@@ -181,12 +181,18 @@ export class ReplayScene extends Phaser.Scene {
 
   private refreshHud(): void {
     const p = this.playback;
+    const keys = this.session.state.keys;
     this.moveText?.setText(
-      `${t('replayMove', { i: p.index, n: p.total })}${p.atEnd && p.total > 0 ? ` · ${t('replayEnd')}` : ''}`,
+      `${t('replayMove', { i: p.index, n: p.total })} · ${t('keys')} ${keys}${p.atEnd && p.total > 0 ? ` · ${t('replayEnd')}` : ''}`,
     );
     this.speedText?.setText(t('replaySpeed', { v: p.speed }));
     this.playBtn?.setText(p.playing ? t('pause') : t('playBtn'));
-    setDebug({ replayIndex: p.index, replaySpeed: p.speed, replayPlaying: p.playing });
+    setDebug({
+      replayIndex: p.index,
+      replaySpeed: p.speed,
+      replayPlaying: p.playing,
+      replayKeys: keys,
+    });
   }
 
   private toStart(): void {
