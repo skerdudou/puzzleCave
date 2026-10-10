@@ -388,11 +388,6 @@ export function detectLang(langs: readonly string[]): Lang {
   return FALLBACK_LANG;
 }
 
-/** Next language for the Options toggle. */
-export function nextLang(l: Lang): Lang {
-  return LANGS[(LANGS.indexOf(l) + 1) % LANGS.length]!;
-}
-
 export function setLang(l: Lang): void {
   current = l;
 }

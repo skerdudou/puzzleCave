@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { LANGS, detectLang, messages, nextLang, setLang, t } from './i18n';
+import { LANGS, detectLang, messages, setLang, t } from './i18n';
 
 test('detectLang picks the first supported language of the browser preferences, else English', () => {
   expect(detectLang(['fr-FR', 'en'])).toBe('fr');
@@ -24,13 +24,6 @@ test('every language has every message, with the same placeholders as English', 
       expect(holes(v), `${lang}.${k}`).toEqual(holes(en[k as keyof typeof en]));
     }
   }
-});
-
-test('the language option cycles through every language', () => {
-  const seen = [LANGS[0]!];
-  for (let i = 1; i < LANGS.length; i++) seen.push(nextLang(seen[i - 1]!));
-  expect(seen).toEqual(LANGS);
-  expect(nextLang(LANGS[LANGS.length - 1]!)).toBe(LANGS[0]);
 });
 
 test('t translates and interpolates', () => {
