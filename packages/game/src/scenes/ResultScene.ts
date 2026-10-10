@@ -14,7 +14,7 @@ import { setDebug } from '../debug';
 import { formatTime } from '../format';
 import { t } from '../i18n';
 import { chapters, levelById, locate } from '../levels';
-import { thresholdRows, type ThresholdRow } from '../medalInfo';
+import { platinumText, thresholdRows, type ThresholdRow } from '../medalInfo';
 import { COLORS, drawMedal, drawThresholdLine, makeButton, px, textStyle } from '../ui';
 import {
   authorServerAvailable,
@@ -107,11 +107,10 @@ export class ResultScene extends Phaser.Scene {
       previous?.bestTimeMs === undefined || result.timeMs < previous.bestTimeMs,
       'time',
     );
-    if (mode === 'platinum' && th.platinumTime !== undefined) {
+    const plat = platinumText(th, level.platinum, t('platinumSurvive'));
+    if (mode === 'platinum' && plat) {
       drawMedal(g, cx - px(130), y, px(10), award.platinum ? 'platinum' : undefined);
-      this.add
-        .text(cx - px(110), y, `${t('platinum')} ≤ ${th.platinumTime} s`, textStyle(14))
-        .setOrigin(0, 0.5);
+      this.add.text(cx - px(110), y, `${t('platinum')} ${plat}`, textStyle(14)).setOrigin(0, 0.5);
       y += px(40);
     }
 

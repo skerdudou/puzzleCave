@@ -46,7 +46,7 @@ The game is available in English and French (it follows your browser's language;
 
 ## Credits
 
-Many levels are by **moineau**. Music by Eric Matyas — see [CREDITS.md](CREDITS.md).
+Music by Eric Matyas — see [CREDITS.md](CREDITS.md).
 
 Want to build the game, create levels or play with the solver? See [DEVELOPMENT.md](DEVELOPMENT.md).
 

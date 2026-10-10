@@ -3,6 +3,7 @@
  <properties>
   <property name="name" value="Niveau 4"/>
   <property name="author" value="moineau"/>
+  <property name="platinum" type="bool" value="true"/>
   <property name="initialKeys" type="int" value="2"/>
   <property name="goldMoves" type="int" value="430"/>
  </properties>

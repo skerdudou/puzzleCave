@@ -180,7 +180,7 @@ export class SelectScene extends Phaser.Scene {
       drawThresholdLine(this, tg, cx, y, t(r.kind), r.tiers);
       y += px(18);
     }
-    const plat = platinumText(th);
+    const plat = platinumText(th, level.platinum, t('platinumSurvive'));
     if (plat) {
       drawThresholdLine(this, tg, cx, y, t('platinum'), [{ medal: 'platinum', text: plat }]);
       y += px(18);

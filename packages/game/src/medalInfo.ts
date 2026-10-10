@@ -22,7 +22,12 @@ export function thresholdRows(th: Thresholds): ThresholdRow[] {
   return rows;
 }
 
-/** Time limit of the platinum challenge, if the level has one. */
-export function platinumText(th: Thresholds): string | undefined {
-  return th.platinumTime === undefined ? undefined : `≤ ${seconds(th.platinumTime)}`;
+/** Platinum condition: the time limit, or just surviving when the level has no time limit. */
+export function platinumText(
+  th: Thresholds,
+  platinum: boolean,
+  survive: string,
+): string | undefined {
+  if (!platinum) return undefined;
+  return th.platinumTime === undefined ? survive : `≤ ${seconds(th.platinumTime)}`;
 }

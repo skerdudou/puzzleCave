@@ -26,8 +26,17 @@ test('wallMask : voisins murs', () => {
   expect(wallMask(isWall, 1, 0)).toBe(2);
 });
 
+test('boardLayout: small levels are not zoomed beyond a 12×12 board', () => {
+  // a 12×12 board fits 1080/192 = 5.6 → 5; a 6×5 board alone would fit 11 → capped at 5
+  expect(boardLayout(1080, 2000, 6, 5, 16, 100, 100).scale).toBe(5);
+  // big levels are unaffected: 18×18 still gets 3
+  expect(boardLayout(1080, 2000, 18, 18, 16, 100, 100).scale).toBe(3);
+  // the cap never drops below 1
+  expect(boardLayout(100, 100, 6, 5, 16, 0, 0).scale).toBe(1);
+});
+
 test('boardLayout: integer factor, centered, at least 1', () => {
-  // dispo hauteur 1800 ; min(1080/288, 1800/288) = 3,75 → 3 ; 864 px ; x = 108 ; y = 100 + 468
+  // available height 1800; min(1080/288, 1800/288) = 3.75 → 3; 864 px; x = 108; y = 100 + 468
   expect(boardLayout(1080, 2000, 18, 18, 16, 100, 100)).toEqual({
     scale: 3,
     x: 108,

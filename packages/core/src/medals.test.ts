@@ -56,6 +56,14 @@ test('award combines moves, time and platinum', () => {
   expect(award(level, { moves: 10, timeMs: 20_010, mode: 'platinum' }).platinum).toBe(false);
 });
 
+test('platinum without a time threshold: finishing without drowning is enough', () => {
+  const level = fromAscii(['@E'], { platinum: true, thresholds: { goldMoves: 10 } });
+  expect(award(level, { moves: 40, timeMs: 999_000, mode: 'platinum' }).platinum).toBe(true);
+  expect(award(level, { moves: 40, timeMs: 999_000, mode: 'normal' }).platinum).toBe(false);
+  const plain = fromAscii(['@E'], { thresholds: { goldMoves: 10 } });
+  expect(award(plain, { moves: 1, timeMs: 1_000, mode: 'platinum' }).platinum).toBe(false);
+});
+
 test('bestMedal keeps the best', () => {
   expect(bestMedal('bronze', 'gold')).toBe('gold');
   expect(bestMedal(undefined, 'silver')).toBe('silver');

@@ -63,8 +63,12 @@ export function medalFor(tier: Tier | undefined, value: number): Medal | undefin
 export function award(level: LevelData, r: RunResult): Award {
   const th = resolveThresholds(level.thresholds, level.platinum);
   const seconds = r.timeMs / 1000;
+  // Platinum: finish the drowning mode; under the time limit when the level has one.
   const a: Award = {
-    platinum: r.mode === 'platinum' && th.platinumTime !== undefined && seconds <= th.platinumTime,
+    platinum:
+      r.mode === 'platinum' &&
+      level.platinum &&
+      (th.platinumTime === undefined || seconds <= th.platinumTime),
   };
   const m = medalFor(th.moves, r.moves);
   if (m) a.moves = m;

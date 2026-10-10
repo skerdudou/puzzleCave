@@ -28,8 +28,9 @@ test('no gold threshold: no row', () => {
   expect(thresholdRows(resolveThresholds({}, true))).toEqual([]);
 });
 
-test('platinum limit only for platinum levels with a time', () => {
-  expect(platinumText(resolveThresholds({ goldTime: 20 }, true))).toBe('≤ 0:20.00');
-  expect(platinumText(resolveThresholds({ goldTime: 20 }, false))).toBeUndefined();
-  expect(platinumText(resolveThresholds({ goldMoves: 20 }, true))).toBeUndefined();
+test('platinum limit: the time if any, else "without drowning", nothing if not platinum', () => {
+  const survive = 'without drowning';
+  expect(platinumText(resolveThresholds({ goldTime: 20 }, true), true, survive)).toBe('≤ 0:20.00');
+  expect(platinumText(resolveThresholds({ goldMoves: 20 }, true), true, survive)).toBe(survive);
+  expect(platinumText(resolveThresholds({ goldTime: 20 }, false), false, survive)).toBeUndefined();
 });
