@@ -145,11 +145,18 @@ const en: Record<MessageKey, string> = {
 };
 
 const dicts: Record<Lang, Record<MessageKey, string>> = { fr, en };
-let current: Lang = 'fr';
+const FALLBACK_LANG: Lang = 'en';
+let current: Lang = FALLBACK_LANG;
 
+/** First supported language in the browser preferences (navigator.languages), else English. */
 export function detectLang(langs: readonly string[]): Lang {
-  return langs[0]?.toLowerCase().startsWith('fr') ? 'fr' : 'en';
+  for (const l of langs) {
+    const base = l.toLowerCase().split('-')[0];
+    if (base === 'fr' || base === 'en') return base;
+  }
+  return FALLBACK_LANG;
 }
+
 export function setLang(l: Lang): void {
   current = l;
 }

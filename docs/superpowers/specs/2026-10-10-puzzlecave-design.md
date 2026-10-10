@@ -183,7 +183,7 @@ suggests `goldMoves`.
   `pixelArt` rendering (no smoothing). Portrait and landscape handled.
 - Music: the two re-encoded MP3s from the original puzzleCave, with `CREDITS.md` (Eric Matyas,
   soundimage.org); sound can be toggled, paused when the tab/app goes to the background.
-- fr/en texts (simple JSON files), browser language by default.
+- fr/en texts (simple JSON files), language from the browser preferences (first supported one, English fallback) until the player picks one in Options.
 
 ## 8. Solver (phase 4)
 

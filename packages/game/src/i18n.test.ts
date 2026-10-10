@@ -1,13 +1,16 @@
 import { expect, test } from 'vitest';
 import { detectLang, setLang, t } from './i18n';
 
-test('detectLang', () => {
+test('detectLang picks the first supported language of the browser preferences, else English', () => {
   expect(detectLang(['fr-FR', 'en'])).toBe('fr');
   expect(detectLang(['en-US', 'fr'])).toBe('en');
+  expect(detectLang(['de-DE', 'fr-CH', 'en'])).toBe('fr');
+  expect(detectLang(['de-DE', 'es'])).toBe('en');
+  expect(detectLang(['FR'])).toBe('fr');
   expect(detectLang([])).toBe('en');
 });
 
-test('t traduit et interpole', () => {
+test('t translates and interpolates', () => {
   setLang('fr');
   expect(t('play')).toBe('Jouer');
   expect(t('help', { dirs: 'ZQSD' })).toContain('ZQSD');
@@ -23,7 +26,7 @@ test('lockedHint explains what to do to unlock', () => {
   setLang('fr');
 });
 
-test('lockedHintOne au singulier', () => {
+test('lockedHintOne is singular', () => {
   setLang('fr');
   expect(t('lockedHintOne')).toBe('Réussis 1 niveau du chapitre précédent');
   setLang('en');
