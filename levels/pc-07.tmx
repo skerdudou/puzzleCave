@@ -3,6 +3,7 @@
  <properties>
   <property name="name" value="brise-cerveau"/>
   <property name="author" value="moineau"/>
+  <property name="goldMoves" type="int" value="402"/>
  </properties>
  <tileset firstgid="1" source="tileset.tsx"/>
  <layer id="1" name="terrain" width="18" height="18">
