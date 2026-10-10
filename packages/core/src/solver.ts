@@ -1,16 +1,18 @@
 import { CompactBound } from './compactBound';
 import { CompactModel } from './compactModel';
 import { MemoryBudget, StateStore, TypedHeap, hashWords } from './compactStore';
+import { DeadlockAnalysis } from './deadlock';
 import { UNREACHABLE } from './solverBound';
 import { DIRS } from './state';
 import type { Dir, LevelData } from './types';
 
-/** memoryBytes: peak bytes allocated by the compact solver (typed arrays) */
-export type SolveResult =
+/** memoryBytes: peak bytes allocated by the compact solver (typed arrays); deadStates: states closed by deadPruning */
+export type SolveResult = { deadStates?: number } & (
   | { status: 'solved'; moves: Dir[]; explored: number; memoryBytes?: number }
   | { status: 'unsolvable'; explored: number; memoryBytes?: number }
   /** lowerBound: proven minimum number of moves of any solution (see solve) */
-  | { status: 'timeout'; explored: number; lowerBound: number; memoryBytes?: number };
+  | { status: 'timeout'; explored: number; lowerBound: number; memoryBytes?: number }
+);
 
 export interface SolveOptions {
   /** maximum number of distinct macro-states (configuration + player position); unlimited by default */
@@ -37,6 +39,12 @@ export interface SolveOptions {
    * upperBound moves"; the lower bound reported on timeout remains valid.
    */
   upperBound?: number;
+  /**
+   * dead-state pruning (DeadlockAnalysis): a state that can no longer be won is closed when
+   * popped, like a state without a route to the exit. Sound (the analysis over-approximates what
+   * can still happen), so status, optimal length and lower bound stay valid. false by default.
+   */
+  deadPruning?: boolean;
 }
 
 /** priority = f · TIE_SPAN + (TIE_SPAN − 1 − cost): on equal f, the most advanced first */
@@ -57,6 +65,7 @@ interface Context {
   now: () => number;
   deadline: number;
   upperBound: number;
+  dead: DeadlockAnalysis | undefined;
 }
 
 /**
@@ -135,16 +144,22 @@ export function solve(level: LevelData, opts: SolveOptions = {}): SolveResult {
     now,
     deadline: t0 + (opts.timeoutMs ?? 60_000),
     upperBound: opts.upperBound ?? Infinity,
+    dead: opts.deadPruning ? new DeadlockAnalysis(model) : undefined,
   };
   const mode = opts.partialExpansion ?? false;
-  if (mode !== 'auto') return search(ctx, mode).result;
+  if (mode !== 'auto') return withStats(search(ctx, mode).result, ctx);
   const first = search(ctx, false);
-  if (!first.limited) return first.result;
+  if (!first.limited) return withStats(first.result, ctx);
   store.reset();
   ctx.heap.reset();
   const second = search(ctx, true).result;
-  if (second.status !== 'timeout' || first.result.status !== 'timeout') return second;
-  return second.lowerBound > first.result.lowerBound ? second : first.result;
+  if (second.status !== 'timeout' || first.result.status !== 'timeout')
+    return withStats(second, ctx);
+  return withStats(second.lowerBound > first.result.lowerBound ? second : first.result, ctx);
+}
+
+function withStats(r: SolveResult, ctx: Context): SolveResult {
+  return ctx.dead ? { ...r, deadStates: ctx.dead.deadCount } : r;
 }
 
 /** one search; limited: stopped by the memory or state limit */
@@ -294,6 +309,8 @@ function search(ctx: Context, partial: boolean): { result: SolveResult; limited:
     let h = store.h(id);
     if (h === NO_H) {
       h = bound.strong();
+      // a dead state is on no path to the exit: closed like an UNREACHABLE one
+      if (h !== UNREACHABLE && ctx.dead?.dead()) h = UNREACHABLE;
       if (h === UNREACHABLE) {
         store.setClosed(id);
         continue;

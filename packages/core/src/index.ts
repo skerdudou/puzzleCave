@@ -25,3 +25,6 @@ export { UNREACHABLE } from './solverBound';
 export * from './solverV2';
 export * from './solverNaive';
 export * from './improve';
+export { planSolution, type PlanOptions, type PlanResult, type PlanStats } from './planner/plan';
+export { reachSubgoal, restrict, type Restriction, type SubgoalResult } from './planner/subgoal';
+export { DeadlockAnalysis, type DeadReason, type ExitEntrance } from './deadlock';

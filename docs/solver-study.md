@@ -100,7 +100,7 @@ No new level solved: memory (1.4 GB per process) stops all searches before 300 s
 
 ## Step 3 done — "best known" gold (2026-10-10)
 
-`improveLevel` pipeline (`packages/core/src/improve/`), command `npm run improve`: starting point (designer's solution if it wins, otherwise `findSolution`, port of the study's BFWS) → `reoptimize` (windows of 8, 16, 24… interactions overlapping by half, exact shortest path to the identical state, fixed point at each size) → `freezeStage` (never-pushed blocks frozen into walls, restricted exact search, then greedy removal of used blocks) → proof (global exact search bounded by the current length). The exact engine is a parameter (`ExactEngine`, `solve` by default, with optional `upperBound`); the inner windows have their own engine (`WindowEngine`, `searchWindow` by default). Budget per level: search ≤ 30%, windows up to 60%, frozen blocks up to 80%, proof the rest.
+`improveLevel` pipeline (`packages/core/src/improve/`), command `npm run improve`: starting point (designer's solution if it wins, otherwise `findSolution`, port of the study's BFWS) → `reoptimize` (windows of 8, 16, 24… interactions overlapping by half, exact shortest path to the identical state, fixed point at each size) → `spareKeys` (added later, see "Spare keys pass") → `freezeStage` (never-pushed blocks frozen into walls, restricted exact search, then greedy removal of used blocks) → proof (global exact search bounded by the current length). The exact engine is a parameter (`ExactEngine`, `solve` by default, with optional `upperBound`); the inner windows have their own engine (`WindowEngine`, `searchWindow` by default). Budget per level: search ≤ 30%, windows up to 60%, frozen blocks up to 80%, proof the rest.
 
 Command: `npm run improve -- --all --apply --timeout 600 --max-states 6000000 --jobs 5` (step 1 v2 engine; rerun with the compact engine, see "Integration of steps 2 and 3"). Total duration **1310 s**; machine RAM peak 65% (shared with two other agents; ~1.9 GB per child at most).
 
@@ -212,3 +212,53 @@ Host memory: ~300–380 MB of resident RAM for the GPU process up to 7 GB of VRA
 Tests (`describe.skipIf` without an adapter): equivalence with `solve` (status and length, replayed solution) on the 454 valid levels of the shared sample (partial expansion, Δ = 1) and on 120 of them with full expansion and Δ = 8; host-driven slices on pc-05; `upperBound` (= optimum → unsolvable, optimum + 1 → same length) on 150 levels; pc-01..03, pc-05/06/10 → 17/151/401/52/176/325; lower bound ≤ optimum when stopped by states, memory and time; synchronous engine; GPU lane of `solve` and `improve` in parallel. Always: kernel emulation on the CPU compared with the compact model's successors (> 5000 states), buffer plan, safeguards (inconsistent solution, failure, level too large, VRAM), simulated fallback (`PUZZLECAVE_GPU=none`: single message in `auto`, error in `on`), machine lock.
 
 Limits: 32 × 32 cells; lower bound = distance to the exit only (the CPU adds the "distinct doors" bound, hence many more GPU states on pc-05: 30 k versus 2 k, with no effect on duration); the search stops when VRAM is full without CPU relay; the fixed cost per micro-iteration dominates on small frontiers. No unsolved level becomes solved: the bounds progress by +6 to +14 moves, still far from the known solutions (pc-04: ≥ 86 versus 502).
+
+## Event planner study, step A — static analysis and dead states (2026-10-10)
+
+`packages/core/src/deadlock.ts` (`DeadlockAnalysis`), options `deadPruning` of `solve` and `findSolution`, `keyDominance` of `findSolution`. Everything is an over-approximation, so a live state is never declared dead.
+
+- **Static**: relaxed reach of a block from each cell (push if the target is floor or water and the player cell is neither a wall nor an exit; other blocks, keys and doors ignored; unfilled water crossed as if filled), hence which cells can fill each water; immovable cells (no push possible: they are walls for good); exit entrances with the waters and doors on every route from the start.
+- **Dead test** on the loaded state: relaxed route to an exit (immovable blocks are walls); 0-1 search over (cell, doors crossed ≤ pocket + remaining keys, key debt included, up to 4 layers) minimising the waters entered; bipartite matching blocks → unfilled waters: the waters on every route (single-cell cuts) must all get a block of their own and the matching must have ≥ wmin edges. Fast path: if the waters of the cheapest route are all matched, alive without the cut tests.
+- **Key dominance** (from the key-closure POC): `findSolution` skips a state if the same state with one key taken off the board and one more key in pocket (same player cell) is already known. Completeness is kept, optimality is not.
+- **Soundness**: exhaustive macro-state graphs of 2,453 random levels (57,273 states, backward "can still win" fixed point): no winnable state declared dead, 72 % of the losing states detected. `solve` with pruning: same status and optimal length on 754 random levels; `findSolution` with pruning and dominance: same status, solutions replay.
+
+Measurements (one process, ≤ 1.5–1.8 GB):
+
+| level | search | without | with dead test | with key dominance |
+|---|---|---|---|---|
+| pc-11 | `solve` 60 s | ≥ 92, 19.0 M states, 21.6 s (memory) | ≥ 90, 12.2 M states, 60 s (time); 0 dead | — |
+| pc-11 | `findSolution` 120 s | failed, 16.7 M states | failed, 7.7 M states; 0 dead | failed, 12.4 M states; 10,032 skipped |
+| pc-06 | `solve` | 176, 459 k states, 0.5 s | 176, same states, 0.7 s | — |
+| pc-03 | `solve` | 401, 1.20 M states, 5.4 s | 401, same states, 13.3 s | — |
+| pc-06 | `findSolution` | 418 moves, 1,599 states | same | 476 moves, 2,583 states |
+| pc-12 | `findSolution` | 858 moves, 17,669 states | same, 0.5 s instead of 0.1 s | — |
+
+Finding: on the real levels the dead test never fires within the depths the global searches reach (0 dead states on pc-11, pc-03, pc-06, pc-12) and costs 1.4–2.5× the time per state. The relaxation is too loose for the 36-block grids: crossing unfilled water as if filled lets almost every block reach almost every water (pc-11: 23–27 candidate blocks per water), and the exit of pc-11 is reachable through doors with no water at all, so the binding constraint (keys, behind waters) is not seen. Key dominance prunes little on pc-11 (4 keys). Both options stay off by default; the analysis is reused by the step B planner, on states where blocks are frozen.
+
+Also found: the BFWS guide (`improve/guide.ts`) declares a solvable random level dead (`vrnd-94`, seed 5: `solve` finds 17 moves, `findSolution` fails at once, with or without the new options).
+
+## Event planner study, step B — sub-goal planner (2026-10-11)
+
+`packages/core/src/planner/` and `npm run plan -- <id…> [--timeout s] [--keys auto|explicit] [--improve s] [--apply]`. This automates the method that solved the hard levels by hand.
+
+- **Low level** (`subgoal.ts`, cleaned-up port of the agents' `lib.ts`): Dijkstra over the macro-states of a restricted copy of the state. Every block not listed as free, every door not allowed and every water not allowed becomes a wall. The moves are replayed on the real state, where frozen objects are never touched. A failed search reports the frozen blocks the player could have pushed (“touched”).
+- **Events**: take key K (any water may be filled), fill water W (only W allowed, one block), open door D (only if it lies on a route with the fewest doors or has a key behind it: keys are exact), move a block so that the region grows, and reach the exit (all doors allowed). The set of free blocks is found by unfreezing: none, then touched blocks added one at a time, closest to the target first (keys ≤ 3 blocks, exit ≤ 2, fill 1; ≤ 60 searches of ≤ 5,000 states).
+- **High level** (`plan.ts`): best-first search over event states. Priority: estimate (waters on the cheapest route to an exit, plus the missing keys each with the waters and doors on the way to it), then novelty over the atoms (region cells, filled waters, consumed keys and doors, pocket keys), then moves. Duplicates are merged on board and player region. States the step A test proves lost are dropped. `keys: auto` takes every key reachable without moving anything after each event (key closure).
+- Tests: restriction, sub-goal search, touched blocks, win goal; small levels in both key modes; on the random sample, every plan replays and wins (253 of 254 solvable levels planned).
+
+| level | method | result | time | work | memory |
+|---|---|---|---|---|---|
+| pc-11 (before, A or not) | `findSolution` 120 s / 400 s at 1.9 GB | failed (16.7 M states, timeout / 25.2 M states, memory, 178 s) | — | — | 1.3–1.7 GB |
+| pc-11 | planner, explicit keys | **346 moves**, no hint | 156 s | 1,094 event states, 375 k sub-searches, 17.1 M macro-states | 233 MB |
+| pc-11 | planner, automatic keys | 346 moves (same plan) | 217 s | 979 event states, 25.8 M macro-states | 253 MB |
+| pc-11, origin/main version (gravel at (6,6), (6,10)) | planner | 346 moves | 121 s | 884 event states | 210 MB |
+| pc-11 | `improve` 300 s from the plan | 346 → **310** (windows), lower bound ≥ 98 | 300 s | — | ≤ 1.8 GB |
+| pc-11 | same with the spare-keys pass (cherry-picked 1963c4e) | 346 → 310, pass removes 0 pickups | 300 s | — | ≤ 1.8 GB |
+| pc-09 (old id) | planner 300 s | failed (timeout) | 300 s | 1,350 event states, 69 M macro-states | 277 MB |
+| pc-15 (old id, keys/doors) | planner 300 s | failed (timeout) | 300 s | 2,285 event states, 189 M macro-states | 473 MB |
+| pc-06 | planner 30 s | failed (timeout); `findSolution` solves it in 0.1 s | 30 s | — | — |
+
+Findings:
+- pc-11 is solved from scratch without hints, and after `improve` it beats the hand-built 340 → 326 solution: **310 moves**, which also wins on the origin/main version (goldMoves 326). It is not committed to `levels/`, since the level changed on main. On the planner side, the step A test never fires (0 dead states): the useful pruning is structural (frozen blocks, forbidden waters, useful doors only).
+- Key closure (`keys: auto`) changes nothing on pc-11: every key there sits behind water or blocks. The spare-keys pass finds nothing either: the planner only takes the keys it needs. A bigger `findSolution` budget does not solve pc-11 within 2 GB: memory stops it at 25 M states.
+- Limits: the planner is incomplete. Each event keeps only its first realisation, unfreezes few blocks and has fixed search caps. It also needs a recognisable structure (keys or waters that open the way). It fails within 300 s on pc-09 (old version) and on the keys/doors grids (pc-15, pc-06): many doors and the useful-door rule leave the estimate flat. Use it as a fallback after `findSolution`, not instead of it.

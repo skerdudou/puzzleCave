@@ -96,14 +96,21 @@ Same memory and parallelism rules as `solve` (same plan: processes, per-process 
 
 1. **Starting point**: the solution in `levels/solutions/<id>.txt` if it wins (the designer's solution, takes priority); otherwise a non-optimal solution search (best-first by novelty, BFWS).
 2. **Windows**: the solution is cut at interactions (key, door, push); each window of 8, 16, 24… interactions is replaced by the exact shortest path to the same state, if it is shorter.
-3. **Frozen blocks**: blocks the solution never pushes become walls, then an exact search on that restricted level (and greedy removal of other blocks if it does not finish). Optimum for that set of blocks only.
-4. **Proof**: global exact search bounded by the current length (only strictly shorter solutions are searched). If it finishes, the solution is proven optimal; otherwise its proven lower bound is kept. Like `solve`, it switches to partial expansion if memory stops it before the deadline.
+3. **Spare keys**: the windows keep keys in hand and on the ground identical, so they never drop a useless key pickup. A pickup is droppable when, from it to the end, the keys in hand never fall below 1; windows of 2, 4, 8… 32 interactions around it then look for a shorter path to the same state but with that key left on the ground and one key fewer in hand. The best saving is applied (one key at a time), and the windows run again on the new solution if time remains.
+4. **Frozen blocks**: blocks the solution never pushes become walls, then an exact search on that restricted level (and greedy removal of other blocks if it does not finish). Optimum for that set of blocks only.
+5. **Proof**: global exact search bounded by the current length (only strictly shorter solutions are searched). If it finishes, the solution is proven optimal; otherwise its proven lower bound is kept. Like `solve`, it switches to partial expansion if memory stops it before the deadline.
 
 Each step replays the solution: it always wins and is never longer than the input. One line per level gives the start (designer's or found solution), the length before → after, the status, the lower bound and the duration, followed by the detail of the steps.
 
 Without `--apply`, nothing is written. With `--apply`, the solution is written with a first comment line (ignored when reading): `# optimal (proven)` or `# best known — not proven optimal (proven lower bound ≥ L)`. `goldMoves` follows the `solve` rule: an existing `goldMoves` is only lowered by a strictly shorter solution, or always with `--force`. `npm run validate` checks that all solutions win and warns about a `goldMoves` longer than the saved solution.
 
 A saved solution that is unreadable or does not win is never overwritten without `--force`: it is kept and reported, the solution found is written next to it in `levels/solutions/<id>.found.txt`, and `goldMoves` is left untouched; that `.found.txt` is deleted as soon as the saved solution is valid again (or with `--force`). `solve --apply` also writes the `# optimal (proven)` header. `solve` and `improve` replay every solution before writing it: a solution that does not win is an error and nothing is written. The `improve` watchdog kills a child process past `--timeout` plus 60 s.
+
+### Fallback for large levels: `plan`
+
+    npm run plan -- <id…> [--timeout s] [--keys auto|explicit] [--improve s] [--max-memory MB] [--apply]
+
+When `improve` finds no starting solution, the event planner builds one from sub-goals: take a key, fill a water cell, open a door, move a block to enlarge the reachable area, reach the exit. Each event is checked by a small exact search where everything not allowed is a wall (blocks are unfrozen one at a time), and a best-first search chains the events. `--improve s` then runs the `improve` pipeline from the plan; `--apply` saves the result only if it wins and is shorter than the saved solution. It solved pc-11 with no hints (346 moves, 310 after `improve`), but it is incomplete and weak on key-and-door grids: use it after `findSolution`, not instead of it. The static dead-state test (`deadPruning`, `keyDominance`) is sound but off by default: it never fired on the real levels and slows the search. Details in `docs/solver-study.md`.
 
 ## Designer tools in the game (`npm run dev` only)
 

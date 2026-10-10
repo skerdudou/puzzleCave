@@ -4,7 +4,18 @@ import { exactBackend } from './gpu';
 import { improveCommand, improveParallel } from './improve';
 import { solveParallel } from './parallel';
 import { LEVELS_DIR } from './paths';
+import { parsePlanArgs, planCommand } from './plan';
 
+if (process.argv[2] === 'plan') {
+  const p = parsePlanArgs(process.argv.slice(3));
+  if ('error' in p) {
+    console.error(p.error);
+    process.exit(2);
+  }
+  const r = planCommand(LEVELS_DIR, p.ids, p.opts);
+  for (const line of r.lines) console.log(line);
+  process.exit(r.ok ? 0 : 1);
+}
 const parsed = parseArgs(process.argv.slice(2));
 if (parsed.kind === 'error') {
   console.error(parsed.message);

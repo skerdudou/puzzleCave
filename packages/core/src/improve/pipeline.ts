@@ -5,6 +5,7 @@ import { findSolution, type FindOptions, type FindResult } from './findSolution'
 import { freezeStage } from './freeze';
 import { normalizeMoves } from './macro';
 import { reoptimize } from './reoptimize';
+import { spareKeys } from './spareKeys';
 
 export interface ImproveOptions {
   /** solution supplied by the designer: preferred starting point if it wins */
@@ -35,7 +36,7 @@ export interface ImproveOptions {
   find?: (level: LevelData, opts: FindOptions) => FindResult;
 }
 
-export type StageName = 'find' | 'reoptimize' | 'freeze' | 'proof';
+export type StageName = 'find' | 'reoptimize' | 'spareKeys' | 'freeze' | 'proof';
 
 export interface StageReport {
   stage: StageName;
@@ -67,11 +68,13 @@ export interface ImproveResult {
 /** stage ends, as a fraction of the total duration (unused time carries over to the next stage) */
 const FIND_END = 0.3;
 const REOPTIMIZE_END = 0.6;
-const FREEZE_END = 0.8;
+const SPARE_KEYS_END = 0.7;
+const FREEZE_END = 0.85;
 
 /**
  * "Best known" pipeline of a level: starting point (designer solution if it wins, otherwise
- * findSolution), exact reoptimization by windows, frozen blocks, then a global exact search
+ * findSolution), exact reoptimization by windows, spare keys (useless key pickups removed, then
+ * windows again), frozen blocks, then a global exact search
  * bounded by the current length. Each stage returns a winning solution that is never longer.
  * Proven optimal if the exact search finishes, or if its lower bound reaches the length;
  * otherwise best known, with the proven lower bound.
@@ -141,6 +144,25 @@ export function improveLevel(level: LevelData, opts: ImproveOptions): ImproveRes
       });
       moves = r.moves;
       return `${r.windows} windows, ${r.improvements} replacements, windows up to ${r.largestWindow} interactions${r.timedOut ? ' (time elapsed)' : ''}`;
+    });
+    run('spareKeys', () => {
+      const windowOpts = {
+        now,
+        maxStatesPerWindow,
+        ...memory,
+        exact,
+        ...(opts.window ? { window: opts.window } : {}),
+      };
+      const r = spareKeys(level, moves!, { ...windowOpts, timeoutMs: until(SPARE_KEYS_END) });
+      moves = r.moves;
+      let note = `${r.dropped} key pickups removed, ${r.windows} windows${r.timedOut ? ' (time elapsed)' : ''}`;
+      if (r.dropped > 0 && until(SPARE_KEYS_END) > 0) {
+        // the removed pickups change the states: the windows may shorten the new solution
+        const w = reoptimize(level, moves, { ...windowOpts, timeoutMs: until(SPARE_KEYS_END) });
+        moves = w.moves;
+        note += `; windows again: ${w.improvements} replacements${w.timedOut ? ' (time elapsed)' : ''}`;
+      }
+      return note;
     });
     run('freeze', () => {
       const r = freezeStage(level, moves!, {

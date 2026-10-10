@@ -38,7 +38,7 @@ test('designer solution preferred, reoptimized and proven optimal', () => {
   expect(r.proven).toBe(true);
   expect(r.lowerBound).toBe(4);
   expect(replay(LEVEL, r.moves!).status).toBe('won');
-  expect(r.stages.map((s) => s.stage)).toEqual(['reoptimize', 'freeze', 'proof']);
+  expect(r.stages.map((s) => s.stage)).toEqual(['reoptimize', 'spareKeys', 'freeze', 'proof']);
 });
 
 test('global engine (GPU): frozen blocks and proof only, never the windows', () => {
@@ -83,6 +83,20 @@ test('memory budget: passed to each search; auto mode for the proof and frozen b
   expect(finals.length).toBeGreaterThan(0);
   for (const c of finals) expect(c.maxStates).toBe(2_000_000);
   for (const [, , , wo] of window.mock.calls) expect(wo).toMatchObject({ maxMemoryMb: 64 });
+});
+
+test('spare keys stage: a useless key pickup the windows cannot drop is removed', () => {
+  // one key in hand opens the door; the key at (1,0) is a detour of 2 moves
+  const level = fromAscii(['#k######', '@.....DE'], { initialKeys: 1 });
+  const initial: Dir[] = ['right', 'up', 'down', ...Array<Dir>(6).fill('right')];
+  // exact engine without an answer: only the windows towards an exact state work
+  const r = improveLevel(level, { ...opts, initial, exact: timeout(0) });
+  const spare = r.stages.find((s) => s.stage === 'spareKeys')!;
+  expect(r.stages.find((s) => s.stage === 'reoptimize')!.after).toBe(9);
+  expect(spare).toMatchObject({ before: 9, after: 7 });
+  expect(spare.note).toMatch(/^1 key pickups removed/);
+  expect(r.moves).toHaveLength(7);
+  expect(replay(level, r.moves!).status).toBe('won');
 });
 
 test('without a designer solution: a solution is searched for', () => {

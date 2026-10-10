@@ -47,6 +47,7 @@ export function readSolution(dir: string, id: string): Dir[] | { error: string }
 const STAGE: Record<StageName, string> = {
   find: 'search',
   reoptimize: 'windows',
+  spareKeys: 'spare keys',
   freeze: 'frozen blocks',
   proof: 'proof',
 };

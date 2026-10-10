@@ -35,6 +35,37 @@ export interface ReoptimizeResult {
 }
 
 /**
+ * Search of one window, shared by the window passes: towards an exact state with the window
+ * engine, towards victory with the exact engine (on the start state seen as a level), within the
+ * remaining time until `deadline`.
+ */
+export function windowSearch(
+  level: LevelData,
+  deadline: number,
+  opts: Pick<ReoptimizeOptions, 'maxMemoryMb'> & {
+    now: () => number;
+    maxStatesPerWindow: number;
+    exact: ExactEngine;
+    window: WindowEngine;
+  },
+): (from: GameState, goal: GameState, limit: number) => WindowResult {
+  const { now, exact, window } = opts;
+  return (from, goal, limit) => {
+    const wopts = {
+      maxStates: opts.maxStatesPerWindow,
+      ...(opts.maxMemoryMb !== undefined ? { maxMemoryMb: opts.maxMemoryMb } : {}),
+      timeoutMs: Math.max(0, deadline - now()),
+      now,
+    };
+    if (goal.status !== 'won') return window(from, goal, limit, wopts);
+    const r = exact(stateAsLevel(level, from), { ...wopts, upperBound: limit });
+    if (r.status === 'solved')
+      return r.moves.length < limit ? { status: 'shorter', moves: r.moves } : { status: 'none' };
+    return r.status === 'unsolvable' ? { status: 'none' } : { status: 'limit' };
+  };
+}
+
+/**
  * Exact reoptimization by windows of a winning solution. The solution is split at interactions;
  * for windows of N interactions (N = 8, 16, 24… until the whole solution is covered), overlapping
  * by half, we look for a path from state s_i to the identical state s_j that is strictly shorter
@@ -59,19 +90,13 @@ export function reoptimize(
   const out = { windows: 0, improvements: 0, largestWindow: 0, rejected: 0, timedOut: false };
   const result = (): ReoptimizeResult => ({ moves, ...out });
 
-  const search = (from: GameState, goal: GameState, limit: number): WindowResult => {
-    const wopts = {
-      maxStates,
-      ...(opts.maxMemoryMb !== undefined ? { maxMemoryMb: opts.maxMemoryMb } : {}),
-      timeoutMs: Math.max(0, deadline - now()),
-      now,
-    };
-    if (goal.status !== 'won') return window(from, goal, limit, wopts);
-    const r = exact(stateAsLevel(level, from), { ...wopts, upperBound: limit });
-    if (r.status === 'solved')
-      return r.moves.length < limit ? { status: 'shorter', moves: r.moves } : { status: 'none' };
-    return r.status === 'unsolvable' ? { status: 'none' } : { status: 'limit' };
-  };
+  const search = windowSearch(level, deadline, {
+    ...opts,
+    now,
+    maxStatesPerWindow: maxStates,
+    exact,
+    window,
+  });
 
   for (let size = stepN; ; size += stepN) {
     let count = 0;

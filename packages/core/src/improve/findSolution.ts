@@ -2,15 +2,17 @@ import { BLOCK, CompactModel, DOOR, KEY, WATER } from '../compactModel';
 import { MemoryBudget, StateStore, TypedHeap, hashWords } from '../compactStore';
 import { DIRS } from '../state';
 import type { Dir, LevelData } from '../types';
+import { DeadlockAnalysis } from '../deadlock';
 import { DEAD, Guide } from './guide';
 
-export type FindResult =
+export type FindResult = { deadStates?: number; dominated?: number } & (
   | { status: 'solved'; moves: Dir[]; explored: number }
   /**
    * exhausted: all non-dead macro-states were visited without winning; limit / timeout: state
    * (or memory) limit or time limit reached
    */
-  | { status: 'failed'; reason: 'exhausted' | 'limit' | 'timeout'; explored: number };
+  | { status: 'failed'; reason: 'exhausted' | 'limit' | 'timeout'; explored: number }
+);
 
 export interface FindOptions {
   maxStates: number;
@@ -18,6 +20,10 @@ export interface FindOptions {
   maxMemoryMb?: number;
   timeoutMs: number;
   now?: () => number;
+  /** discard the states DeadlockAnalysis proves lost (sound: completeness is kept) */
+  deadPruning?: boolean;
+  /** skip a state dominated by a known one holding one key more in pocket (see findSolution) */
+  keyDominance?: boolean;
 }
 
 /** 32-bit priority: novelty (2 bits) | h (17 bits) | 8191 − cost (13 bits) */
@@ -44,6 +50,7 @@ export function findSolution(level: LevelData, opts: FindOptions): FindResult {
   const model = new CompactModel(level);
   const probe = new CompactModel(level);
   const guide = new Guide(probe);
+  const deadTest = opts.deadPruning ? new DeadlockAnalysis(probe) : undefined;
   const { n, words } = model;
   const budget = new MemoryBudget(Math.floor((opts.maxMemoryMb ?? 1024) * MB));
   let store: StateStore;
@@ -125,7 +132,8 @@ export function findSolution(level: LevelData, opts: FindOptions): FindResult {
   store.setParent(root, root);
   probe.load(startKey);
   const h0 = guide.h();
-  if (h0 === DEAD) return { status: 'failed', reason: 'exhausted', explored: 1 };
+  if (h0 === DEAD || deadTest?.dead())
+    return { status: 'failed', reason: 'exhausted', explored: 1 };
   store.setCost(root, 0);
   if (novelty(atomsOfProbe(), h0) < 0 || !heap.push(prio(1, h0, 0), root))
     return { status: 'failed', reason: 'limit', explored: 1 };
@@ -137,6 +145,36 @@ export function findSolution(level: LevelData, opts: FindOptions): FindResult {
   let goalEdge = -1;
   let goalCost = Infinity;
   const next = model.next;
+  /**
+   * key dominance: the same state with one key k taken off the board and one more key in pocket
+   * (same player cell) is at least as good — it can replay any continuation, skipping the moves
+   * that were blocked at a door for lack of a key and walking on k as on floor. If it is already
+   * known, `next` is skipped (completeness kept, optimality not).
+   */
+  const dominance = opts.keyDominance ?? false;
+  const dom = new Uint32Array(words);
+  let dominatedCount = 0;
+  const stats = () => ({
+    ...(deadTest ? { deadStates: deadTest.deadCount } : {}),
+    ...(dominance ? { dominated: dominatedCount } : {}),
+  });
+  const dominated = (): boolean => {
+    probe.load(next);
+    const keysWord = next[0]! >>> 16;
+    const cap = probe.doorsLeft + 0x8000;
+    for (let f = 0; f < probe.fixedCount; f++) {
+      if (!probe.fixedIsKey[f] || probe.grid[probe.fixedCell[f]!] !== KEY) continue;
+      dom.set(next);
+      const bit = probe.fixedBit[probe.fixedCell[f]!]!;
+      dom[bit >>> 5]! &= ~(1 << (bit & 31));
+      dom[0] = ((next[0]! & 0xffff) | (Math.min(keysWord + 1, cap) << 16)) >>> 0;
+      if (store.find(dom, hashWords(dom, 0, words)) >= 0) {
+        dominatedCount++;
+        return true;
+      }
+    }
+    return false;
+  };
   const sink = {
     succ(edge: number, walk: number, _cell: number, won: boolean): boolean {
       const nextCost = curCost + walk + 1;
@@ -147,6 +185,7 @@ export function findSolution(level: LevelData, opts: FindOptions): FindResult {
         }
         return true;
       }
+      if (dominance && dominated()) return true;
       const hash = hashWords(next, 0, words);
       if (store.find(next, hash) >= 0) return true;
       if (store.size >= opts.maxStates) {
@@ -163,7 +202,7 @@ export function findSolution(level: LevelData, opts: FindOptions): FindResult {
       store.setCost(id, Math.min(nextCost, 0xffff));
       probe.load(next);
       const h = guide.h();
-      if (h === DEAD) {
+      if (h === DEAD || deadTest?.dead()) {
         store.setClosed(id);
         return true;
       }
@@ -193,7 +232,7 @@ export function findSolution(level: LevelData, opts: FindOptions): FindResult {
 
   for (let pops = 0; heap.size > 0; pops++) {
     if ((pops & 255) === 0 && now() - t0 > opts.timeoutMs)
-      return { status: 'failed', reason: 'timeout', explored: explored() };
+      return { status: 'failed', reason: 'timeout', explored: explored(), ...stats() };
     heap.pop();
     const id = heap.topVal;
     store.readKey(id, key);
@@ -201,8 +240,9 @@ export function findSolution(level: LevelData, opts: FindOptions): FindResult {
     curId = id;
     curCost = store.cost(id);
     model.expand(sink);
-    if (goalEdge >= 0) return { status: 'solved', moves: path(id, goalEdge), explored: explored() };
-    if (failed) return { status: 'failed', reason: failed, explored: explored() };
+    if (goalEdge >= 0)
+      return { status: 'solved', moves: path(id, goalEdge), explored: explored(), ...stats() };
+    if (failed) return { status: 'failed', reason: failed, explored: explored(), ...stats() };
   }
-  return { status: 'failed', reason: 'exhausted', explored: explored() };
+  return { status: 'failed', reason: 'exhausted', explored: explored(), ...stats() };
 }
