@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <map version="1.10" tiledversion="1.11.2" orientation="orthogonal" renderorder="right-down" width="17" height="17" tilewidth="16" tileheight="16" infinite="0" nextlayerid="3" nextobjectid="51">
  <properties>
-  <property name="name" value="bomberman2 D"/>
+  <property name="name" value="Bomberman 2 D"/>
   <property name="author" value="moineau"/>
   <property name="goldMoves" type="int" value="582"/>
  </properties>

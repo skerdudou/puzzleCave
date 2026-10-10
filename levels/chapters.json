@@ -1,20 +1,30 @@
 [
   {
     "id": "easy",
-    "name": { "fr": "Facile", "en": "Easy" },
+    "name": { "en": "Easy", "fr": "Facile", "de": "Leicht", "es": "Fácil", "it": "Facile" },
     "unlockAfter": 0,
-    "levels": ["pc-01", "pc-02", "pc-19", "pc-06"]
+    "levels": ["pc-01", "pc-20", "pc-21", "pc-22", "pc-23", "pc-24", "pc-25", "pc-19"]
   },
   {
     "id": "medium",
-    "name": { "fr": "Moyen", "en": "Medium" },
-    "unlockAfter": 3,
-    "levels": ["pc-07", "pc-08", "pc-09", "pc-10", "pc-03", "pc-16"]
+    "name": { "en": "Medium", "fr": "Moyen", "de": "Mittel", "es": "Medio", "it": "Medio" },
+    "unlockAfter": 4,
+    "levels": ["pc-06", "pc-16", "pc-10", "pc-03", "pc-04"]
   },
   {
     "id": "hard",
-    "name": { "fr": "Difficile", "en": "Hard" },
-    "unlockAfter": 3,
-    "levels": ["pc-04", "pc-11", "pc-12", "pc-13", "pc-14", "pc-17", "pc-18"]
+    "name": { "en": "Hard", "fr": "Difficile", "de": "Schwer", "es": "Difícil", "it": "Difficile" },
+    "unlockAfter": 4,
+    "levels": [
+      "pc-17",
+      "pc-07",
+      "pc-12",
+      "pc-11",
+      "pc-13",
+      "pc-14",
+      "pc-09",
+      "pc-08",
+      "pc-18"
+    ]
   }
 ]

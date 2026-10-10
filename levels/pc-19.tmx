@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <map version="1.10" tiledversion="1.11.2" orientation="orthogonal" renderorder="right-down" width="13" height="9" tilewidth="16" tileheight="16" infinite="0" nextlayerid="3" nextobjectid="7">
  <properties>
-  <property name="name" value="Niveau 2b"/>
+  <property name="name" value="The Long Way Round"/>
   <property name="author" value="moineau"/>
   <property name="goldMoves" type="int" value="88"/>
  </properties>

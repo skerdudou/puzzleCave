@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <map version="1.10" tiledversion="1.11.2" orientation="orthogonal" renderorder="right-down" width="18" height="18" tilewidth="16" tileheight="16" infinite="0" nextlayerid="3" nextobjectid="40">
  <properties>
-  <property name="name" value="Niveau 3"/>
+  <property name="name" value="Castle"/>
   <property name="author" value="moineau"/>
   <property name="goldMoves" type="int" value="401"/>
  </properties>
