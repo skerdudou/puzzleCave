@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<map version="1.10" tiledversion="1.11.2" orientation="orthogonal" renderorder="right-down" width="18" height="18" tilewidth="16" tileheight="16" infinite="0" nextlayerid="3" nextobjectid="40">
+ <properties>
+  <property name="name" value="Niveau 3"/>
+  <property name="author" value="moineau"/>
+  <property name="goldMoves" type="int" value="401"/>
+ </properties>
+ <tileset firstgid="1" source="tileset.tsx"/>
+ <layer id="1" name="terrain" width="18" height="18">
+  <data encoding="csv">
+5,1,4,3,1,4,4,1,3,1,1,1,1,1,1,3,1,1,
+4,1,1,3,1,1,4,4,4,1,4,4,4,4,1,4,4,1,
+1,1,1,3,1,4,4,1,1,3,1,1,1,1,3,1,1,1,
+1,1,1,3,1,1,4,3,1,1,1,4,4,4,1,4,1,1,
+1,1,4,3,1,4,4,3,1,1,2,1,1,1,1,1,4,1,
+1,1,1,3,1,1,4,1,1,4,4,1,1,1,1,1,4,1,
+1,1,1,3,1,4,4,4,1,4,4,1,1,1,1,1,4,4,
+1,1,4,3,1,1,4,4,3,1,4,1,1,1,1,1,4,1,
+1,1,1,3,1,4,4,1,1,1,4,1,1,1,1,1,4,1,
+1,1,1,3,1,1,4,1,2,1,4,4,4,4,4,4,1,1,
+1,1,1,3,1,4,4,4,1,1,1,1,1,1,1,1,1,1,
+1,1,1,3,1,1,4,1,3,1,1,1,1,1,1,1,1,1,
+3,1,1,3,1,4,4,4,4,4,4,4,1,4,4,4,4,4,
+1,1,1,3,1,1,4,1,4,1,4,1,1,1,4,1,4,1,
+1,1,1,3,1,1,1,1,1,1,1,4,1,4,1,1,1,1,
+1,1,4,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
+3,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+1,1,1,1,1,4,1,1,4,1,1,4,1,1,3,1,1,1
+</data>
+ </layer>
+ <objectgroup id="2" name="objects">
+  <object id="1" gid="6" x="208" y="112" width="16" height="16"/>
+  <object id="2" gid="9" x="208" y="96" width="16" height="16"/>
+  <object id="3" gid="9" x="192" y="112" width="16" height="16"/>
+  <object id="4" gid="9" x="208" y="128" width="16" height="16"/>
+  <object id="5" gid="9" x="224" y="112" width="16" height="16"/>
+  <object id="6" gid="9" x="224" y="80" width="16" height="16"/>
+  <object id="7" gid="9" x="240" y="96" width="16" height="16"/>
+  <object id="8" gid="9" x="240" y="128" width="16" height="16"/>
+  <object id="9" gid="9" x="224" y="144" width="16" height="16"/>
+  <object id="10" gid="9" x="192" y="144" width="16" height="16"/>
+  <object id="11" gid="9" x="176" y="128" width="16" height="16"/>
+  <object id="12" gid="9" x="176" y="96" width="16" height="16"/>
+  <object id="13" gid="9" x="192" y="80" width="16" height="16"/>
+  <object id="14" gid="9" x="256" y="48" width="16" height="16"/>
+  <object id="15" gid="9" x="144" y="16" width="16" height="16"/>
+  <object id="16" gid="9" x="128" y="48" width="16" height="16"/>
+  <object id="17" gid="9" x="128" y="64" width="16" height="16"/>
+  <object id="18" gid="9" x="176" y="224" width="16" height="16"/>
+  <object id="19" gid="9" x="208" y="224" width="16" height="16"/>
+  <object id="20" gid="9" x="16" y="48" width="16" height="16"/>
+  <object id="21" gid="9" x="0" y="64" width="16" height="16"/>
+  <object id="22" gid="9" x="0" y="96" width="16" height="16"/>
+  <object id="23" gid="8" x="192" y="240" width="16" height="16"/>
+  <object id="24" gid="8" x="192" y="224" width="16" height="16"/>
+  <object id="25" gid="8" x="192" y="208" width="16" height="16"/>
+  <object id="26" gid="8" x="272" y="160" width="16" height="16"/>
+  <object id="27" gid="8" x="272" y="64" width="16" height="16"/>
+  <object id="28" gid="8" x="224" y="64" width="16" height="16"/>
+  <object id="29" gid="8" x="128" y="112" width="16" height="16"/>
+  <object id="30" gid="8" x="144" y="80" width="16" height="16"/>
+  <object id="31" gid="8" x="16" y="16" width="16" height="16"/>
+  <object id="32" gid="7" x="112" y="16" width="16" height="16"/>
+  <object id="33" gid="7" x="112" y="48" width="16" height="16"/>
+  <object id="34" gid="7" x="272" y="80" width="16" height="16"/>
+  <object id="35" gid="7" x="272" y="96" width="16" height="16"/>
+  <object id="36" gid="7" x="272" y="128" width="16" height="16"/>
+  <object id="37" gid="7" x="272" y="144" width="16" height="16"/>
+  <object id="38" gid="7" x="112" y="192" width="16" height="16"/>
+  <object id="39" gid="7" x="208" y="144" width="16" height="16"/>
+ </objectgroup>
+</map>

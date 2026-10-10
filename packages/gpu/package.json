@@ -1,0 +1,16 @@
+{
+  "name": "@puzzlecave/gpu",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@puzzlecave/core": "*",
+    "webgpu": "^0.6.2"
+  },
+  "devDependencies": {
+    "@puzzlecave/tiled": "*"
+  }
+}

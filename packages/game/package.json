@@ -1,0 +1,22 @@
+{
+  "name": "@puzzlecave/game",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --configLoader runner",
+    "build": "vite build --configLoader runner",
+    "preview": "vite preview --configLoader runner",
+    "e2e": "playwright test"
+  },
+  "dependencies": {
+    "@puzzlecave/core": "*",
+    "phaser": "^4.2.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.0",
+    "@puzzlecave/tiled": "*",
+    "vite": "^8.3.4",
+    "vite-plugin-pwa": "^2.0.0"
+  }
+}

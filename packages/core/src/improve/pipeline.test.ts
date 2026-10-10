@@ -1,0 +1,180 @@
+import { expect, test, vi } from 'vitest';
+import { fromAscii } from '../ascii';
+import { replay } from '../replay';
+import { solve } from '../solver';
+import type { Dir } from '../types';
+import { findSolution } from './findSolution';
+import { improveLevel } from './pipeline';
+import { searchWindow } from './window';
+
+// optimum 4: key, block into the water, exit
+const LEVEL = fromAscii(['@kB~E', '.D###', '.k...'], { initialKeys: 0 });
+const LONG: Dir[] = [
+  'down',
+  'down',
+  'up',
+  'up',
+  'right',
+  'left',
+  'right',
+  'right',
+  'right',
+  'right',
+];
+const opts = { timeoutMs: 20_000, maxStates: 100_000 };
+const timeout = (lowerBound: number) =>
+  vi.fn(() => ({ status: 'timeout' as const, explored: 0, lowerBound }));
+
+test('designer solution preferred, reoptimized and proven optimal', () => {
+  expect(replay(LEVEL, LONG).status).toBe('won');
+  const find = vi.fn(findSolution);
+  const exact = vi.fn(solve);
+  const r = improveLevel(LEVEL, { ...opts, initial: LONG, find, exact });
+  expect(find).not.toHaveBeenCalled();
+  expect(exact).toHaveBeenCalled();
+  expect(r.start).toBe('designer');
+  expect(r.initialLength).toBe(LONG.length);
+  expect(r.moves).toHaveLength(4);
+  expect(r.proven).toBe(true);
+  expect(r.lowerBound).toBe(4);
+  expect(replay(LEVEL, r.moves!).status).toBe('won');
+  expect(r.stages.map((s) => s.stage)).toEqual(['reoptimize', 'freeze', 'proof']);
+});
+
+test('global engine (GPU): frozen blocks and proof only, never the windows', () => {
+  const exact = vi.fn(solve);
+  const global = vi.fn(solve);
+  const r = improveLevel(LEVEL, { ...opts, initial: LONG, exact, global });
+  expect(r.proven).toBe(true);
+  expect(r.moves).toHaveLength(4);
+  // final windows: ordinary exact engine, without auto mode
+  expect(exact).toHaveBeenCalled();
+  for (const [, o] of exact.mock.calls) expect(o?.partialExpansion).toBeUndefined();
+  // frozen blocks and proof (auto mode): global engine; the proof covers the whole level
+  expect(global.mock.calls.length).toBeGreaterThanOrEqual(2);
+  for (const [, o] of global.mock.calls) expect(o?.partialExpansion).toBe('auto');
+  expect(global.mock.calls.at(-1)![0]).toBe(LEVEL);
+});
+
+test('memory budget: passed to each search; auto mode for the proof and frozen blocks, not for the final windows; no state limit', () => {
+  const calls: {
+    maxMemoryMb?: number;
+    partialExpansion?: unknown;
+    maxStates?: number;
+    upperBound?: number;
+  }[] = [];
+  const exact = vi.fn((l: Parameters<typeof solve>[0], o: Parameters<typeof solve>[1]) => {
+    calls.push({ ...o });
+    return solve(l, o);
+  });
+  const find = vi.fn(findSolution);
+  const window = vi.fn((...a: Parameters<typeof searchWindow>) => searchWindow(...a));
+  const r = improveLevel(LEVEL, { timeoutMs: 20_000, maxMemoryMb: 64, exact, find, window });
+  expect(r.proven).toBe(true);
+  expect(find.mock.calls[0]![1]).toMatchObject({ maxMemoryMb: 64 });
+  expect(find.mock.calls[0]![1].maxStates).toBe(Infinity);
+  expect(calls.length).toBeGreaterThan(1);
+  for (const c of calls) expect(c.maxMemoryMb).toBe(64);
+  // last call: the proof (no state limit, auto mode)
+  expect(calls.at(-1)).toMatchObject({ partialExpansion: 'auto' });
+  expect(calls.at(-1)!.maxStates).toBeUndefined();
+  // final windows: state limit per window, without partial expansion
+  const finals = calls.filter((c) => c.partialExpansion !== 'auto');
+  expect(finals.length).toBeGreaterThan(0);
+  for (const c of finals) expect(c.maxStates).toBe(2_000_000);
+  for (const [, , , wo] of window.mock.calls) expect(wo).toMatchObject({ maxMemoryMb: 64 });
+});
+
+test('without a designer solution: a solution is searched for', () => {
+  const find = vi.fn(findSolution);
+  const r = improveLevel(LEVEL, { ...opts, find });
+  expect(find).toHaveBeenCalled();
+  expect(r.start).toBe('found');
+  expect(r.stages[0]!.stage).toBe('find');
+  expect(r.moves).toHaveLength(4);
+  expect(r.proven).toBe(true);
+});
+
+test('designer solution that does not win: flagged, then search', () => {
+  const r = improveLevel(LEVEL, { ...opts, initial: ['down'] });
+  expect(r.designerInvalid).toBe('playing');
+  expect(r.start).toBe('found');
+  expect(replay(LEVEL, r.moves!).status).toBe('won');
+});
+
+test('exact search that does not finish: best known, proven lower bound', () => {
+  const r = improveLevel(LEVEL, { ...opts, initial: LONG, exact: timeout(3) });
+  expect(r.proven).toBe(false);
+  expect(r.lowerBound).toBe(3);
+  expect(r.moves!.length).toBeLessThanOrEqual(LONG.length);
+  expect(replay(LEVEL, r.moves!).status).toBe('won');
+});
+
+test('lower bound equal to the length: proven without the search finishing', () => {
+  const r = improveLevel(LEVEL, {
+    ...opts,
+    initial: ['right', 'right', 'right', 'right'],
+    exact: timeout(4),
+  });
+  expect(r.moves).toHaveLength(4);
+  expect(r.proven).toBe(true);
+});
+
+test('engine answering "nothing shorter" (upperBound): the solution is proven', () => {
+  const exact = vi.fn((_l, o: { upperBound?: number }) =>
+    o.upperBound !== undefined
+      ? { status: 'unsolvable' as const, explored: 0 }
+      : { status: 'timeout' as const, explored: 0, lowerBound: 0 },
+  );
+  const r = improveLevel(LEVEL, { ...opts, initial: ['right', 'right', 'right', 'right'], exact });
+  expect(r.proven).toBe(true);
+  expect(r.lowerBound).toBe(4);
+});
+
+test.each([
+  ['that does not win', ['down'] as Dir[]],
+  ['longer than the current solution', ['down', 'up', ...LONG] as Dir[]],
+])('proof: an exact engine solution %s proves nothing', (_, bad) => {
+  // the engine only answers the proof (no final window nor useful restriction)
+  const exact = vi.fn((_l, o: { maxStates?: number }) =>
+    o.maxStates === 100_000
+      ? { status: 'solved' as const, moves: bad, explored: 1 }
+      : { status: 'timeout' as const, explored: 0, lowerBound: 0 },
+  );
+  const r = improveLevel(LEVEL, { ...opts, maxStatesPerWindow: 50, initial: LONG, exact });
+  expect(r.proven).toBe(false);
+  expect(r.lowerBound).toBe(0);
+  expect(r.moves!.length).toBeLessThanOrEqual(LONG.length);
+  expect(replay(LEVEL, r.moves!).status).toBe('won');
+  expect(r.stages.at(-1)!.note).toMatch(/inconsistent/);
+});
+
+test('proof: an exact engine solution of the same length proves optimality', () => {
+  const exact = vi.fn(() => ({
+    status: 'solved' as const,
+    moves: ['right', 'right', 'right', 'right'] as Dir[],
+    explored: 1,
+  }));
+  const r = improveLevel(LEVEL, { ...opts, initial: ['right', 'right', 'right', 'right'], exact });
+  expect(r.proven).toBe(true);
+  expect(r.lowerBound).toBe(4);
+});
+
+test('unsolvable level: nothing to do, reported as such', () => {
+  const r = improveLevel(fromAscii(['@#E']), opts);
+  expect(r.start).toBe('none');
+  expect(r.moves).toBeUndefined();
+  expect(r.unsolvable).toBe(true);
+  expect(r.proven).toBe(false);
+});
+
+test('no solution found within the limits: lower bound of the exact search', () => {
+  const r = improveLevel(LEVEL, {
+    ...opts,
+    find: () => ({ status: 'failed', reason: 'limit', explored: 1 }),
+    exact: timeout(2),
+  });
+  expect(r.start).toBe('none');
+  expect(r.moves).toBeUndefined();
+  expect(r.lowerBound).toBe(2);
+});

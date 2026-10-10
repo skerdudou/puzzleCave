@@ -1,0 +1,11 @@
+{
+  "name": "@puzzlecave/tools",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@puzzlecave/core": "*",
+    "@puzzlecave/gpu": "*",
+    "@puzzlecave/tiled": "*"
+  }
+}

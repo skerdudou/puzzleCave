@@ -1,0 +1,32 @@
+{
+  "name": "puzzlecave",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:slow": "vitest run --mode slow packages/tools/src/solverSlow.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "format": "prettier --write .",
+    "validate": "tsx packages/tools/src/cli.ts validate",
+    "solve": "tsx packages/tools/src/cli.ts solve",
+    "improve": "tsx packages/tools/src/cli.ts improve",
+    "dev": "npm run dev -w @puzzlecave/game",
+    "build": "npm run build -w @puzzlecave/game",
+    "e2e": "npm run e2e -w @puzzlecave/game"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "prettier": "^3.9.10",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  }
+}
