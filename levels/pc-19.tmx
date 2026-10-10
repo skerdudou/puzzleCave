@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<map version="1.10" tiledversion="1.11.2" orientation="orthogonal" renderorder="right-down" width="13" height="9" tilewidth="16" tileheight="16" infinite="0" nextlayerid="3" nextobjectid="7">
+ <properties>
+  <property name="name" value="Niveau 2b"/>
+  <property name="author" value="moineau"/>
+  <property name="goldMoves" type="int" value="88"/>
+ </properties>
+ <tileset firstgid="1" source="tileset.tsx"/>
+ <layer id="1" name="terrain" width="13" height="9">
+  <data encoding="csv">
+4,1,1,1,1,1,1,1,1,3,5,4,4,
+4,1,1,1,1,1,1,1,4,4,4,4,4,
+4,4,3,4,4,4,4,4,4,4,4,4,4,
+4,4,1,1,1,1,1,1,1,1,1,1,1,
+4,4,1,1,4,4,4,4,4,4,4,1,1,
+4,4,4,4,4,4,4,4,4,1,3,1,1,
+4,4,4,4,4,4,4,4,4,4,4,1,1,
+1,1,1,1,1,1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,1,1,1,1,1
+</data>
+ </layer>
+ <objectgroup id="2" name="objects">
+  <object id="1" gid="6" x="0" y="144" width="16" height="16"/>
+  <object id="2" gid="8" x="128" y="16" width="16" height="16"/>
+  <object id="3" gid="9" x="32" y="32" width="16" height="16"/>
+  <object id="4" gid="7" x="144" y="96" width="16" height="16"/>
+  <object id="5" gid="9" x="32" y="128" width="16" height="16"/>
+  <object id="6" gid="9" x="80" y="128" width="16" height="16"/>
+ </objectgroup>
+</map>

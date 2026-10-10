@@ -3,7 +3,7 @@
     "id": "easy",
     "name": { "fr": "Facile", "en": "Easy" },
     "unlockAfter": 0,
-    "levels": ["pc-01", "pc-02", "pc-05", "pc-06"]
+    "levels": ["pc-01", "pc-02", "pc-19", "pc-05", "pc-06"]
   },
   {
     "id": "medium",
