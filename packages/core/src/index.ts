@@ -27,4 +27,15 @@ export * from './solverNaive';
 export * from './improve';
 export { planSolution, type PlanOptions, type PlanResult, type PlanStats } from './planner/plan';
 export { reachSubgoal, restrict, type Restriction, type SubgoalResult } from './planner/subgoal';
+export {
+  deriveStages,
+  formatStage,
+  formatStages,
+  parseStages,
+  runStages,
+  type RunStagesOptions,
+  type RunStagesResult,
+  type Stage,
+  type StageReport,
+} from './planner/stages';
 export { DeadlockAnalysis, type DeadReason, type ExitEntrance } from './deadlock';

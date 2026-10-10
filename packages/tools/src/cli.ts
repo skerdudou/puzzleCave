@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import { parseArgs } from './args';
 import { solveCommand, validateCommand, type CommandResult } from './commands';
 import { exactBackend } from './gpu';
@@ -5,6 +6,7 @@ import { improveCommand, improveParallel } from './improve';
 import { solveParallel } from './parallel';
 import { LEVELS_DIR } from './paths';
 import { parsePlanArgs, planCommand } from './plan';
+import { parseSubgoalArgs, subgoalCommand } from './subgoal';
 
 if (process.argv[2] === 'plan') {
   const p = parsePlanArgs(process.argv.slice(3));
@@ -13,6 +15,18 @@ if (process.argv[2] === 'plan') {
     process.exit(2);
   }
   const r = planCommand(LEVELS_DIR, p.ids, p.opts);
+  for (const line of r.lines) console.log(line);
+  process.exit(r.ok ? 0 : 1);
+}
+if (process.argv[2] === 'subgoal') {
+  const p = parseSubgoalArgs(process.argv.slice(3));
+  if ('error' in p) {
+    console.error(p.error);
+    process.exit(2);
+  }
+  // relative to the directory npm was started from
+  const file = resolve(process.env.INIT_CWD ?? '.', p.file);
+  const r = subgoalCommand(LEVELS_DIR, p.id, file, p.opts);
   for (const line of r.lines) console.log(line);
   process.exit(r.ok ? 0 : 1);
 }

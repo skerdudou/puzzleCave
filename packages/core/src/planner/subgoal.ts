@@ -24,15 +24,21 @@ export interface SubgoalOptions {
   maxStates?: number;
   /** the goal is a win (reaching the exit) */
   win?: boolean;
+  /** wall-clock limit of the search (none by default) */
+  timeoutMs?: number;
+  now?: () => number;
+  /** memory budget of the search structures (256 MB by default) */
+  maxMemoryMb?: number;
 }
 
 export type SubgoalResult =
   | { ok: true; moves: Dir[]; state: GameState; explored: number }
   /**
    * touched: frozen blocks the player stood next to with room behind them (pushable if
-   * unfrozen); full: stopped by maxStates rather than exhausted
+   * unfrozen); full: stopped by maxStates (or the memory budget) rather than exhausted;
+   * timedOut: stopped by timeoutMs
    */
-  | { ok: false; touched: number[]; full: boolean; explored: number };
+  | { ok: false; touched: number[]; full: boolean; timedOut: boolean; explored: number };
 
 /** Copy of s where every block, door and water that is not allowed becomes a wall. */
 export function restrict(s: GameState, r: Restriction): GameState {
@@ -74,7 +80,7 @@ export function reachSubgoal(
     if (o === 'block' && !free.has(i)) frozen[i] = 1;
   });
   const touched = new Set<number>();
-  const budget = new MemoryBudget(256 * 1024 * 1024);
+  const budget = new MemoryBudget((opts.maxMemoryMb ?? 256) * 1024 * 1024);
   const store = new StateStore(words, budget);
   const heap = new TypedHeap(budget);
   const key = new Uint32Array(words);
@@ -90,6 +96,10 @@ export function reachSubgoal(
   let winParent = -1;
   let winCost = Infinity;
   let full = false;
+  let timedOut = false;
+  const now = opts.now ?? (() => performance.now());
+  const deadline = opts.timeoutMs === undefined ? Infinity : now() + opts.timeoutMs;
+  let pops = 0;
   const next = model.next;
   const sink = {
     succ(edge: number, walk: number, _cell: number, won: boolean): boolean {
@@ -148,6 +158,10 @@ export function reachSubgoal(
     const id = heap.topVal;
     const cost = heap.topPrio;
     if (store.closed(id) || store.cost(id) !== cost) continue;
+    if ((++pops & 255) === 0 && now() > deadline) {
+      timedOut = true;
+      break;
+    }
     // a win found earlier is not longer than anything still in the heap
     if (winEdge >= 0 && winCost <= cost) break;
     store.setClosed(id);
@@ -165,7 +179,7 @@ export function reachSubgoal(
     if (full) break;
   }
   if (found < 0 && winEdge < 0)
-    return { ok: false, touched: [...touched], full, explored: store.size };
+    return { ok: false, touched: [...touched], full, timedOut, explored: store.size };
   const moves = found >= 0 ? rebuild(found, -1) : rebuild(winParent, winEdge);
   // replay on the real state
   let real = s;

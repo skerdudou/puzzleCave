@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { app } from '../app';
 import { setDebug } from '../debug';
 import { LANGS, getLang, messages, setLang, t, type Lang } from '../i18n';
+import { onSceneKeyDown } from '../input/sceneKeys';
 import { syncMusic } from '../music';
 import { COLORS, dpr, makeButton, px, textStyle } from '../ui';
 
@@ -90,7 +91,8 @@ export class OptionsScene extends Phaser.Scene {
     );
 
     button('back', cx, y + px(12), t('back'), () => this.scene.start('Menu'), 16);
-    this.input.keyboard?.on('keydown-ESC', () => {
+    onSceneKeyDown(this, (e) => {
+      if (e.key !== 'Escape') return;
       if (this.langMenu.length) this.closeLangMenu();
       else this.scene.start('Menu');
     });

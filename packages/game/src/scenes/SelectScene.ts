@@ -9,6 +9,7 @@ import { app } from '../app';
 import { setDebug } from '../debug';
 import { formatTime } from '../format';
 import { getLang, t } from '../i18n';
+import { onSceneKeyDown } from '../input/sceneKeys';
 import { chapters, levelById, locate } from '../levels';
 import { platinumText, thresholdRows } from '../medalInfo';
 import { syncMusic } from '../music';
@@ -46,7 +47,7 @@ export class SelectScene extends Phaser.Scene {
 
   create(): void {
     this.draw();
-    this.input.keyboard?.on('keydown', (e: KeyboardEvent) => this.onKey(e));
+    onSceneKeyDown(this, (e) => this.onKey(e));
     const onResize = () => this.scene.restart({ levelId: this.currentId() });
     this.scale.on('resize', onResize);
     this.events.once('shutdown', () => this.scale.off('resize', onResize));

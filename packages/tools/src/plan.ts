@@ -14,7 +14,7 @@ import {
   type LevelData,
 } from '@puzzlecave/core';
 import { loadPack, setMapProperty } from '@puzzlecave/tiled';
-import { solutionHeader, type CommandResult } from './commands';
+import { savedLowerBound, solutionHeader, type CommandResult } from './commands';
 
 export interface PlanCommandOptions {
   timeoutMs: number;
@@ -105,17 +105,24 @@ export function planCommand(dir: string, ids: string[], o: PlanCommandOptions): 
         `${id}: improve ${r.moves.length} → ${best.length} moves${im.proven ? ' (proven)' : ` (≥ ${im.lowerBound})`}, ${sec(performance.now() - t1)}`,
       );
     }
-    if (o.apply) lines.push(...apply(dir, level, best, lowerBound));
+    if (o.apply) lines.push(...applySolution(dir, level, best, lowerBound));
   }
   return { ok, lines };
 }
 
 /** writes the solution if it wins and beats the saved one; lowers goldMoves accordingly */
-function apply(dir: string, level: LevelData, moves: Dir[], lowerBound: number): string[] {
-  if (replay(level, moves).status !== 'won') return [`${level.id}: plan rejected (does not win)`];
+export function applySolution(
+  dir: string,
+  level: LevelData,
+  moves: Dir[],
+  lowerBound: number,
+): string[] {
+  if (replay(level, moves).status !== 'won')
+    return [`${level.id}: solution rejected (does not win)`];
   const file = join(dir, 'solutions', `${level.id}.txt`);
   if (existsSync(file)) {
     try {
+      lowerBound = Math.max(lowerBound, savedLowerBound(file));
       const saved = parseMoves(readFileSync(file, 'utf8'));
       if (replay(level, saved).status === 'won' && saved.length <= moves.length)
         return [`${level.id}: saved solution (${saved.length}) kept`];

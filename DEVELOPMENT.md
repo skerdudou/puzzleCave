@@ -112,6 +112,27 @@ A saved solution that is unreadable or does not win is never overwritten without
 
 When `improve` finds no starting solution, the event planner builds one from sub-goals: take a key, fill a water cell, open a door, move a block to enlarge the reachable area, reach the exit. Each event is checked by a small exact search where everything not allowed is a wall (blocks are unfrozen one at a time), and a best-first search chains the events. `--improve s` then runs the `improve` pipeline from the plan; `--apply` saves the result only if it wins and is shorter than the saved solution. It solved pc-11 with no hints (346 moves, 310 after `improve`), but it is incomplete and weak on key-and-door grids: use it after `findSolution`, not instead of it. The static dead-state test (`deadPruning`, `keyDominance`) is sound but off by default: it never fired on the real levels and slows the search. Details in `docs/solver-study.md`.
 
+### Hand-written stages: `subgoal`
+
+    npm run subgoal -- <id> <stages-file> [--from-solution] [--timeout s] [--max-states N] [--max-memory MB] [--improve s] [--apply]
+
+The same restricted searches as `plan`, but the event order is written by hand. A stages file has one stage per line (`#` starts a comment); a stage is a list of clauses, each a keyword followed by cells `x,y`:
+
+| Clause | Meaning |
+| --- | --- |
+| `key x,y…` / `water x,y…` / `door x,y…` | goal: those keys taken / waters filled / doors opened |
+| `at x,y…` | goal: a block stands on each cell |
+| `reach x,y…` | goal: the player can walk to each cell |
+| `player x,y` | goal: the stage ends with the player on that cell (cell of its last push, key or door) |
+| `exit` | goal: win (alone on its line) |
+| `blocks x,y…` | blocks allowed to move, named by their cell at the start of the stage |
+| `doors x,y…` / `waters x,y…` / `waters all` | doors that may be opened / waters a block may fill (besides those of the goals) |
+| `max N` | macro-state limit of this stage (default `--max-states`, 200 000) |
+
+All goals of a line must hold together. Everything not allowed is frozen as a wall: other blocks and doors, other waters. Example: `water 14,8 blocks 13,8`, `key 0,0`, `door 6,4`, `exit`. Each stage is a shortest search from the end of the previous one (a stage already satisfied costs 0); the output gives the moves of each stage, or the failing stage, its line and why (unreachable, with the frozen blocks the player could push; state limit; `--timeout` per stage, default 60 s). The chained moves are replayed with the real rules and must win. `--improve` and `--apply` work as in `plan`.
+
+`--from-solution` first writes the stages of the saved solution into the stages file (never overwritten): one stage per event, with the blocks moved in the segment, `at`/`player` pins on its end state and its length in a comment, so it rebuilds a solution at most as long. Edit it (reorder stages, drop the pins, free other blocks) to get starting points `improve` cannot reach by local changes (pc-11 went from 326 to 310 moves with another event order). Relative paths are resolved from the directory `npm` was started from.
+
 ## Designer tools in the game (`npm run dev` only)
 
 In author mode (development server; the `?dev` option alone is not enough since there is no server behind it):

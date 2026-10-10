@@ -3,7 +3,7 @@
  <properties>
   <property name="name" value="Hidden in Plain Sight"/>
   <property name="author" value="moineau"/>
-  <property name="goldMoves" type="int" value="126"/>
+  <property name="goldMoves" type="int" value="106"/>
   <property name="platinum" type="bool" value="true"/>
  </properties>
  <tileset firstgid="1" source="tileset.tsx"/>

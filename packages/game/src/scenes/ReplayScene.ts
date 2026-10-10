@@ -4,6 +4,7 @@ import { setDebug } from '../debug';
 import { t } from '../i18n';
 import { levelById } from '../levels';
 import { Playback } from '../author/playback';
+import { onSceneKeyDown } from '../input/sceneKeys';
 import { BoardView } from '../render/BoardView';
 import { boardLayout } from '../render/layout';
 import { COLORS, makeButton, px, textStyle } from '../ui';
@@ -58,8 +59,7 @@ export class ReplayScene extends Phaser.Scene {
     if (this.info.paused) this.playback.playing = false;
     this.refreshHud();
 
-    const onKey = (e: KeyboardEvent) => this.onKey(e);
-    this.input.keyboard?.on('keydown', onKey);
+    onSceneKeyDown(this, (e) => this.onKey(e));
     const onResize = () =>
       this.scene.restart({
         ...this.info,

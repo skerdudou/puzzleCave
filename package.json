@@ -19,6 +19,7 @@
     "solve": "tsx packages/tools/src/cli.ts solve",
     "improve": "tsx packages/tools/src/cli.ts improve",
     "plan": "tsx packages/tools/src/cli.ts plan",
+    "subgoal": "tsx packages/tools/src/cli.ts subgoal",
     "dev": "npm run dev -w @puzzlecave/game",
     "build": "npm run build -w @puzzlecave/game",
     "e2e": "npm run e2e -w @puzzlecave/game"

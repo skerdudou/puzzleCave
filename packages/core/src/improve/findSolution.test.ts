@@ -3,7 +3,8 @@ import { fromAscii } from '../ascii';
 import { replay } from '../replay';
 import { solveNaive } from '../solverNaive';
 import { findSolution } from './findSolution';
-import { sampleLevels } from '../testLevels';
+import { solve } from '../solver';
+import { mulberry32, sampleLevels, validRandomLevel } from '../testLevels';
 
 const LEVELS = {
   corridor: ['@..E'],
@@ -68,4 +69,27 @@ test('property: on the random sample, solves exactly the solvable levels', () =>
     } else expect(r.status, level.id).toBe('failed');
   }
   expect(solved).toBeGreaterThan(200);
+});
+
+test('findSolution: block on gravel pushed into water (vrnd-94, seed 5)', () => {
+  const level = fromAscii([',..~##.', '#..E~.#', '~#~~BD.', ',~#.#.#', '~#~#..D', 'k.....@']);
+  level.terrain[2 * level.width + 4] = 'gravel'; // under the block (no ASCII character for it)
+  const r = findSolution(level, { maxStates: 100_000, timeoutMs: 10_000 });
+  expect(r.status).toBe('solved');
+  if (r.status === 'solved') expect(replay(level, r.moves).status).toBe('won');
+});
+
+test('property: on valid random levels (gravel under blocks), solves what solve() solves', () => {
+  // the stage 1 sample above never puts a block on gravel; stage 2 does
+  const rnd = mulberry32(5);
+  let solved = 0;
+  for (let n = 0; n < 500; n++) {
+    const level = validRandomLevel(rnd, n);
+    if (solve(level, { timeoutMs: 60_000 }).status !== 'solved') continue;
+    const r = findSolution(level, { maxStates: 1_000_000, timeoutMs: 60_000 });
+    expect(r.status, level.id).toBe('solved');
+    if (r.status === 'solved') expect(replay(level, r.moves).status, level.id).toBe('won');
+    solved++;
+  }
+  expect(solved).toBeGreaterThan(150);
 });

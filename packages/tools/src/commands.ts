@@ -20,6 +20,14 @@ export function solutionHeader(proven: boolean, lowerBound: number): string {
     : `# best known — not proven optimal (proven lower bound ≥ ${lowerBound})`;
 }
 
+/** lower bound written in a saved solution's header (0 if none): it stays proven for any later
+ * solution of the same level, so a shorter or weaker run must not lower it */
+export function savedLowerBound(file: string): number {
+  if (!existsSync(file)) return 0;
+  const m = /proven lower bound ≥ (\d+)/.exec(readFileSync(file, 'utf8').split('\n', 1)[0]!);
+  return m ? Number(m[1]) : 0;
+}
+
 export interface CommandResult {
   ok: boolean;
   lines: string[];

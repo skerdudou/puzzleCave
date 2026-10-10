@@ -13,6 +13,7 @@ import { app } from '../app';
 import { setDebug } from '../debug';
 import { formatTime } from '../format';
 import { t } from '../i18n';
+import { onSceneKeyDown } from '../input/sceneKeys';
 import { chapters, levelById, locate } from '../levels';
 import { platinumText, thresholdRows, type ThresholdRow } from '../medalInfo';
 import { COLORS, drawMedal, drawThresholdLine, makeButton, px, textStyle } from '../ui';
@@ -168,7 +169,7 @@ export class ResultScene extends Phaser.Scene {
       }
     }
 
-    this.input.keyboard?.on('keydown', (e: KeyboardEvent) => {
+    onSceneKeyDown(this, (e) => {
       if (e.key === 'Enter' && next) this.scene.start('Game', { levelId: next, mode: 'normal' });
       else if (e.key.toLowerCase() === 'r') this.scene.start('Game', { levelId, mode });
       else if (e.key === 'Escape') this.scene.start('Select', { levelId });

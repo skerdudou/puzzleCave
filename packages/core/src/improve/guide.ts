@@ -42,7 +42,9 @@ export class Guide {
     this.queue = new Int32Array(n * 2);
     this.frontier = new Int32Array(n);
     // relaxed push graph: a block goes from f to c = f + d if c is floor or water and if the
-    // player's cell f − d is not a wall; reverse BFS from each (non-walled) water
+    // player's cell f − d is not a wall; reverse BFS from each (non-walled) water. Only the
+    // destination c must accept a block: the origin f may be gravel (an initial block standing on
+    // gravel can be pushed off it but never back onto it), so gravel is a start, never a step.
     const terrain = model.start.terrain;
     const canHold = (i: number) =>
       base[i] !== WALL && (terrain[i] === 'floor' || terrain[i] === 'water');
@@ -53,11 +55,12 @@ export class Guide {
       const q = [w];
       for (let h = 0; h < q.length; h++) {
         const c = q[h]!;
+        if (c !== w && !canHold(c)) continue; // c (gravel) is reached as an origin only
         for (let k = 0; k < 4; k++) {
           const f = nb[c * 4 + (k ^ 1)]!; // cell the block comes from to reach c going in direction k
           if (f < 0) continue;
           const p = nb[f * 4 + (k ^ 1)]!; // cell of the pushing player
-          if (p < 0 || !canHold(f) || base[p] === WALL || d[f] !== DEAD) continue;
+          if (p < 0 || base[f] === WALL || base[p] === WALL || d[f] !== DEAD) continue;
           d[f] = d[c]! + 1;
           q.push(f);
         }

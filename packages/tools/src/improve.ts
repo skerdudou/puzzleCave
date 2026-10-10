@@ -14,7 +14,12 @@ import {
   type StageName,
 } from '@puzzlecave/core';
 import { loadPack, setMapProperty } from '@puzzlecave/tiled';
-import { solutionHeader, type CommandResult, type SolveCommandOptions } from './commands';
+import {
+  savedLowerBound,
+  solutionHeader,
+  type CommandResult,
+  type SolveCommandOptions,
+} from './commands';
 import type { GpuMode } from './args';
 import type { ImproveReply, ImproveTask } from './improveWorker';
 import { inProcessMemoryMb } from './memory';
@@ -120,8 +125,11 @@ export function reportImprove(
   if (savedIsInvalid(dir, level)) ok = false;
   if (o.apply) {
     try {
-      const text = `${solutionHeader(r.proven, r.lowerBound)}\n${formatMoves(r.moves)}`;
       const file = keepSaved ? join(dir, 'solutions', `${id}.found.txt`) : solutionFile(dir, id);
+      const bound = keepSaved
+        ? r.lowerBound
+        : Math.max(r.lowerBound, savedLowerBound(solutionFile(dir, id)));
+      const text = `${solutionHeader(r.proven, bound)}\n${formatMoves(r.moves)}`;
       if (!existsSync(file) || readFileSync(file, 'utf8') !== text) {
         mkdirSync(join(dir, 'solutions'), { recursive: true });
         writeFileSync(file, text);
