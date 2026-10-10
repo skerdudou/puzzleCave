@@ -1,6 +1,6 @@
 # Solver study (2026-10-10) — Fable + Opus synthesis
 
-> **Level changes after the measurements below.** `pc-11` now has the water put back on the start tile; its former 644-move solution no longer wins and is kept in `levels/solutions/pc-11.found.txt`, without `goldMoves`. The chapters are `easy`, `medium`, `hard`.
+> **Level changes after the measurements below.** `pc-11` now has the water put back on the start tile; its former 644-move solution no longer wins. The machine searches failed on it (lower bound ≥ 112); a 340-move solution was then built by decomposing the level into sub-goals (one key or one filled water cell at a time, other blocks frozen as walls, each sub-search under 1,000 states), and `improve` shortened it to 326 (`goldMoves` 326, lower bound ≥ 100 at 50 M states). The chapters are `easy`, `medium`, `hard`.
 
 Two independent studies (Fable and Opus models), which then compared their results. Prototypes: branches `solver-study` (Fable, folder `study/`) and `solver-opus` (Opus, folder `study/`) of the repository.
 

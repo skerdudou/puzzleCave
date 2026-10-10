@@ -10,8 +10,9 @@ import { setDebug } from '../debug';
 import { formatTime } from '../format';
 import { getLang, t } from '../i18n';
 import { chapters, levelById, locate } from '../levels';
+import { platinumText, thresholdRows } from '../medalInfo';
 import { syncMusic } from '../music';
-import { COLORS, drawMedal, makeButton, px, textStyle } from '../ui';
+import { COLORS, drawMedal, drawThresholdLine, makeButton, px, textStyle } from '../ui';
 import { authorServerAvailable, fetchSolution } from '../author/client';
 
 export class SelectScene extends Phaser.Scene {
@@ -172,6 +173,20 @@ export class SelectScene extends Phaser.Scene {
         .text(cx, y, t('by', { author: level.author }), textStyle(12, COLORS.dim))
         .setOrigin(0.5);
     y += px(22);
+    const th = resolveThresholds(level.thresholds, level.platinum);
+    const rows = thresholdRows(th);
+    const tg = this.add.graphics();
+    for (const r of rows) {
+      drawThresholdLine(this, tg, cx, y, t(r.kind), r.tiers);
+      y += px(18);
+    }
+    const plat = platinumText(th);
+    if (plat) {
+      drawThresholdLine(this, tg, cx, y, t('platinum'), [{ medal: 'platinum', text: plat }]);
+      y += px(18);
+    }
+    setDebug({ thresholds: rows, platinumLimit: plat });
+    if (rows.length || plat) y += px(4);
     if (rec?.completed) {
       const time = rec.bestTimeMs !== undefined ? formatTime(rec.bestTimeMs) : '–';
       this.add

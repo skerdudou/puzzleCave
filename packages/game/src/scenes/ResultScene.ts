@@ -14,7 +14,8 @@ import { setDebug } from '../debug';
 import { formatTime } from '../format';
 import { t } from '../i18n';
 import { chapters, levelById, locate } from '../levels';
-import { COLORS, drawMedal, makeButton, px, textStyle } from '../ui';
+import { thresholdRows, type ThresholdRow } from '../medalInfo';
+import { COLORS, drawMedal, drawThresholdLine, makeButton, px, textStyle } from '../ui';
 import {
   authorServerAvailable,
   fetchJob,
@@ -61,6 +62,7 @@ export class ResultScene extends Phaser.Scene {
 
     const g = this.add.graphics();
     const th = resolveThresholds(level.thresholds, level.platinum);
+    const rows = thresholdRows(th);
     const line = (
       label: string,
       value: string,
@@ -68,6 +70,7 @@ export class ResultScene extends Phaser.Scene {
       hasTier: boolean,
       best: string | undefined,
       isRecord: boolean,
+      kind: ThresholdRow['kind'],
     ) => {
       if (hasTier) drawMedal(g, cx - px(130), y, px(10), medal);
       this.add.text(cx - px(110), y, `${label} : ${value}`, textStyle(16)).setOrigin(0, 0.5);
@@ -79,6 +82,11 @@ export class ResultScene extends Phaser.Scene {
         this.add
           .text(cx + px(60), y + px(16), t('newRecord'), textStyle(11, COLORS.accent))
           .setOrigin(0, 0.5);
+      const row = rows.find((r) => r.kind === kind);
+      if (row) {
+        drawThresholdLine(this, g, cx, y + px(32), '', row.tiers);
+        y += px(18);
+      }
       y += px(40);
     };
     line(
@@ -88,6 +96,7 @@ export class ResultScene extends Phaser.Scene {
       th.moves !== undefined,
       previous?.bestMoves?.toString(),
       previous?.bestMoves === undefined || result.moves < previous.bestMoves,
+      'moves',
     );
     line(
       t('time'),
@@ -96,6 +105,7 @@ export class ResultScene extends Phaser.Scene {
       th.time !== undefined,
       previous?.bestTimeMs !== undefined ? formatTime(previous.bestTimeMs) : undefined,
       previous?.bestTimeMs === undefined || result.timeMs < previous.bestTimeMs,
+      'time',
     );
     if (mode === 'platinum' && th.platinumTime !== undefined) {
       drawMedal(g, cx - px(130), y, px(10), award.platinum ? 'platinum' : undefined);

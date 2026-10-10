@@ -49,6 +49,37 @@ export function makeButton(
   return b;
 }
 
+/** A centered line "label ● ≤ a ● ≤ b ● ≤ c" (medal dot then its limit, for each medal). */
+export function drawThresholdLine(
+  scene: Phaser.Scene,
+  g: Phaser.GameObjects.Graphics,
+  cx: number,
+  y: number,
+  label: string,
+  tiers: readonly { medal: Medal | 'platinum'; text: string }[],
+  size = 11,
+): void {
+  const items = tiers.map((tier) => ({
+    tier,
+    text: scene.add.text(0, y, tier.text, textStyle(size, COLORS.dim)).setOrigin(0, 0.5),
+  }));
+  const head = scene.add.text(0, y, label, textStyle(size, COLORS.dim)).setOrigin(0, 0.5);
+  const r = px(size / 2.5);
+  const dot = 2 * r + px(4);
+  const gap = px(12);
+  const width = head.width + items.reduce((w, i) => w + gap + dot + i.text.width, 0);
+  let x = cx - width / 2;
+  head.setX(x);
+  x += head.width;
+  for (const i of items) {
+    x += gap;
+    drawMedal(g, x + r, y, r, i.tier.medal);
+    x += dot;
+    i.text.setX(x);
+    x += i.text.width;
+  }
+}
+
 export function drawMedal(
   g: Phaser.GameObjects.Graphics,
   x: number,
