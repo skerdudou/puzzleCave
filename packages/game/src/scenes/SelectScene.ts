@@ -76,7 +76,9 @@ export class SelectScene extends Phaser.Scene {
   private draw(): void {
     const ch = chapters[this.ci]!;
     const cx = this.scale.width / 2;
-    this.add.text(cx, px(30), ch.name[getLang()], textStyle(18, COLORS.accent)).setOrigin(0.5);
+    this.add
+      .text(cx, px(30), ch.name[getLang()] ?? ch.name.en, textStyle(18, COLORS.accent))
+      .setOrigin(0.5);
     if (this.ci > 0) makeButton(this, px(30), px(30), '‹', () => this.switchChapter(-1), 18);
     if (this.ci < chapters.length - 1)
       makeButton(this, this.scale.width - px(30), px(30), '›', () => this.switchChapter(1), 18);

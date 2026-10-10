@@ -1,4 +1,4 @@
-export type Lang = 'fr' | 'en';
+export type Lang = 'en' | 'fr' | 'de' | 'es' | 'it';
 
 const fr = {
   play: 'Jouer',
@@ -146,17 +146,251 @@ const en: Record<MessageKey, string> = {
   by: 'by {author}',
 };
 
-const dicts: Record<Lang, Record<MessageKey, string>> = { fr, en };
+const de: Record<MessageKey, string> = {
+  play: 'Spielen',
+  options: 'Optionen',
+  back: 'Zurück',
+  sound: 'Ton',
+  on: 'An',
+  off: 'Aus',
+  language: 'Sprache',
+  langName: 'Deutsch',
+  swipe: 'Wisch-Empfindlichkeit',
+  repeat: 'Tastenwiederholung (Züge/s)',
+  lockedHint: 'Schaffe {n} Level des vorherigen Kapitels',
+  lockedHintOne: 'Schaffe 1 Level des vorherigen Kapitels',
+  moves: 'Züge',
+  time: 'Zeit',
+  keys: 'Schlüssel',
+  undo: 'Rückgängig',
+  restart: 'Neustart',
+  menu: 'Menü',
+  replay: 'Nochmal',
+  next: 'Weiter',
+  won: 'Level geschafft!',
+  drowned: 'Ertrunken!',
+  drownedHint: 'R: Neustart',
+  platinum: 'Platin-Herausforderung',
+  platinumMode: 'PLATIN',
+  platinumSurvive: 'ohne zu ertrinken',
+  record: 'Rekord',
+  copyTiled: 'Tiled-Eigenschaften kopieren',
+  copySolution: 'Lösung kopieren',
+  copied: 'Kopiert!',
+  newRecord: 'Neuer Rekord!',
+  selectHelp: 'Pfeile: wählen · Enter: spielen · P: Platin · Esc: Menü',
+  help: '{dirs} / Pfeile: bewegen · U: rückgängig · R: Neustart · Esc: Menü',
+  saveSolution: 'Lösung speichern',
+  solutionSaved: 'Lösung gespeichert: {n} Züge',
+  optimizing: 'Optimierung läuft{dots}',
+  optimizingTime: '({s} s vergangen)',
+  optimizedFromTo: 'Optimiert: {from} → {to} Züge ({status})',
+  alreadyOptimal: 'Bereits optimal: {n} Züge (beweisbar optimal)',
+  noImprovement: 'Keine Verbesserung: {n} Züge ({status})',
+  statusProven: 'beweisbar optimal',
+  statusBest: 'beste bekannte, untere Schranke ≥ {lb}',
+  optimizeFailed:
+    'Die Optimierung ist fehlgeschlagen (siehe Serverkonsole); die Lösung bleibt gespeichert',
+  tmxChanged: 'Gold-Schwelle im Level aktualisiert: lade die Seite neu, um sie zu sehen.',
+  notShorter: 'Eine gleich lange oder kürzere Lösung mit {n} Zügen ist bereits gespeichert.',
+  replaceAnyway: 'Trotzdem ersetzen',
+  notShorterProven:
+    'Eine beweisbar optimale Lösung mit {n} Zügen ist bereits gespeichert: Ersetzen verliert diesen Beweis (sie bleibt erhalten, wenn der neue Lauf ihn nicht erbringt).',
+  proofKept:
+    'Beweisbar optimale Lösung behalten ({n} Züge): der neue Lauf konnte sie nicht beweisen.',
+  notWinning: 'Diese Lösung gewinnt das Level nicht.',
+  jobRunning: 'Für dieses Level läuft bereits eine Optimierung.',
+  networkError: 'Entwicklungsserver nicht erreichbar: {msg}',
+  replayMine: 'Meine Lösung ansehen',
+  replayOptimized: 'Optimierte Lösung ansehen',
+  replaySaved: 'Lösung ansehen',
+  noSavedSolution: 'Keine gespeicherte Lösung für dieses Level',
+  labelMine: 'meine Lösung',
+  labelOptimized: 'optimierte Lösung',
+  labelSaved: 'gespeicherte Lösung',
+  replayMove: 'Zug {i} / {n}',
+  replaySpeed: 'Tempo: {v} Züge/s',
+  replayEnd: 'Ende',
+  replayPaused: 'Pause',
+  replayHelp: 'Leertaste: Pause · ←/→: Zug · +/−: Tempo · Pos1: Anfang · Esc: zurück',
+  toStart: 'Anfang',
+  pause: 'Pause',
+  playBtn: 'Abspielen',
+  by: 'von {author}',
+};
+
+const es: Record<MessageKey, string> = {
+  play: 'Jugar',
+  options: 'Opciones',
+  back: 'Volver',
+  sound: 'Sonido',
+  on: 'Activado',
+  off: 'Desactivado',
+  language: 'Idioma',
+  langName: 'Español',
+  swipe: 'Sensibilidad del deslizamiento',
+  repeat: 'Repetición (movimientos/s)',
+  lockedHint: 'Supera {n} niveles del capítulo anterior',
+  lockedHintOne: 'Supera 1 nivel del capítulo anterior',
+  moves: 'Movimientos',
+  time: 'Tiempo',
+  keys: 'Llaves',
+  undo: 'Deshacer',
+  restart: 'Reiniciar',
+  menu: 'Menú',
+  replay: 'Repetir',
+  next: 'Siguiente',
+  won: '¡Nivel superado!',
+  drowned: '¡Ahogado!',
+  drownedHint: 'R: reiniciar',
+  platinum: 'Desafío platino',
+  platinumMode: 'PLATINO',
+  platinumSurvive: 'sin ahogarte',
+  record: 'Récord',
+  copyTiled: 'Copiar propiedades de Tiled',
+  copySolution: 'Copiar la solución',
+  copied: '¡Copiado!',
+  newRecord: '¡Nuevo récord!',
+  selectHelp: 'Flechas: elegir · Intro: jugar · P: platino · Esc: menú',
+  help: '{dirs} / flechas: moverse · U: deshacer · R: reiniciar · Esc: menú',
+  saveSolution: 'Guardar la solución',
+  solutionSaved: 'Solución guardada: {n} movimientos',
+  optimizing: 'Optimizando{dots}',
+  optimizingTime: '({s} s transcurridos)',
+  optimizedFromTo: 'Optimizada: {from} → {to} movimientos ({status})',
+  alreadyOptimal: 'Ya óptima: {n} movimientos (óptima demostrada)',
+  noImprovement: 'Sin mejora: {n} movimientos ({status})',
+  statusProven: 'óptima demostrada',
+  statusBest: 'mejor conocida, cota inferior ≥ {lb}',
+  optimizeFailed:
+    'La optimización ha fallado (consulta la consola del servidor); la solución sigue guardada',
+  tmxChanged: 'Umbral de oro actualizado en el nivel: recarga la página para verlo.',
+  notShorter: 'Ya hay guardada una solución igual o más corta, de {n} movimientos.',
+  replaceAnyway: 'Reemplazar de todos modos',
+  notShorterProven:
+    'Ya hay guardada una solución óptima demostrada de {n} movimientos: reemplazarla pierde esa prueba (se conserva si la nueva ejecución no la demuestra).',
+  proofKept:
+    'Se conserva la solución óptima demostrada ({n} movimientos): la nueva ejecución no pudo demostrarla.',
+  notWinning: 'Esta solución no supera el nivel.',
+  jobRunning: 'Ya hay una optimización en curso para este nivel.',
+  networkError: 'Servidor de desarrollo inaccesible: {msg}',
+  replayMine: 'Ver mi solución',
+  replayOptimized: 'Ver la solución optimizada',
+  replaySaved: 'Ver la solución',
+  noSavedSolution: 'No hay ninguna solución guardada para este nivel',
+  labelMine: 'mi solución',
+  labelOptimized: 'solución optimizada',
+  labelSaved: 'solución guardada',
+  replayMove: 'Movimiento {i} / {n}',
+  replaySpeed: 'Velocidad: {v} movimientos/s',
+  replayEnd: 'Fin',
+  replayPaused: 'Pausa',
+  replayHelp: 'Espacio: pausa · ←/→: movimiento · +/−: velocidad · Inicio: principio · Esc: volver',
+  toStart: 'Principio',
+  pause: 'Pausa',
+  playBtn: 'Reproducir',
+  by: 'por {author}',
+};
+
+const it: Record<MessageKey, string> = {
+  play: 'Gioca',
+  options: 'Opzioni',
+  back: 'Indietro',
+  sound: 'Suono',
+  on: 'Attivo',
+  off: 'Disattivo',
+  language: 'Lingua',
+  langName: 'Italiano',
+  swipe: 'Sensibilità dello swipe',
+  repeat: 'Ripetizione (mosse/s)',
+  lockedHint: 'Completa {n} livelli del capitolo precedente',
+  lockedHintOne: 'Completa 1 livello del capitolo precedente',
+  moves: 'Mosse',
+  time: 'Tempo',
+  keys: 'Chiavi',
+  undo: 'Annulla',
+  restart: 'Ricomincia',
+  menu: 'Menu',
+  replay: 'Rigioca',
+  next: 'Avanti',
+  won: 'Livello completato!',
+  drowned: 'Annegato!',
+  drownedHint: 'R: ricomincia',
+  platinum: 'Sfida platino',
+  platinumMode: 'PLATINO',
+  platinumSurvive: 'senza annegare',
+  record: 'Record',
+  copyTiled: 'Copia le proprietà Tiled',
+  copySolution: 'Copia la soluzione',
+  copied: 'Copiato!',
+  newRecord: 'Nuovo record!',
+  selectHelp: 'Frecce: scegli · Invio: gioca · P: platino · Esc: menu',
+  help: '{dirs} / frecce: muoviti · U: annulla · R: ricomincia · Esc: menu',
+  saveSolution: 'Salva la soluzione',
+  solutionSaved: 'Soluzione salvata: {n} mosse',
+  optimizing: 'Ottimizzazione in corso{dots}',
+  optimizingTime: '({s} s trascorsi)',
+  optimizedFromTo: 'Ottimizzata: {from} → {to} mosse ({status})',
+  alreadyOptimal: 'Già ottimale: {n} mosse (ottimalità dimostrata)',
+  noImprovement: 'Nessun miglioramento: {n} mosse ({status})',
+  statusProven: 'ottimalità dimostrata',
+  statusBest: 'migliore conosciuta, limite inferiore ≥ {lb}',
+  optimizeFailed:
+    'L’ottimizzazione non è riuscita (vedi la console del server); la soluzione resta salvata',
+  tmxChanged: 'Soglia d’oro aggiornata nel livello: ricarica la pagina per vederla.',
+  notShorter: 'È già salvata una soluzione di {n} mosse, altrettanto corta o più corta.',
+  replaceAnyway: 'Sostituisci comunque',
+  notShorterProven:
+    'È già salvata una soluzione ottimale dimostrata di {n} mosse: sostituirla fa perdere questa prova (viene conservata se la nuova esecuzione non la dimostra).',
+  proofKept:
+    'Soluzione ottimale dimostrata conservata ({n} mosse): la nuova esecuzione non ha potuto dimostrarla.',
+  notWinning: 'Questa soluzione non completa il livello.',
+  jobRunning: 'È già in corso un’ottimizzazione per questo livello.',
+  networkError: 'Server di sviluppo non raggiungibile: {msg}',
+  replayMine: 'Rivedi la mia soluzione',
+  replayOptimized: 'Rivedi la soluzione ottimizzata',
+  replaySaved: 'Rivedi la soluzione',
+  noSavedSolution: 'Nessuna soluzione salvata per questo livello',
+  labelMine: 'la mia soluzione',
+  labelOptimized: 'soluzione ottimizzata',
+  labelSaved: 'soluzione salvata',
+  replayMove: 'Mossa {i} / {n}',
+  replaySpeed: 'Velocità: {v} mosse/s',
+  replayEnd: 'Fine',
+  replayPaused: 'Pausa',
+  replayHelp: 'Spazio: pausa · ←/→: mossa · +/−: velocità · Home: inizio · Esc: indietro',
+  toStart: 'Inizio',
+  pause: 'Pausa',
+  playBtn: 'Riproduci',
+  by: 'di {author}',
+};
+
+/** Languages offered in Options, in that order. */
+export const LANGS: readonly Lang[] = ['en', 'fr', 'de', 'es', 'it'];
+const dicts: Record<Lang, Record<MessageKey, string>> = { fr, en, de, es, it };
 const FALLBACK_LANG: Lang = 'en';
 let current: Lang = FALLBACK_LANG;
+
+export function messages(lang: Lang): Record<MessageKey, string> {
+  return dicts[lang];
+}
+
+export function isLang(v: unknown): v is Lang {
+  return typeof v === 'string' && (LANGS as readonly string[]).includes(v);
+}
 
 /** First supported language in the browser preferences (navigator.languages), else English. */
 export function detectLang(langs: readonly string[]): Lang {
   for (const l of langs) {
     const base = l.toLowerCase().split('-')[0];
-    if (base === 'fr' || base === 'en') return base;
+    if (isLang(base)) return base;
   }
   return FALLBACK_LANG;
+}
+
+/** Next language for the Options toggle. */
+export function nextLang(l: Lang): Lang {
+  return LANGS[(LANGS.indexOf(l) + 1) % LANGS.length]!;
 }
 
 export function setLang(l: Lang): void {

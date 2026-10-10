@@ -9,7 +9,7 @@ describe.skipIf(!process.env.SLOW)('compact engine against v2 (repository levels
   const pack = loadPack(LEVELS_DIR);
   const level = (id: string) => pack.levels.find((l) => l.id === id)!;
 
-  test.each(['pc-01', 'pc-02', 'pc-03', 'pc-05', 'pc-06', 'pc-10'])(
+  test.each(['pc-01', 'pc-02', 'pc-03', 'pc-06', 'pc-10'])(
     '%s: same optimal length as v2',
     (id) => {
       const l = level(id);

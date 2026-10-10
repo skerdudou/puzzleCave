@@ -12,7 +12,7 @@ test('no storage: default save, save returns false', () => {
   expect(s.save(defaultSave())).toBe(false);
 });
 
-test('aller-retour', () => {
+test('round trip', () => {
   const kv = mem();
   const d = defaultSave();
   d.levels['pc-01'] = { completed: true, bestMoves: 12, medals: { moves: 'gold' } };
@@ -69,7 +69,7 @@ test('invalid settings replaced by defaults', () => {
   const kv = mem({
     [SAVE_KEY]: JSON.stringify({
       version: 1,
-      settings: { sound: 'yes', lang: 'de', swipeThreshold: 1000 },
+      settings: { sound: 'yes', lang: 'xx', swipeThreshold: 1000 },
       levels: {},
     }),
   });
@@ -79,6 +79,11 @@ test('invalid settings replaced by defaults', () => {
     swipeThreshold: 80,
     repeatRate: 10,
   });
+});
+
+test.each(['en', 'fr', 'de', 'es', 'it'])('language %s is kept', (lang) => {
+  const kv = mem({ [SAVE_KEY]: JSON.stringify({ version: 1, settings: { lang }, levels: {} }) });
+  expect(new SaveStore(kv).load().settings.lang).toBe(lang);
 });
 
 test('levels that is not an object: set aside', () => {

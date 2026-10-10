@@ -2,7 +2,8 @@ import { bestMedal, type Award, type Medal, type RunResult } from './medals';
 
 export interface Chapter {
   id: string;
-  name: { fr: string; en: string };
+  /** en and fr required; other UI languages optional (English is used when missing) */
+  name: { en: string; fr: string } & Partial<Record<string, string>>;
   unlockAfter: number;
   levels: string[];
 }

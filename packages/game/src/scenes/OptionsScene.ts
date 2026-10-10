@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { app } from '../app';
 import { setDebug } from '../debug';
-import { getLang, setLang, t } from '../i18n';
+import { getLang, nextLang, setLang, t } from '../i18n';
 import { syncMusic } from '../music';
 import { COLORS, makeButton, px, textStyle } from '../ui';
 
@@ -39,7 +39,7 @@ export class OptionsScene extends Phaser.Scene {
       syncMusic(this, s.sound, 'music-menu');
     });
     row(t('language'), t('langName'), null, () => {
-      const next = getLang() === 'fr' ? 'en' : 'fr';
+      const next = nextLang(getLang());
       s.lang = next;
       setLang(next);
     });

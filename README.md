@@ -42,7 +42,7 @@ next one; finish a few levels of a chapter to open the next chapter.
   undo, **R** to restart, **Esc** for the menu.
 - **Touch**: swipe, or use the on-screen d-pad; the undo and restart buttons are on screen.
 
-The game is available in English and French (it follows your browser's language; change it in Options).
+The game is available in English, French, German, Spanish and Italian (it follows your browser's language; change it in Options).
 
 ## Credits
 

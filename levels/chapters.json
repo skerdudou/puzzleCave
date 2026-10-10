@@ -3,18 +3,18 @@
     "id": "easy",
     "name": { "fr": "Facile", "en": "Easy" },
     "unlockAfter": 0,
-    "levels": ["pc-01", "pc-02", "pc-19", "pc-05", "pc-06"]
+    "levels": ["pc-01", "pc-02", "pc-19", "pc-06"]
   },
   {
     "id": "medium",
     "name": { "fr": "Moyen", "en": "Medium" },
     "unlockAfter": 3,
-    "levels": ["pc-07", "pc-08", "pc-09", "pc-10", "pc-03"]
+    "levels": ["pc-07", "pc-08", "pc-09", "pc-10", "pc-03", "pc-16"]
   },
   {
     "id": "hard",
     "name": { "fr": "Difficile", "en": "Hard" },
     "unlockAfter": 3,
-    "levels": ["pc-04", "pc-11", "pc-12", "pc-13", "pc-14", "pc-15", "pc-16", "pc-17", "pc-18"]
+    "levels": ["pc-04", "pc-11", "pc-12", "pc-13", "pc-14", "pc-17", "pc-18"]
   }
 ]

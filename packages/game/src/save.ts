@@ -1,5 +1,5 @@
 import type { LevelRecord, Medal } from '@puzzlecave/core';
-import type { Lang } from './i18n';
+import { isLang, type Lang } from './i18n';
 
 export interface Settings {
   sound: boolean;
@@ -49,7 +49,7 @@ function sanitiseSettings(raw: unknown): Settings {
     typeof raw === 'object' && raw !== null && !Array.isArray(raw)
       ? (raw as Record<string, unknown>)
       : {};
-  const lang = s.lang === 'fr' || s.lang === 'en' || s.lang === null ? s.lang : d.lang;
+  const lang = isLang(s.lang) || s.lang === null ? s.lang : d.lang;
   return {
     sound: typeof s.sound === 'boolean' ? s.sound : d.sound,
     lang,
