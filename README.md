@@ -15,6 +15,13 @@ Requirements: Node 24+.
     npm run e2e        # end-to-end test (Playwright)
     npm run build      # publishable build in packages/game/dist (PWA)
 
+## Publishing
+
+The game is published on GitHub Pages at https://skerdudou.github.io/puzzleCave/ by
+`.github/workflows/pages.yml`, only when a release is published or a version tag is pushed
+(`git tag v1.0.0 && git push origin v1.0.0`). The workflow runs the typecheck, `validate` and the
+tests before building; pushes to `main` do not deploy anything.
+
 ## Controls
 
 - Keyboard: arrows or ZQSD (WASD on QWERTY, detected automatically), U undo, R restart, Esc menu.
