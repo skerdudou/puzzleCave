@@ -51,6 +51,7 @@ export function readSolution(dir: string, id: string): Dir[] | { error: string }
 
 const STAGE: Record<StageName, string> = {
   find: 'search',
+  plan: 'planner',
   reoptimize: 'windows',
   spareKeys: 'spare keys',
   freeze: 'frozen blocks',
@@ -102,7 +103,12 @@ export function reportImprove(
       outcome: 'none',
       summary: `solution rejected (status ${end})`,
     };
-  const from = r.start === 'designer' ? 'solution saved' : 'solution found';
+  const from =
+    r.start === 'designer'
+      ? 'solution saved'
+      : r.start === 'planned'
+        ? 'solution planned'
+        : 'solution found';
   const status = r.proven ? 'optimal (proven)' : `best known, proven lower bound ≥ ${r.lowerBound}`;
   const lines = [
     `${id}: ${from} (${r.initialLength}) → ${n} moves — ${status} ${time}`,

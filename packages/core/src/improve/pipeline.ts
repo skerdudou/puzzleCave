@@ -1,3 +1,4 @@
+import { planSolution, type PlanOptions, type PlanResult } from '../planner/plan';
 import { solve } from '../solver';
 import type { Dir, LevelData, Status } from '../types';
 import type { ExactEngine, WindowEngine } from './engine';
@@ -34,9 +35,18 @@ export interface ImproveOptions {
   window?: WindowEngine;
   /** search for any solution; `findSolution` by default */
   find?: (level: LevelData, opts: FindOptions) => FindResult;
+  /**
+   * event planner run when there is no designer solution and the search finds none (true by
+   * default: it costs nothing when the search succeeds)
+   */
+  planFallback?: boolean;
+  /** share of the total duration given to the planner (0.3 by default) */
+  planShare?: number;
+  /** planner; `planSolution` by default */
+  planner?: (level: LevelData, opts: PlanOptions) => PlanResult;
 }
 
-export type StageName = 'find' | 'reoptimize' | 'spareKeys' | 'freeze' | 'proof';
+export type StageName = 'find' | 'plan' | 'reoptimize' | 'spareKeys' | 'freeze' | 'proof';
 
 export interface StageReport {
   stage: StageName;
@@ -48,8 +58,8 @@ export interface StageReport {
 }
 
 export interface ImproveResult {
-  /** starting point: designer solution, found solution, or none */
-  start: 'designer' | 'found' | 'none';
+  /** starting point: designer solution, found solution (search or proof), planned, or none */
+  start: 'designer' | 'found' | 'planned' | 'none';
   /** status of the designer solution when it does not win (then ignored) */
   designerInvalid?: Status;
   /** length of the starting point */
@@ -70,6 +80,8 @@ const FIND_END = 0.3;
 const REOPTIMIZE_END = 0.6;
 const SPARE_KEYS_END = 0.7;
 const FREEZE_END = 0.85;
+/** planner settings of the fallback (see docs/solver-study.md, planner limits relaxed) */
+const PLAN_FALLBACK: Omit<PlanOptions, 'timeoutMs'> = {};
 
 /**
  * "Best known" pipeline of a level: starting point (designer solution if it wins, otherwise
@@ -82,7 +94,16 @@ const FREEZE_END = 0.85;
 export function improveLevel(level: LevelData, opts: ImproveOptions): ImproveResult {
   const now = opts.now ?? (() => performance.now());
   const t0 = now();
-  const until = (fraction: number) => Math.max(0, t0 + fraction * opts.timeoutMs - now());
+  // when the planner ran, the stage ends after the starting point (windows … proof) are rescaled
+  // over the time left, so that it does not eat the windows' share
+  let rest0 = FIND_END;
+  const until = (fraction: number) => {
+    const f =
+      fraction <= FIND_END
+        ? fraction
+        : rest0 + ((fraction - FIND_END) / (1 - FIND_END)) * (1 - rest0);
+    return Math.max(0, t0 + f * opts.timeoutMs - now());
+  };
   const exact = opts.exact ?? solve;
   const global = opts.global ?? exact;
   const find = opts.find ?? findSolution;
@@ -127,6 +148,24 @@ export function improveLevel(level: LevelData, opts: ImproveOptions): ImproveRes
       result.start = 'found';
       return `${f.explored} states`;
     });
+  if (!moves && opts.planFallback !== false) {
+    const share = Math.min(1 - FIND_END, Math.max(0, opts.planShare ?? 0.3));
+    run('plan', () => {
+      const p = (opts.planner ?? planSolution)(level, {
+        ...PLAN_FALLBACK,
+        timeoutMs: until(FIND_END + share),
+        now,
+      });
+      const work = `${p.expanded} event states, ${p.subSearches} sub-searches`;
+      if (p.status !== 'solved') return `no plan (${p.reason}, ${work})`;
+      const n = normalizeMoves(level, p.moves);
+      if (n.status !== 'won') return 'planned solution invalid (discarded)';
+      moves = n.moves;
+      result.start = 'planned';
+      return `${p.events.length} events, ${work}`;
+    });
+    rest0 = Math.min(1, Math.max(FIND_END, (now() - t0) / opts.timeoutMs));
+  }
   if (moves) {
     result.initialLength = moves.length;
     const maxStatesPerWindow = Math.min(

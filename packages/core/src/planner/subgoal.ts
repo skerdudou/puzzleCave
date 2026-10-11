@@ -14,6 +14,11 @@ export interface Restriction {
   doors?: Iterable<number>;
   /** waters a block may be pushed into ('all': every one); the others are walls */
   waters?: Iterable<number> | 'all';
+  /**
+   * keys that may be taken ('all' by default); the others become walls (taking keys on the way
+   * multiplies the macro-states: one per subset of keys taken)
+   */
+  keys?: Iterable<number> | 'all';
 }
 
 /** goal tested on the restricted model with the macro-state loaded; true: reached */
@@ -29,10 +34,29 @@ export interface SubgoalOptions {
   now?: () => number;
   /** memory budget of the search structures (256 MB by default) */
   maxMemoryMb?: number;
+  /**
+   * goal states wanted (1 by default): after the first one, the search goes on (goal states are
+   * expanded as well) for other goal states with a different board (blocks, waters, keys,
+   * doors; the player cell is ignored), in order of cost, within as many macro-states again as
+   * the first one took (at least 1,000). Ignored with win.
+   */
+  alternatives?: number;
+}
+
+export interface SubgoalRealisation {
+  moves: Dir[];
+  state: GameState;
 }
 
 export type SubgoalResult =
-  | { ok: true; moves: Dir[]; state: GameState; explored: number }
+  | {
+      ok: true;
+      moves: Dir[];
+      state: GameState;
+      explored: number;
+      /** other goal states (different boards), cheapest first; absent with one goal state */
+      more?: SubgoalRealisation[];
+    }
   /**
    * touched: frozen blocks the player stood next to with room behind them (pushable if
    * unfrozen); full: stopped by maxStates (or the memory budget) rather than exhausted;
@@ -46,12 +70,18 @@ export function restrict(s: GameState, r: Restriction): GameState {
   const doors = new Set(r.doors ?? []);
   const allWaters = r.waters === 'all';
   const waters = new Set(r.waters === 'all' ? [] : (r.waters ?? []));
+  const allKeys = r.keys === undefined || r.keys === 'all';
+  const keys = new Set(r.keys === undefined || r.keys === 'all' ? [] : r.keys);
   const terrain: Terrain[] = s.terrain.slice();
   const objects = s.objects.slice();
   const player = s.player.y * s.width + s.player.x;
   for (let i = 0; i < terrain.length; i++) {
     const o = objects[i];
-    if ((o === 'block' && !free.has(i)) || (o === 'door' && !doors.has(i))) {
+    if (
+      (o === 'block' && !free.has(i)) ||
+      (o === 'door' && !doors.has(i)) ||
+      (o === 'key' && !allKeys && !keys.has(i))
+    ) {
       terrain[i] = 'wall';
       objects[i] = null;
     } else if (terrain[i] === 'water' && !allWaters && !waters.has(i) && i !== player)
@@ -81,7 +111,8 @@ export function reachSubgoal(
   });
   const touched = new Set<number>();
   const budget = new MemoryBudget((opts.maxMemoryMb ?? 256) * 1024 * 1024);
-  const store = new StateStore(words, budget);
+  // small chunks: most restricted searches visit a few hundred macro-states at most
+  const store = new StateStore(words, budget, 8);
   const heap = new TypedHeap(budget);
   const key = new Uint32Array(words);
   const startKey = model.encode(model.start);
@@ -152,7 +183,11 @@ export function reachSubgoal(
       }
     }
   };
-  let found = -1;
+  const wanted = opts.win ? 1 : Math.max(1, opts.alternatives ?? 1);
+  const found: number[] = [];
+  const boards = new Set<string>();
+  // after the first goal state, the alternatives get at most this many more macro-states
+  let altLimit = Infinity;
   while (heap.size > 0) {
     heap.pop();
     const id = heap.topVal;
@@ -168,9 +203,20 @@ export function reachSubgoal(
     store.readKey(id, key);
     model.load(key);
     if (!opts.win && id !== root && goal(model)) {
-      found = id;
-      break;
+      const w0 = key[0];
+      key[0] = (key[0]! & 0xffff0000) >>> 0;
+      const board = key.join(',');
+      key[0] = w0!;
+      if (!boards.has(board)) {
+        boards.add(board);
+        found.push(id);
+        if (found.length >= wanted) break;
+        if (found.length === 1) altLimit = store.size + Math.max(1_000, store.size);
+      }
+      // goal states are expanded too: their continuations (a block pushed further) are other
+      // end states of the same event
     }
+    if (store.size >= altLimit) break;
     model.load(key);
     noteTouched();
     curId = id;
@@ -178,18 +224,27 @@ export function reachSubgoal(
     model.expand(sink);
     if (full) break;
   }
-  if (found < 0 && winEdge < 0)
+  if (found.length === 0 && winEdge < 0)
     return { ok: false, touched: [...touched], full, timedOut, explored: store.size };
-  const moves = found >= 0 ? rebuild(found, -1) : rebuild(winParent, winEdge);
-  // replay on the real state
-  let real = s;
-  for (const d of moves) {
-    const nx = step(real, d).state;
-    if (nx.moves === real.moves) throw new Error('sub-goal replay: move without effect');
-    real = nx;
-  }
-  if (opts.win && real.status !== 'won') throw new Error('sub-goal replay: no win');
-  return { ok: true, moves, state: real, explored: store.size };
+  const realise = (moves: Dir[]): SubgoalRealisation => {
+    // replay on the real state
+    let real = s;
+    for (const d of moves) {
+      const nx = step(real, d).state;
+      if (nx.moves === real.moves) throw new Error('sub-goal replay: move without effect');
+      real = nx;
+    }
+    if (opts.win && real.status !== 'won') throw new Error('sub-goal replay: no win');
+    return { moves, state: real };
+  };
+  const first = realise(found.length > 0 ? rebuild(found[0]!, -1) : rebuild(winParent, winEdge));
+  const more = found.slice(1).map((id) => realise(rebuild(id, -1)));
+  return {
+    ok: true,
+    ...first,
+    explored: store.size,
+    ...(more.length > 0 ? { more } : {}),
+  };
 
   function rebuild(last: number, edgeAfter: number): Dir[] {
     const chain: number[] = [];

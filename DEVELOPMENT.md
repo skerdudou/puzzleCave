@@ -50,7 +50,7 @@ lets you copy `goldMoves`/`goldTime` and the solution you played.
 
 ## Solutions (spoilers!)
 
-`levels/solutions/` contains reference solutions (all 22 current levels, including 11 best known but not proven optimal: pc-04, pc-07, pc-08, pc-09, pc-11, pc-12, pc-13, pc-14, pc-16, pc-17, pc-18; the others are proven optimal; the first line of each file gives its status), replayed by `npm run validate` and the tests. The solver found some of them directly; the hardest ones (pc-07, pc-08, pc-09, pc-11, pc-13, pc-14, pc-16, pc-17, pc-18) were built by chaining small sub-goal searches (one key or one filled water cell at a time, other blocks frozen as walls), then shortened with `improve`. New ones can be added with `npm run solve -- <id> --apply`, or by playing in author mode and saving the solution from the result screen. They are not included in the published game, but they are readable in the repository.
+`levels/solutions/` contains reference solutions (all 22 current levels, including 10 best known but not proven optimal: pc-04, pc-07, pc-08, pc-09, pc-11, pc-13, pc-14, pc-16, pc-17, pc-18; the others are proven optimal; the first line of each file gives its status), replayed by `npm run validate` and the tests. The solver found some of them directly; the hardest ones (pc-07, pc-08, pc-09, pc-11, pc-13, pc-14, pc-16, pc-17, pc-18) were built by chaining small sub-goal searches (one key or one filled water cell at a time, other blocks frozen as walls), then shortened with `improve`. New ones can be added with `npm run solve -- <id> --apply`, or by playing in author mode and saving the solution from the result screen. They are not included in the published game, but they are readable in the repository.
 
 Current solver limits: exact A* search bounded by time (60 s by default, `--timeout <s>`) and by memory (`--max-memory <MB>` per process, computed by default, see below); `--max-states <n>` adds a state limit (none by default). The compact engine stores a macro-state in ~60–110 bytes (typed arrays outside the V8 heap, which it caps itself) and processes one in ~1–6 µs. When memory or the state limit stops it before the deadline, it restarts for the remaining time with partial expansion (slower, but deeper for the same memory) and keeps the best bound. Large levels with many pushable objects exceed these limits and stay without an optimal solution: `improve` (below) then starts from the designer's solution or looks for a non-optimal one. When a limit is hit, `solve` prints a **proven lower bound** (`≥ L moves`: no solution is shorter) and reports an error if the level's `goldMoves` is below that bound (unreachable threshold).
 
@@ -94,7 +94,7 @@ Same memory and parallelism rules as `solve` (same plan: processes, per-process 
 
 `solve` remains the exact search alone. `improve` looks for the best possible solution and says whether it is **proven optimal** or only **best known**. For each level, within the `--timeout` time:
 
-1. **Starting point**: the solution in `levels/solutions/<id>.txt` if it wins (the designer's solution, takes priority); otherwise a non-optimal solution search (best-first by novelty, BFWS).
+1. **Starting point**: the solution in `levels/solutions/<id>.txt` if it wins (the designer's solution, takes priority); otherwise a non-optimal solution search (best-first by novelty, BFWS), with 30 % of the time; if it finds nothing, the event planner (see `plan` below) gets the next 30 % (`planFallback`, on by default: it only runs when the search failed, so it costs nothing otherwise; `planShare` sets its share). The later stages then share the time left. The report says `solution planned` when the start comes from the planner.
 2. **Windows**: the solution is cut at interactions (key, door, push); each window of 8, 16, 24… interactions is replaced by the exact shortest path to the same state, if it is shorter.
 3. **Spare keys**: the windows keep keys in hand and on the ground identical, so they never drop a useless key pickup. A pickup is droppable when, from it to the end, the keys in hand never fall below 1; windows of 2, 4, 8… 32 interactions around it then look for a shorter path to the same state but with that key left on the ground and one key fewer in hand. The best saving is applied (one key at a time), and the windows run again on the new solution if time remains.
 4. **Frozen blocks**: blocks the solution never pushes become walls, then an exact search on that restricted level (and greedy removal of other blocks if it does not finish). Optimum for that set of blocks only.
@@ -106,11 +106,50 @@ Without `--apply`, nothing is written. With `--apply`, the solution is written w
 
 A saved solution that is unreadable or does not win is never overwritten without `--force`: it is kept and reported, the solution found is written next to it in `levels/solutions/<id>.found.txt`, and `goldMoves` is left untouched; that `.found.txt` is deleted as soon as the saved solution is valid again (or with `--force`). `solve --apply` also writes the `# optimal (proven)` header. `solve` and `improve` replay every solution before writing it: a solution that does not win is an error and nothing is written. The `improve` watchdog kills a child process past `--timeout` plus 60 s.
 
+### Long run on one level: `longrun`
+
+    npm run longrun -- <id> [--work-dir d] [--max-disk GB] [--max-memory MB] [--threads n] [--partitions n]
+                            [--timeout s] [--bound n] [--watch file]… [--gpu auto|on|off]
+                            [--compress none|gen|all] [--resume] [--apply]
+
+Exact search of a single level with the whole machine: worker threads, the GPU, RAM, then the disk. It only
+looks for solutions strictly shorter than the saved one (`levels/solutions/<id>.txt`, re-read before
+each layer, as are the `--watch` files: a shorter winning solution saved meanwhile lowers the bound;
+`--bound n` replaces them). States are processed by layers of moves (uniform cost), partitioned by
+hash into files, duplicates removed per partition against the states already expanded (delayed
+duplicate detection). Design and measurements in `docs/solver-study.md`: it proved pc-12 optimal at
+122 moves (662 M states, 20–35 min on 8 threads, 35–90 GB of disk); the keys/doors levels grow far
+too fast for it.
+
+- Work dir: `.oneshot/longrun/<id>/` by default (git-ignored): `manifest.json` (checkpoint after
+  each layer), `progress.log` (one line per layer: states, disk, pending records, lower bound),
+  `runs/` and `gen/`. `--resume` continues from the last finished layer (Ctrl+C drops the current
+  layer and keeps the checkpoint); without it, the work dir is emptied.
+- `--threads` (default: half the logical cores), `--max-memory` (all threads, default
+  min(8 GB, half the free RAM)), `--partitions` (power of two, 256 by default), `--max-disk`
+  (100 GB by default, never more than the free space minus 5 GB): the disk limit stops the run
+  cleanly at the last checkpoint.
+- `--gpu` (auto by default, same lock as `solve`): the walk BFS and the successors of each batch
+  of states are computed by the card, the rest stays on the CPU (≤ 32 × 32 maps; ~1.3× faster
+  end to end on pc-12). `--compress`: records packed (~2× smaller) in the transient successor
+  files (`gen`, default), also in the run files (`all`: less disk, but they are unpacked at every
+  layer), or `none`.
+- Results: `solved` (an optimal solution shorter than the bound, saved in the work dir as
+  `solution.txt`), `exhausted` (no shorter solution: the saved one is proven optimal, `proof.txt`),
+  or `stopped` (time, disk, Ctrl+C) with a proven lower bound.
+- `--apply` follows the `improve` rules: a shorter solution is written only if it wins
+  (header `# optimal (proven)`, `goldMoves` lowered); an exhausted search marks the saved solution
+  `# optimal (proven)`; a stopped one raises the lower bound in its header.
+- Measurement options: `--dead-pruning` (dead-state test before expanding), `--gen-strong s`
+  (strong bound on successors whose weak f is within `s` of the bound).
+
 ### Fallback for large levels: `plan`
 
-    npm run plan -- <id…> [--timeout s] [--keys auto|explicit] [--improve s] [--max-memory MB] [--apply]
+    npm run plan -- <id…> [--timeout s] [--keys auto|explicit] [--max-free n] [--fill-free n] [--exit-free n] [--tries n] [--sub-states n] [--alternatives k] [--widen n] [--all-doors level] [--side-keys on|off] [--improve s] [--max-memory MB] [--apply]
 
 When `improve` finds no starting solution, the event planner builds one from sub-goals: take a key, fill a water cell, open a door, move a block to enlarge the reachable area, reach the exit. Each event is checked by a small exact search where everything not allowed is a wall (blocks are unfrozen one at a time), and a best-first search chains the events. `--improve s` then runs the `improve` pipeline from the plan; `--apply` saves the result only if it wins and is shorter than the saved solution. It solved pc-11 with no hints (346 moves, 310 after `improve`), but it is incomplete and weak on key-and-door grids: use it after `findSolution`, not instead of it. The static dead-state test (`deadPruning`, `keyDominance`) is sound but off by default: it never fired on the real levels and slows the search. Details in `docs/solver-study.md`.
+
+Limits (defaults in brackets): blocks unfrozen per key event `--max-free` [3], per fill `--fill-free` [1], for the exit `--exit-free` [2]; restricted searches per event `--tries` [60] and macro-states per search `--sub-states` [5,000] (and 8,000 per event attempt); end states kept per event `--alternatives` [1]. With `--widen n` [1], a state where a cap stopped an event is queued again one level higher, behind the states of the same estimate and lower novelty: each level adds one unfrozen block, doubles tries and macro-states, and, from level `--all-doors` [1] on, allows every door (not only those on a route with the fewest doors or with a key behind; `--all-doors 0` helps pc-09, where a door only gives access to blocks, but lengthens pc-11). Keys are taken only by their own event unless `--side-keys on` (a key taken on the way multiplies the restricted search). Cheap relaxed tests skip impossible events (key unreachable, water no block can reach, exit behind water or behind more doors than keys); a fill may open the doors next to its water. Failing runs print, per event kind, which cap stopped how many events.
 
 ### Hand-written stages: `subgoal`
 
@@ -133,6 +172,21 @@ All goals of a line must hold together. Everything not allowed is frozen as a wa
 
 `--from-solution` first writes the stages of the saved solution into the stages file (never overwritten): one stage per event, with the blocks moved in the segment, `at`/`player` pins on its end state and its length in a comment, so it rebuilds a solution at most as long. Edit it (reorder stages, drop the pins, free other blocks) to get starting points `improve` cannot reach by local changes (pc-11 went from 326 to 310 moves with another event order). Relative paths are resolved from the directory `npm` was started from.
 
+### Other starting points: `explore`
+
+    npm run explore -- <id…> [--timeout s per level] [--variants n] [--improve-top k] [--screen f] [--seed n] [--max-memory MB] [--from dir] [--save dir] [--apply]
+
+`improve` only shortens windows towards the same state, so it keeps the order of the events. `explore` starts from the saved solution, cuts it into its events (as `subgoal --from-solution`: one stage per key, water, door, exit, with its blocks and its end pins) and rebuilds **variants of that plan** with the exact per-stage searches of `subgoal`:
+
+- stages swapped, moved up to 8 places, sub-sequences reversed, adjacent blocks of stages exchanged;
+- adjacent stages merged (one search reaches both goals in the best order; at most 4 movable blocks) or split again;
+- end pins dropped per stage (`player`, `at`);
+- an extra stage that fills a water the solution leaves unfilled with a nearby block it never pushes (shortcut, as in pc-11's planner solution), or removes it.
+
+Blocks are named by identity (the block that started on a cell), so a moved stage still frees the same blocks wherever they stand; a block that has already sunk is simply not free. Every stage search is memoised (start state, stage, block cells): variants share most stages, so a level rebuilds from ~5 variants per second (pc-18, 1,500 moves) to several thousand (pc-11, pc-16). A local search accepts variants that are not longer and restarts from a kept one after 150 steps without progress; the `--improve-top` (3) shortest distinct variants, never the saved solution itself, then get improve's windows and spare keys pass (no proof: its time goes to the variants). A round takes `--screen` (0.3) of the time for the screening and at most (1 − screen) / k per improved variant; rounds repeat until `--timeout` (300 s), each from the best solution so far, with another seed and never the same variant twice. `--variants` caps the variants per round (default: time only).
+
+The line per level gives saved → best length, rounds, variants (feasible), the rebuild of the plan as is, the best variant of the first round and each improve run. Rounds start from the shortest solution so far, and a screened variant shorter than it is kept even if improve does not shorten it. `--from dir` starts from the shortest winning `dir/<id>-<n>.txt` when it beats the saved solution (to chain runs); the saved solution stays the reference for writing. Without `--apply` or `--save`, nothing is written; `--save dir` writes each shorter solution as `dir/<id>-<length>.txt` (moves only); `--apply` writes it with the rules of `plan --apply` (only if it wins and is strictly shorter, goldMoves lowered only when shorter, the proven lower bound of the saved header kept). It is a separate command rather than an `improve` flag: it needs a winning solution, has its own knobs, and `improve` stays the reference pipeline with its proof. Measurements in `docs/solver-study.md`.
+
 ## Designer tools in the game (`npm run dev` only)
 
 In author mode (development server; the `?dev` option alone is not enough since there is no server behind it):
@@ -147,10 +201,10 @@ Details: a short `PC_IMPROVE_TIMEOUT` may show "best known" on a level proven op
 
 ## Layout
 
-- `packages/core` — rules, medals, progress, exact solver and the "best known" pipeline (`src/improve`) (pure TypeScript, no dependencies)
+- `packages/core` — rules, medals, progress, exact solver, the "best known" pipeline (`src/improve`) and the event planner, stages and explore (`src/planner`) (pure TypeScript, no dependencies)
 - `packages/tiled` — reading/writing Tiled maps
 - `packages/gpu` — exact GPU engine (WebGPU), loaded on demand by `--gpu`
-- `packages/tools` — `validate` / `solve` / `improve` CLI
+- `packages/tools` — `validate` / `solve` / `improve` / `plan` / `subgoal` / `explore` CLI
 - `packages/game` — Phaser 4 + Vite + PWA game
 
 Credits: see `CREDITS.md`.

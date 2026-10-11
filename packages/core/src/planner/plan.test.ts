@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { fromAscii } from '../ascii';
-import { KEY, WATER } from '../compactModel';
+import { BLOCK, KEY, WATER } from '../compactModel';
 import { replay } from '../replay';
 import { solve } from '../solver';
 import { initialState } from '../state';
@@ -97,4 +97,59 @@ test('property: on the random sample, every plan found wins, on solvable levels 
   }
   // incomplete by design (few unfrozen blocks per event), but almost every small level passes
   expect(solved).toBeGreaterThan(0.95 * solvable);
+});
+
+test('restrict: keys not allowed become walls', () => {
+  const s = initialState(fromAscii(['@k.k.E']));
+  const r = restrict(s, { keys: [3] });
+  expect(r.terrain[1]).toBe('wall');
+  expect(r.objects[3]).toBe('key');
+  expect(restrict(s, {}).objects[1]).toBe('key');
+});
+
+test('reachSubgoal: alternatives are goal states with different boards, cheapest first', () => {
+  const s = initialState(fromAscii(['@B...']));
+  const r = reachSubgoal(s, { free: [1] }, (m) => m.grid[1] !== BLOCK, { alternatives: 3 });
+  expect(r.ok).toBe(true);
+  if (!r.ok) return;
+  const all = [r, ...(r.more ?? [])];
+  expect(all.map((x) => x.state.objects.indexOf('block'))).toEqual([2, 3, 4]);
+  expect(all.map((x) => x.moves.length)).toEqual([1, 2, 3]);
+  // one goal state by default
+  expect(reachSubgoal(s, { free: [1] }, (m) => m.grid[1] !== BLOCK)).not.toHaveProperty('more');
+});
+
+test('planSolution: widening raises the caps of a state an event was capped on', () => {
+  const level = fromAscii(LEVELS.water!);
+  // two macro-states per restricted search: every event is capped at level 0
+  const capped = planSolution(level, { timeoutMs: 10_000, maxSubStates: 2, widen: 0 });
+  expect(capped).toMatchObject({ status: 'failed', reason: 'exhausted', widened: 0 });
+  const widened = planSolution(level, { timeoutMs: 10_000, maxSubStates: 2, widen: 4 });
+  expect(widened.status).toBe('solved');
+  expect(widened.widened).toBeGreaterThan(0);
+  if (widened.status === 'solved') expect(replay(level, widened.moves).status).toBe('won');
+});
+
+test('planSolution: statistics per event kind', () => {
+  const r = planSolution(fromAscii(LEVELS.chain!), { timeoutMs: 10_000 });
+  expect(r.status).toBe('solved');
+  expect(r.kinds.exit.realised).toBe(1);
+  expect(r.kinds.fill.realised + r.kinds.key.realised).toBeGreaterThan(0);
+  const total = Object.values(r.kinds).reduce((a, k) => a + k.searches, 0);
+  expect(total).toBe(r.subSearches);
+});
+
+test.each([
+  ['alternatives', { alternatives: 3 }],
+  ['side keys', { sideKeys: true }],
+  ['no prechecks', { prechecks: false }],
+  ['no widening', { widen: 0 }],
+  ['every door at once', { allDoorsLevel: 0 }],
+])('planSolution with %s: the small levels are solved, plans replay', (_, o) => {
+  for (const rows of Object.values(LEVELS)) {
+    const level = fromAscii(rows);
+    const r = planSolution(level, { timeoutMs: 10_000, ...o });
+    expect(r.status, rows.join('/')).toBe('solved');
+    if (r.status === 'solved') expect(replay(level, r.moves).status).toBe('won');
+  }
 });

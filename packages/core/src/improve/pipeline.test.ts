@@ -3,6 +3,7 @@ import { fromAscii } from '../ascii';
 import { replay } from '../replay';
 import { solve } from '../solver';
 import type { Dir } from '../types';
+import { planSolution } from '../planner/plan';
 import { findSolution } from './findSolution';
 import { improveLevel } from './pipeline';
 import { searchWindow } from './window';
@@ -187,8 +188,65 @@ test('no solution found within the limits: lower bound of the exact search', () 
     ...opts,
     find: () => ({ status: 'failed', reason: 'limit', explored: 1 }),
     exact: timeout(2),
+    planFallback: false,
   });
   expect(r.start).toBe('none');
   expect(r.moves).toBeUndefined();
   expect(r.lowerBound).toBe(2);
+  expect(r.stages.map((s) => s.stage)).toEqual(['find', 'proof']);
+});
+
+test('planner fallback: no search solution, the plan is the starting point', () => {
+  const planner = vi.fn(planSolution);
+  const r = improveLevel(LEVEL, {
+    ...opts,
+    find: () => ({ status: 'failed', reason: 'limit', explored: 1 }),
+    exact: timeout(2),
+    planner,
+  });
+  expect(planner).toHaveBeenCalledOnce();
+  // its share: 30 % of the duration after the search's 30 %
+  expect(planner.mock.calls[0]![1].timeoutMs).toBeGreaterThan(0.55 * opts.timeoutMs);
+  expect(planner.mock.calls[0]![1].timeoutMs).toBeLessThanOrEqual(0.6 * opts.timeoutMs);
+  expect(r.start).toBe('planned');
+  expect(r.stages.map((s) => s.stage)).toEqual([
+    'find',
+    'plan',
+    'reoptimize',
+    'spareKeys',
+    'freeze',
+    'proof',
+  ]);
+  expect(replay(LEVEL, r.moves!).status).toBe('won');
+  // the windows bring the plan down to the optimum
+  expect(r.moves).toHaveLength(4);
+});
+
+test('planner fallback: not run when the search succeeds or with a designer solution', () => {
+  const planner = vi.fn(planSolution);
+  improveLevel(LEVEL, { ...opts, planner });
+  improveLevel(LEVEL, { ...opts, initial: LONG, planner });
+  expect(planner).not.toHaveBeenCalled();
+});
+
+test('planner fallback: a failed plan leaves no starting point', () => {
+  const r = improveLevel(LEVEL, {
+    ...opts,
+    find: () => ({ status: 'failed', reason: 'timeout', explored: 1 }),
+    exact: timeout(2),
+    // a planner that fails: the one of an unsolvable level
+    planner: (_, o) => planSolution(fromAscii(['@#E']), o),
+  });
+  expect(r.start).toBe('none');
+  expect(r.moves).toBeUndefined();
+  expect(r.stages[1]).toMatchObject({ stage: 'plan', note: expect.stringMatching(/^no plan/) });
+});
+
+test('planner fallback, real limits: the search stops at its state limit, the planner does not', () => {
+  // the planner's restricted searches are not bound by maxStates
+  const level = fromAscii(['@B.B.B.~~E', 'B.B.B.B~~.', '.B.B.B.~~.', 'B.B.B.B...']);
+  const r = improveLevel(level, { timeoutMs: 20_000, maxStates: 3 });
+  expect(r.stages[0]).toMatchObject({ stage: 'find', note: expect.stringMatching(/limit/) });
+  expect(r.start).toBe('planned');
+  expect(replay(level, r.moves!).status).toBe('won');
 });

@@ -274,7 +274,7 @@ export type RunStagesResult =
  * Goal of a stage on a compact model (the restricted one or the real one). `at` cells holding a
  * frozen block (a wall in the restricted model) are satisfied by it.
  */
-function stageGoal(st: Stage, s: GameState): Goal {
+export function stageGoal(st: Stage, s: GameState): Goal {
   const at = st.at.filter((c) => s.objects[c] !== 'block' || st.blocks.includes(c));
   return (m) => {
     for (const c of st.keys) if (m.grid[c] === KEY) return false;

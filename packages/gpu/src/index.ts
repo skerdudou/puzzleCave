@@ -29,3 +29,13 @@ export function probeGpu(
   r.worker.close();
   return { ok: true, name };
 }
+// batch expansion for the long-run external search (packages/tools/src/longrun)
+export {
+  CTL,
+  GOAL_SLOTS,
+  OUT_EXTRA,
+  laneBuffers,
+  startBatchHost,
+  type BatchHostMessage,
+  type BatchLane,
+} from './batchProtocol';

@@ -34,6 +34,7 @@ test('plan arguments', () => {
       improveMs: 0,
       maxMemoryMb: undefined,
       apply: false,
+      planner: {},
     },
   });
   expect(
@@ -56,8 +57,48 @@ test('plan arguments', () => {
       improveMs: 120_000,
       maxMemoryMb: undefined,
       apply: true,
+      planner: {},
     },
   });
+  const limits = parsePlanArgs([
+    'pc-09',
+    '--max-free',
+    '5',
+    '--fill-free',
+    '3',
+    '--exit-free',
+    '2',
+    '--tries',
+    '200',
+    '--sub-states',
+    '20000',
+    '--alternatives',
+    '2',
+    '--widen',
+    '1',
+    '--side-keys',
+    'on',
+    '--all-doors',
+    '0',
+  ]);
+  expect(limits).toMatchObject({
+    ids: ['pc-09'],
+    opts: {
+      planner: {
+        maxFree: 5,
+        fillFree: 3,
+        exitFree: 2,
+        maxTries: 200,
+        maxSubStates: 20_000,
+        alternatives: 2,
+        widen: 1,
+        sideKeys: true,
+        allDoorsLevel: 0,
+      },
+    },
+  });
+  expect(parsePlanArgs(['pc-11', '--widen', '1.5'])).toHaveProperty('error');
+  expect(parsePlanArgs(['pc-11', '--side-keys', 'yes'])).toHaveProperty('error');
   expect(parsePlanArgs([])).toHaveProperty('error');
   expect(parsePlanArgs(['pc-11', '--keys', 'some'])).toHaveProperty('error');
   expect(parsePlanArgs(['pc-11', '--timeout', '0'])).toHaveProperty('error');

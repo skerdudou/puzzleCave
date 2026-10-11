@@ -262,3 +262,123 @@ Findings:
 - pc-11 is solved from scratch without hints, and after `improve` it beats the hand-built 340 → 326 solution: **310 moves**, which also wins on the origin/main version (goldMoves 326). It is not committed to `levels/`, since the level changed on main. On the planner side, the step A test never fires (0 dead states): the useful pruning is structural (frozen blocks, forbidden waters, useful doors only).
 - Key closure (`keys: auto`) changes nothing on pc-11: every key there sits behind water or blocks. The spare-keys pass finds nothing either: the planner only takes the keys it needs. A bigger `findSolution` budget does not solve pc-11 within 2 GB: memory stops it at 25 M states.
 - Limits: the planner is incomplete. Each event keeps only its first realisation, unfreezes few blocks and has fixed search caps. It also needs a recognisable structure (keys or waters that open the way). It fails within 300 s on pc-09 (old version) and on the keys/doors grids (pc-15, pc-06): many doors and the useful-door rule leave the estimate flat. Use it as a fallback after `findSolution`, not instead of it.
+
+## Planner limits relaxed, and planner fallback in `improve` (2026-10-11)
+
+`packages/core/src/planner/plan.ts` now reports, per event kind (exit, key, door, fill, move), the attempts, the restricted searches and their macro-states, and which cap stopped an event: `--sub-states` (search full), free blocks (a set at the limit still had pushable blocks), `--tries`. The CLI prints these lines when a plan fails.
+
+**Why each level failed (step B code, measured).**
+
+- **pc-06** (60 s): fill events took 89 % of the macro-states (6.7 M of 7.6 M) for 68 fills out of 4,211 attempts. The exit event never succeeded: 35 of its 156 searches hit the 5,000 cap. Cause: every restricted search could take every key on its way (pc-06 has 25 keys), so the macro-states multiply by the subsets of keys taken; the exit search also allowed all ~30 doors.
+- **pc-09** (180 s): the estimate stays at h = 2 for the whole run (one water and one door before exit (0,0)). The real plan has 31 events that do not change h. 9,016 of 9,891 fill attempts stop at the one-block limit; key attempts stop on free blocks (1,428) and tries (662); the exit search is full 1,956 times. Replaying the hand solution (`subgoal --from-solution`) shows events the planner could not express at all: a water filled through a door (fill and door in one event), a door opened only to reach blocks (not "useful"), fills that move 2–4 blocks, and a first event that moves 11 blocks.
+- **pc-15** (old Easy1 A, 180 s): all 2,012 exit searches hit the 5,000 cap (~130 doors allowed, plus side keys); the estimate is flat at h = 1 after 7 events; 25,835 door events and 44,913 key attempts in 1,382 expansions (a grid of doors: about 30 children per state). The hand plan has 66 events with an exact key economy.
+
+**What was relaxed or added** (all options of `planSolution`, also flags of `npm run plan`):
+
+- Caps configurable: `maxFree` (key), `fillFree`, `exitFree`, `maxTries`, `exitTries`, `maxSubStates`, and a new `attemptStates` (macro-states of all the searches of one event attempt, 8,000).
+- `alternatives` k: a restricted search goes on after its first goal state (goal states are expanded too) and returns up to k goal states with different boards; then the other unfrozen sets of the same size are tried. Each becomes a child event state.
+- Progressive widening `widen` (default 1): a state where a cap stopped an event is queued again one level higher; its key is (h, novelty + level, level, moves), so it competes with lower-novelty states instead of waiting for the whole plateau. Level L adds L unfrozen blocks to every limit, multiplies tries and macro-states by 2^L, and from `allDoorsLevel` (1) on opens every door, not only the useful ones.
+- Side keys off by default (`sideKeys`): keys other than the event's own are walls in restricted searches. This removed the key-subset blow-up (pc-06 fills: 4.8 M → 15 k macro-states).
+- Sound relaxed prechecks (`prechecks`, on): key unreachable with blocks and fillable waters passable; water with no block of the relaxed region able to reach it (`DeadlockAnalysis.canFill`), and the fill search starts from those blocks instead of an empty set; exit skipped behind water, or behind more doors than keys in pocket (without side keys). pc-06: 13.3 s → 5.9 s with the same plan.
+- Exit: first only the doors on a route with the fewest doors, then all doors. A fill may open the doors next to its water. Restricted searches use small store chunks (256 nodes instead of 4,096): −25 % time on pc-06.
+- Tried and dropped: limiting a key event's waters to those on a route with the fewest waters (pc-11 then failed in 600 s); `alternatives` 2 on pc-11 (same plan, 208 s instead of 162 s); `allDoorsLevel` 0 by default (pc-11: 362 moves in 191 s instead of 346 in 150 s).
+
+**Results** (one process each, run one after another on a machine shared with other jobs; old = planner of commit 62f96bc; new = default options):
+
+| level | old | new | time old → new | memory old → new | work old → new |
+|---|---|---|---|---|---|
+| pc-11 | 346 moves | 346 moves (same plan) | 171 s → 87 s | 253 → 342 MB | 13.6 M → 6.7 M macro-states |
+| pc-06 | 240 moves | 258 moves | 89 s → 2.8 s | 131 → 132 MB | 9.8 M → 0.11 M macro-states |
+| pc-06, `--keys auto` | — | 214 moves | 0.8 s | — | 20 k macro-states |
+| pc-09 | failed (300 s) | failed (300 s; also 1,800 s with `allDoorsLevel` 0, widen 1 or 3) | — | 278 → 411 MB (700 MB at 1,800 s) | 1,108 → 5,766 event states |
+| pc-15 | failed (300 s) | failed (300 s; 1,200 s with widen 1) | — | 476 → 868 MB (1.1 GB at 1,200 s) | 152 M → 1 M macro-states, 1,981 → 6,220 event states |
+
+pc-09 from intermediate states of the hand solution (`start` option, 120 s, `allDoorsLevel` 0): before fills could open a door and widened states every door, it solved only the last event (from event 30; from 28 it exhausted); new code solves from event 15 on (596 moves total after event 16, 582 after event 15, 97 s), not from event 12 (the next events need a 4-block fill). From the start, the estimate stays flat. pc-15 no longer hits any cap (0 full searches, 0 tries-capped): what is missing is guidance (flat estimate over a door grid), not limits. The random sample is unchanged (253 of 254 solvable levels planned, with each option).
+
+**Fallback in `improve`.** When there is no saved solution and `findSolution` fails, `improveLevel` runs the planner (`planFallback`, on by default) with `planShare` (30 %) of the duration after the search's 30 %; the later stages then share the time left. It costs nothing when the search succeeds or a designer solution exists (the planner is not called; tested). On a small level, a search stopped by `maxStates` 3 is followed by a winning plan. pc-11 from scratch, `improve` 1,200 s, 2 GB per search: search failed (memory limit, 25.2 M states, 321 s) → plan 346 moves (116 s) → windows 310 → frozen blocks and proof (lower bound ≥ 104), peak RSS 2.0 GB. That is the saved length (310), now reached without any hint.
+
+## Long run: external-memory exact search (2026-10-11)
+
+`npm run longrun -- <id>` (`packages/tools/src/longrun/`): one level, the whole machine (worker threads, RAM, disk, optionally the GPU), to prove the saved solution optimal or find a shorter one where the in-RAM search runs out of memory. CLI in `DEVELOPMENT.md`.
+
+### Design
+
+- **Order: uniform cost by layers of g** (moves), bounded by U = length of the saved solution (only solutions of fewer than U moves; U is re-read from `levels/solutions/<id>.txt` and the `--watch` files before every layer, and only goes down). A layer is processed once all smaller layers are done (every interaction costs ≥ 1 move), so each state is expanded at its optimal cost and a goal found at cost c is optimal once all layers below c are done. Pruning: weak bound (relaxed distance to the exit) when a successor is generated, strong bound (distinct doors) when it is expanded; f ≥ U (or ≥ the best goal) is dropped. To *prove* U optimal, this expands exactly the states with g* + h < U, the same set as A*: the order costs nothing for a proof. Its weakness is the lower bound reported when stopped early: the minimum over pending records of g + toExit, about the current layer + 3 on the block levels (A* by f would report more). Proof of the bound at the top of `search.ts`.
+- **Record**: the compact engine's packed key (CompactModel, 9–13 words) + parent (layer, partition, index in the partition's run file) + edge, 12 more bytes: **52 bytes on pc-12** (10 words).
+- **Partitioning and duplicate detection**: 256 partitions by key hash (`--partitions`). A job = (layer G, partition p): load the bucket (all segments emitted for it), remove the duplicates inside it (typed hash table), then remove the states already expanded at a smaller cost by streaming the partition's run file once against that table (**delayed duplicate detection**: one sequential read of the partition's closed set per layer), compute the strong bound, append the survivors to the run file and expand them. Successors are buffered per (target layer, target partition) in 16 KB chunks and appended to the worker's gen file of the layer; a small per-thread cache of recent successors drops 1–10 % of the duplicates before they reach the disk. A bucket larger than the thread's memory is processed in several passes (hash slices).
+- **Disk**: run files (one per partition, append-only, kept for duplicate detection and path rebuilding) and gen files (per layer and worker, deleted once all their target layers are done). Gen chunks are packed (each word XOR the same word of the previous record, then only the non-zero bytes with a 4-bit mask per word: ~2× smaller, ~5 ns per byte); run files stay raw by default (`--compress all` packs them too, but they are then unpacked again at every layer). zstd (node:zlib, level 1) was tried first: 2.6× smaller, but each call sets up and frees a context (~70 µs) and these allocations serialize the threads (65 % of the worker time on pc-11, whose 16–64 KB chunks are written by the hundred thousand per layer). Successor chunks grow on demand (16 records, doubled up to 64 KB): a fixed 16 KB chunk per (layer, partition) filled the buffer cap with near-empty chunks, whose flush wrote millions of 3-record segments and overflowed the coordinator's heap on pc-11. `--max-disk` is enforced on every write (shared atomic counter): the run stops cleanly at the last checkpoint.
+- **Checkpoint per layer**: `manifest.json` (next layer, best goal, run file sizes and block lists, live gen files, statistics), written atomically after each layer; `--resume` truncates the run files and drops the gen files of the interrupted layer. Ctrl+C, `--timeout` and the disk limit all stop the same way. The path is rebuilt by following the parent references through the run files, the walks are recomputed by BFS (as in `solve`), and the solution is replayed before anything is written.
+- **CPU parallelism**: the jobs of a layer run on `--threads` worker threads (default: half the logical cores); the coordinator only plans the jobs, merges the segment indexes and writes the checkpoint.
+- **GPU** (`--gpu auto|on|off`, auto by default): one GPU thread owns the card; each CPU worker sends it batches of 16,384 states of the layer (shared buffers, synchronous wait, one readback per batch); the card runs the walk BFS and the interactions (the engine's `expand` kernel without the store: `packages/gpu/src/batch.ts`, one 32-thread subgroup per state) and returns the successors with f < bound. Deduplication, bounds, disk and checkpoints stay on the CPU. Checked equal to `CompactModel.expand` successor by successor (0 differences on 2,000 pc-12 states) and by the long-run tests on the sample.
+
+### Measurements
+
+Ryzen 7 3700X (8 cores / 16 threads), 32 GB, RTX 4070, NVMe SSD. Other agents kept the CPU at 50–100 % during every run: durations are pessimistic and noisy.
+
+**pc-12 (Bomberman 2 A), saved 126, proven ≥ 100 before**: `npm run longrun -- pc-12 --threads 8 --max-memory 6000` finds a **122-move solution, proven optimal** (`.oneshot/pc-12-optimal-122.txt`, replayed: wins; not applied to `levels/`). 116 non-empty layers, 662 M states expanded, 1.19 G successors written.
+
+| run | duration | disk peak | states/s |
+|---|---|---|---|
+| uncompressed (first version) | 1,200 s | 89.9 GB | 550 k |
+| zstd on all blocks | 2,153 s | 34.8 GB | 310 k |
+| zstd on gen blocks + `--gpu on` (first GPU version) | 1,349 s | 55.5 GB | 490 k |
+
+Per layer (uncompressed run): the layers grow ×1.16 per move (×1.35 every two moves, odd and even layers alternate) until layer ~113, then the bound U cuts them; pending records peak at 375 M (layer 110).
+
+| layer | states expanded | records loaded | duration | total states | disk | pending records | lower bound |
+|---|---|---|---|---|---|---|---|
+| 90 | 2.0 M | 3.2 M | 6.9 s | 18.8 M | 6.4 GB | 82 M | ≥ 94 |
+| 100 | 8.5 M | 14.4 M | 18.2 s | 82 M | 22.5 GB | 249 M | ≥ 104 |
+| 105 | 24.7 M | 42.6 M | 43.2 s | 166 M | 38.8 GB | 357 M | ≥ 108 |
+| 110 | 26.4 M | 48.8 M | 47.9 s | 302 M | 58.2 GB | 375 M | ≥ 114 |
+| 113 | 45.6 M | 82.4 M | 68.3 s | 421 M | 70.8 GB | 301 M | ≥ 116 |
+| 115 | 49.5 M | 89.7 M | 73.9 s | 502 M | 78.1 GB | 223 M | ≥ 118 |
+| 117 | 49.1 M | 89.4 M | 74.2 s | 587 M | 84.9 GB | 123 M | ≥ 120 |
+| 120 | 15.7 M | 34.9 M | 35.0 s | 662 M | 88.8 GB | 5 M | ≥ 122 = solution |
+
+About 1.8 records loaded per expanded state (on large layers ~15 % are duplicates inside the bucket and ~35 % of the distinct ones were already expanded); disk at the peak ~135 bytes per expanded state uncompressed, ~53 with zstd on all blocks, ~84 with zstd on the gen blocks. Thread time per expanded state on large layers: loading ~1.6 µs, duplicate detection against the runs 2–3 µs (grows with the closed set), expansion and emission ~7 µs.
+
+Validation: pc-19 → no solution under 88 (the saved 88 is proven optimal; `--bound 89` finds 88), pc-03 → no solution under 401 (1.19 M states, as `solve`), pc-12 three times (122, 662 M states). Tests: same status and optimal length as `solve` on 120 sample levels, `upperBound` = optimum → exhausted and optimum + 1 → same length on 100 more, resume after an interruption and after a disk stop, disk limit, bound lowered between layers, worker threads, GPU path (when an adapter is present).
+
+**GPU versus CPU**: the batch kernel alone expands **4.2–4.5 M pc-12 states/s** (readback included), versus 0.22–0.26 M/s for `CompactModel.expand` on one contended core (5 µs per state; strong bound 0.13 µs, load 0.2 µs). 8 concurrent lanes reach 6.4 M states/s on the card. In the long run (final version: one readback per request sized for the expected output, passes under 2,048 states on the CPU, request latency being a few ms) it divides the expansion thread time by ~3.5 on large layers (pc-12 `--bound 104`, layer 95: 4.7 versus 16.7 thread-s, 1.8 versus 3.3 s), and the whole `--bound 104` run takes **47 s versus 60 s** on the CPU (38.9 M states). The gain stays well below the kernel's speed: once the BFS runs on the card, the CPU side (bucket loading and hashing, duplicate detection against the runs, successor hashing, cache and emission, compression, I/O) dominates. Going further would mean moving the deduplication to the card as well; not done, since the closed sets live on disk and are streamed, and the CPU hash tables already run at memory speed.
+
+**Admissible pruning, measured** (pc-12 `--bound 104`, 38.9 M states): the dead-state test (`--dead-pruning`, `deadlock.ts`) declares **0** states dead and makes the run 4× slower (337 s versus 85 s); the strong bound on generated successors (`--gen-strong 40`) cuts **0** successors on pc-12 (its strong bound equals the exit distance there) and 0 on the first 24 layers of pc-17. Both stay off.
+
+**Projected reach on the other hard levels** (10- and 5-minute profiles, `--gpu on`):
+
+- **pc-17** (keys/doors, saved 106, proven ≥ 42): the layers grow **×4 every two moves** (20 successors per state): layer 24 has 20.8 M states and writes 406 M successors (17.7 GB of disk after 600 s, 33.6 M states). Reaching g ≈ 105 would need ~4^40 times more: out of reach. Even the reported bound (≥ 36 at layer 24) stays below the in-RAM A* bound (≥ 42) because of the g order.
+- **pc-16** (keys/doors, saved 126, proven ≥ 46): ×2.5 every two moves, 25.9 M states at layer 29 after 300 s (bound ≥ 38). Out of reach as well.
+- **36-block family** (pc-11 310, pc-13 450, pc-14 582, proven ≥ 100): same growth as pc-12 (×1.16 per move), but without the cut of a close bound. An hour reaches g ≈ 115–120 (bound ≥ ~120, and any solution of up to ~120 moves would be found); each further move costs ×1.16 in states and disk. A 310-move solution cannot be proven this way.
+- pc-04, pc-07, pc-08, pc-09, pc-18: gaps of 260–1,460 moves between the solution and the bound: no proof possible with this method; only the lower bound can rise.
+
+Conclusion: the external search closed pc-12 (126 → **122, proven optimal**) in 20–35 minutes. On the keys/doors levels the state space grows too fast for any exact method of this kind; on the remaining block levels it can only raise the proven bounds to ~120–125, unless their optimum turns out to be far shorter than the saved solutions.
+## Other starting points — `explore` (2026-10-11)
+
+`packages/core/src/planner/explore.ts`, `npm run explore` (DEVELOPMENT.md). `improve` keeps the order of a solution's events; `explore` changes it. The saved solution is cut into its events (key, water, door, exit; blocks named by identity), variants of that plan are rebuilt by the exact per-stage restricted searches of `subgoal` (swap, move, reverse, exchange blocks of stages; merge or split adjacent stages; drop `player`/`at` pins; add or remove an extra fill of an unused water with a never-pushed nearby block), and a local search ranks them by length. The 3 shortest distinct variants then get improve's windows and spare keys (no proof). Rounds repeat from the best solution.
+
+Run 1: 15 min per level, seed 1, saved solution as start, 3 processes in parallel (≤ 1.5 GB each) while other agents used the machine. Run 2: 30 min per level from the run 1 results (`--from`), with the fix below. Run 3: seed 2 from run 2's results (pc-18, pc-09, pc-04). Run 4: pc-18, seed 2 from run 1's 1414.
+
+| level | saved | plan rebuilt as is | best variant, round 1 (before improve) | after improve, round 1 | run 1 (15 min) | runs 2–3 (30 min each) |
+|---|---|---|---|---|---|---|
+| pc-04 | 430 | 430 | **318** | 296 | 296 (2 rounds) | **278** |
+| pc-07 | 392 | 392 | 392 | 392 | 392 | 392 |
+| pc-08 | 619 | 619 | 611 | 611 | 611 | **601** |
+| pc-09 | 574 | 574 | 544 | 538 | 538 | **490** |
+| pc-11 | 310 | 310 | 310 | **296** | 296 | 296 |
+| pc-12 | 126 | 126 | 126 | 126 | 126 | 126 |
+| pc-13 | 450 | 450 | 436 | **430** | 430 | 430 |
+| pc-14 | 582 | 582 | 562 | 562 | 562 | **556** |
+| pc-16 | 126 | 126 | **122** | 122 | 122 | 122 |
+| pc-17 | 106 | 106 | 106 | 104 | **92** (round 2: 100 → 92) | 92 |
+| pc-18 | 1554 | 1554 | 1422 | 1414 | 1414 | **1346** (run 4) |
+
+Work: 2,000 (pc-18) to 4.5 M (pc-16) variants per 15 min; about a quarter feasible; the memo answers most stage searches (pc-11: 2.1 M variants, 23 k searches). Memory stays under ~1.5 GB per process (window searches of the improve phase).
+
+Findings:
+- The rebuilt plan alone never gains (the saved solutions are already improved): the gains come from other orders. Reordered and merged stages, then improve: −152 moves on pc-04 (430 → 278, −35 %), −84 on pc-09, −208 on pc-18, −14 on pc-17, −26 on pc-14, −20 on pc-13, −18 on pc-08, −14 on pc-11, −4 on pc-16. pc-07 and pc-12 do not move.
+- Merging is the strongest mutation: a merged stage is one exact search that reaches several goals in the best order (pc-16's 122 comes from a 32-event merged stage of keys and doors with ≤ 4 blocks; the restricted search stays small since the other blocks are walls). Extra water fills appear in pc-11's 296 (30 events instead of 28).
+- Screening often finds the gain without improve (pc-04 318, pc-16 122, pc-14 562, pc-08 611); improve adds 0–22 moves on top. Each round restarts from the new best, whose own plan opens new reorderings (pc-17: 106 → 104 → 92; pc-09: 574 → 538 → 490).
+- Fix found by run 1: a later round spent all the remaining time screening, and a shorter screened variant was lost when no time was left to improve it (pc-18 1348, pc-09 504, pc-04 294 were screened but not kept). Now a shorter screened variant is kept as it is and later rounds keep the same share of the remaining time for improve. Results also depend on the seed and the starting solution (pc-18 from 1414: 1392 with seed 1, 1346 with seed 2; from 1392: no gain with seed 2): long runs benefit from several seeds and starts.
+- Limits: local search only (no proof that an order is the best); stage searches cost ~0.2 s on pc-18 (2 blocks, large free area), so it screens only ~5 variants/s there; the 3 improved variants of a round are often near-identical.
+
+Shorter solutions (files `.oneshot/<id>-<length>.txt`, all replayed and winning, not applied here): pc-04 278, pc-08 601, pc-09 490, pc-11 296, pc-13 430, pc-14 556, pc-16 122, pc-17 92, pc-18 1346.

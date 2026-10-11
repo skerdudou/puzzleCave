@@ -1,5 +1,5 @@
-// `npm run plan -- <id…> [--timeout s] [--keys auto|explicit] [--improve s] [--max-memory MB]
-// [--apply]`: event planner (sub-goals with frozen blocks), then optionally the improve pipeline
+// `npm run plan -- <id…> [--timeout s] [--keys auto|explicit] [planner limits] [--improve s]
+// [--max-memory MB] [--apply]`: event planner (sub-goals with frozen blocks), then optionally the improve pipeline
 // started from the plan. --apply saves the result only if it wins and is shorter than the saved
 // solution, and lowers goldMoves when it is shorter.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -12,6 +12,8 @@ import {
   replay,
   type Dir,
   type LevelData,
+  type PlanOptions,
+  type PlanStats,
 } from '@puzzlecave/core';
 import { loadPack, setMapProperty } from '@puzzlecave/tiled';
 import { savedLowerBound, solutionHeader, type CommandResult } from './commands';
@@ -23,16 +25,50 @@ export interface PlanCommandOptions {
   improveMs: number;
   maxMemoryMb?: number | undefined;
   apply: boolean;
+  /** planner limits given on the command line (planner defaults otherwise) */
+  planner: PlannerLimits;
   log?: (line: string) => void;
 }
 
+export type PlannerLimits = Pick<
+  PlanOptions,
+  | 'maxFree'
+  | 'fillFree'
+  | 'exitFree'
+  | 'maxTries'
+  | 'maxSubStates'
+  | 'alternatives'
+  | 'widen'
+  | 'sideKeys'
+  | 'allDoorsLevel'
+>;
+
+/** integer flags of the planner limits */
+const LIMIT_FLAGS: [string, keyof PlannerLimits][] = [
+  ['--max-free', 'maxFree'],
+  ['--fill-free', 'fillFree'],
+  ['--exit-free', 'exitFree'],
+  ['--tries', 'maxTries'],
+  ['--sub-states', 'maxSubStates'],
+  ['--alternatives', 'alternatives'],
+  ['--widen', 'widen'],
+  ['--all-doors', 'allDoorsLevel'],
+];
+
 export const PLAN_USAGE =
-  'usage: plan <id…> [--timeout s] [--keys auto|explicit] [--improve s] [--max-memory MB] [--apply]';
+  'usage: plan <id…> [--timeout s] [--keys auto|explicit] [--max-free n] [--fill-free n] [--exit-free n] [--tries n] [--sub-states n] [--alternatives k] [--widen n] [--all-doors level] [--side-keys on|off] [--improve s] [--max-memory MB] [--apply]';
 
 export function parsePlanArgs(
   args: string[],
 ): { ids: string[]; opts: PlanCommandOptions } | { error: string } {
-  const valued = new Set(['--timeout', '--keys', '--improve', '--max-memory']);
+  const valued = new Set([
+    '--timeout',
+    '--keys',
+    '--improve',
+    '--max-memory',
+    '--side-keys',
+    ...LIMIT_FLAGS.map(([f]) => f),
+  ]);
   const value = (name: string) => {
     const i = args.indexOf(name);
     return i < 0 ? undefined : args[i + 1];
@@ -50,6 +86,18 @@ export function parsePlanArgs(
   if (!(timeout > 0) || Number.isNaN(improve) || (mem !== undefined && !(mem > 0)))
     return { error: PLAN_USAGE };
   if (keys !== 'auto' && keys !== 'explicit') return { error: PLAN_USAGE };
+  const planner: PlannerLimits = {};
+  for (const [flag, field] of LIMIT_FLAGS) {
+    if (value(flag) === undefined) continue;
+    const n = num(flag, 0);
+    if (!Number.isInteger(n)) return { error: PLAN_USAGE };
+    (planner as Record<string, number>)[field] = n;
+  }
+  const side = value('--side-keys');
+  if (side !== undefined) {
+    if (side !== 'on' && side !== 'off') return { error: PLAN_USAGE };
+    planner.sideKeys = side === 'on';
+  }
   const ids = args.filter((a, i) => !a.startsWith('--') && !valued.has(args[i - 1] ?? ''));
   if (ids.length === 0) return { error: PLAN_USAGE };
   return {
@@ -60,11 +108,22 @@ export function parsePlanArgs(
       improveMs: improve * 1000,
       maxMemoryMb: mem,
       apply: args.includes('--apply'),
+      planner,
     },
   };
 }
 
 const sec = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
+
+/** per event kind: realised / attempted, macro-states, and the caps that stopped events */
+export function kindLines(r: PlanStats): string[] {
+  return Object.entries(r.kinds)
+    .filter(([, k]) => k.attempts > 0)
+    .map(
+      ([kind, k]) =>
+        `  ${kind}: ${k.realised}/${k.attempts} realised, ${k.searches} searches, ${k.states} macro-states; capped: ${k.full} by --sub-states, ${k.freeCapped} by free blocks, ${k.triesCapped} by --tries`,
+    );
+}
 
 export function planCommand(dir: string, ids: string[], o: PlanCommandOptions): CommandResult {
   const pack = loadPack(dir);
@@ -79,10 +138,16 @@ export function planCommand(dir: string, ids: string[], o: PlanCommandOptions): 
       continue;
     }
     const t0 = performance.now();
-    const r = planSolution(level, { timeoutMs: o.timeoutMs, keys: o.keys, log: o.log });
-    const stats = `${r.expanded} event states, ${r.subSearches} sub-searches, ${r.subStates} macro-states`;
+    const r = planSolution(level, {
+      ...o.planner,
+      timeoutMs: o.timeoutMs,
+      keys: o.keys,
+      ...(o.log ? { log: o.log } : {}),
+    });
+    const stats = `${r.expanded} event states (${r.widened} widened), ${r.subSearches} sub-searches, ${r.subStates} macro-states`;
     if (r.status !== 'solved') {
       lines.push(`${id}: no plan (${r.reason}) — ${stats}, ${sec(performance.now() - t0)}`);
+      lines.push(...kindLines(r));
       ok = false;
       continue;
     }

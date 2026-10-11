@@ -1,12 +1,14 @@
 import { resolve } from 'node:path';
 import { parseArgs } from './args';
 import { solveCommand, validateCommand, type CommandResult } from './commands';
+import { exploreCommand, parseExploreArgs } from './explore';
 import { exactBackend } from './gpu';
 import { improveCommand, improveParallel } from './improve';
 import { solveParallel } from './parallel';
 import { LEVELS_DIR } from './paths';
 import { parsePlanArgs, planCommand } from './plan';
 import { parseSubgoalArgs, subgoalCommand } from './subgoal';
+import { longRunCommand, parseLongRunArgs } from './longrun/command';
 
 if (process.argv[2] === 'plan') {
   const p = parsePlanArgs(process.argv.slice(3));
@@ -18,6 +20,23 @@ if (process.argv[2] === 'plan') {
   for (const line of r.lines) console.log(line);
   process.exit(r.ok ? 0 : 1);
 }
+if (process.argv[2] === 'explore') {
+  const p = parseExploreArgs(process.argv.slice(3));
+  if ('error' in p) {
+    console.error(p.error);
+    process.exit(2);
+  }
+  // relative to the directory npm was started from
+  const cwd = process.env.INIT_CWD ?? '.';
+  // the result lines are streamed through log as well
+  const r = exploreCommand(LEVELS_DIR, p.ids, {
+    ...p.opts,
+    save: p.opts.save && resolve(cwd, p.opts.save),
+    from: p.opts.from && resolve(cwd, p.opts.from),
+    log: (line) => console.log(line),
+  });
+  process.exit(r.ok ? 0 : 1);
+}
 if (process.argv[2] === 'subgoal') {
   const p = parseSubgoalArgs(process.argv.slice(3));
   if ('error' in p) {
@@ -27,6 +46,29 @@ if (process.argv[2] === 'subgoal') {
   // relative to the directory npm was started from
   const file = resolve(process.env.INIT_CWD ?? '.', p.file);
   const r = subgoalCommand(LEVELS_DIR, p.id, file, p.opts);
+  for (const line of r.lines) console.log(line);
+  process.exit(r.ok ? 0 : 1);
+}
+if (process.argv[2] === 'longrun') {
+  const p = parseLongRunArgs(process.argv.slice(3));
+  if ('error' in p) {
+    console.error(p.error);
+    process.exit(2);
+  }
+  let interrupts = 0;
+  const r = await longRunCommand(
+    LEVELS_DIR,
+    p,
+    (line) => console.log(line),
+    (run) => {
+      // Ctrl+C: the current layer is dropped, the checkpoint stays (resume with --resume)
+      process.on('SIGINT', () => {
+        if (++interrupts > 1) process.exit(130);
+        console.log('stopping (Ctrl+C again to quit at once)…');
+        run.requestStop();
+      });
+    },
+  );
   for (const line of r.lines) console.log(line);
   process.exit(r.ok ? 0 : 1);
 }
