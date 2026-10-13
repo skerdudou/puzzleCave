@@ -16,6 +16,8 @@ import { t } from '../i18n';
 import { onSceneKeyDown } from '../input/sceneKeys';
 import { chapters, hasMaster, levelById, locate } from '../levels';
 import { thresholdRows, type ThresholdRow } from '../medalInfo';
+import { planReveal, prefersReducedMotion, type RevealSlot } from '../medalReveal';
+import { MedalReveal, type MedalSpot } from '../render/MedalReveal';
 import { COLORS, drawMedal, drawThresholdLine, makeButton, px, textStyle } from '../ui';
 import {
   authorServerAvailable,
@@ -43,6 +45,7 @@ export class ResultScene extends Phaser.Scene {
   private extra: Phaser.GameObjects.GameObject[] = [];
   private alive = false;
   private tick = 0;
+  private reveal?: MedalReveal;
   constructor() {
     super('Result');
   }
@@ -67,6 +70,13 @@ export class ResultScene extends Phaser.Scene {
     const th = resolveThresholds(level.thresholds);
     const master = hasMaster(levelId);
     const rows = thresholdRows(th, master);
+    // earned medals are drawn by the reveal animation, unearned ones (outlines) here
+    const spots: Partial<Record<RevealSlot, MedalSpot>> = {};
+    const medalAt = (slot: RevealSlot, earned: boolean) => {
+      const spot = { x: cx - px(130), y, r: px(10) };
+      if (earned) spots[slot] = spot;
+      else drawMedal(g, spot.x, spot.y, spot.r, undefined);
+    };
     const line = (
       label: string,
       value: string,
@@ -76,8 +86,10 @@ export class ResultScene extends Phaser.Scene {
       isRecord: boolean,
       kind: ThresholdRow['kind'],
     ) => {
-      if (hasTier) drawMedal(g, cx - px(130), y, px(10), medal);
-      this.add.text(cx - px(110), y, `${label} : ${value}`, textStyle(16)).setOrigin(0, 0.5);
+      if (hasTier) medalAt(kind, medal !== undefined);
+      this.add
+        .text(cx - px(110), y, t('labelValue', { label, value }), textStyle(16))
+        .setOrigin(0, 0.5);
       if (best)
         this.add
           .text(cx + px(60), y, `${t('record')} ${best}`, textStyle(12, COLORS.dim))
@@ -112,7 +124,7 @@ export class ResultScene extends Phaser.Scene {
       'time',
     );
     if (mode === 'master' && master && th.platinumMoves !== undefined) {
-      drawMedal(g, cx - px(130), y, px(10), award.platinum ? 'platinum' : undefined);
+      medalAt('platinum', award.platinum);
       this.add
         .text(cx - px(110), y, `${t('platinum')} : ≤ ${th.platinumMoves}`, textStyle(14))
         .setOrigin(0, 0.5);
@@ -173,7 +185,26 @@ export class ResultScene extends Phaser.Scene {
       }
     }
 
+    const plan = planReveal({
+      award,
+      previous,
+      moves: result.moves,
+      timeMs: result.timeMs,
+      hasMovesTier: th.moves !== undefined,
+      hasTimeTier: th.time !== undefined,
+    });
+    setDebug({
+      resultAnimDone: false,
+      resultReveal: plan.steps.map((s) => `${s.slot}:${s.medal}:${s.emphasis}`),
+    });
+    this.reveal = new MedalReveal(this, plan, spots, !prefersReducedMotion(), (r) =>
+      setDebug({ resultAnimDone: true, resultMedalScales: r.scales() }),
+    );
+    // any key or click shows the final state at once; buttons and keys still work right away
+    this.input.on('pointerdown', () => this.reveal?.finish());
+
     onSceneKeyDown(this, (e) => {
+      this.reveal?.finish();
       if (e.key === 'Enter' && next) this.scene.start('Game', { levelId: next, mode: 'normal' });
       else if (e.key.toLowerCase() === 'r') this.scene.start('Game', { levelId, mode });
       else if (e.key === 'Escape') this.scene.start('Select', { levelId });
