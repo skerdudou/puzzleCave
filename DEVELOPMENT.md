@@ -120,13 +120,14 @@ A saved solution that is unreadable or does not win is never overwritten without
 
     npm run longrun -- <id> [--work-dir d] [--max-disk GB] [--max-memory MB] [--threads n] [--partitions n]
                             [--timeout s] [--bound n] [--watch file]… [--gpu auto|on|off]
-                            [--compress none|gen|all] [--resume] [--apply]
+                            [--dominance off|player|keys] [--compress none|gen|all] [--resume] [--apply]
 
 Exact search of a single level with the whole machine: worker threads, the GPU, RAM, then the disk. It only
 looks for solutions strictly shorter than the saved one (`levels/solutions/<id>.txt`, re-read before
 each layer, as are the `--watch` files: a shorter winning solution saved meanwhile lowers the bound;
-`--bound n` replaces them). States are processed by layers of moves (uniform cost), partitioned by
-hash into files, duplicates removed per partition against the states already expanded (delayed
+`--bound n` replaces the saved solution, the `--watch` files can still lower it). States are
+processed by layers of moves (uniform cost), partitioned by the hash of their blocks, waters and
+doors into files, duplicates removed per partition against the states already expanded (delayed
 duplicate detection). Design and measurements in `docs/solver-study.md`: it proved pc-12 optimal at
 122 moves (662 M states, 20–35 min on 8 threads, 35–90 GB of disk); the keys/doors levels grow far
 too fast for it.
@@ -150,6 +151,16 @@ too fast for it.
 - `--apply` follows the `improve` rules: a shorter solution is written only if it wins
   (header `# optimal (proven)`, `goldMoves` lowered); an exhausted search marks the saved solution
   `# optimal (proven)`; a stopped one raises the lower bound in its header.
+- `--dominance` (`keys` by default): a state is dropped when a state expanded at an earlier
+  layer, with the same blocks, waters and doors, reaches it by walking at no greater cost and
+  holds at least as many useful keys (`player`: same keys on the ground and in hand only; `off`).
+  Sound (proof in `expander.ts`); −6–8 % states on pc-12, −14 % on pc-11 by layer 124, −40 % on pc-03 and pc-19; it
+  costs a candidate per closed state of a live core in the closed phase (a wash in time on pc-12).
+  Checkpoints of the previous format (manifest version 4) are refused.
+- On a level whose proof is out of reach, `--bound n` (below the saved solution) is the cheap way
+  to raise the lower bound: successors with g + h ≥ n are never written, which removes most of
+  the pending records (on pc-11 they span 40 layers ahead), and an exhausted run proves "no
+  solution under n".
 - Measurement options: `--dead-pruning` (dead-state test before expanding), `--gen-strong s`
   (strong bound on successors whose weak f is within `s` of the bound).
 

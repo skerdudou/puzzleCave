@@ -12,6 +12,7 @@
 // ~70 µs per call in context setup, and its allocations serialize the threads: it was 65 % of
 // the workers' time on pc-11.
 import { join } from 'node:path';
+import type { CompactModel } from '@puzzlecave/core';
 
 let packBuf = new Uint8Array(0);
 let unpackBuf = new Uint32Array(0);
@@ -95,8 +96,8 @@ export const recordWords = (words: number) => words + EXTRA_WORDS;
 
 /** run file of a partition: the expanded states of every layer, appended layer after layer */
 export const runFile = (dir: string, part: number) => join(dir, 'runs', `p${part}.bin`);
-/** block list of a run file: triples (byte offset, stored bytes, records) */
-export const RUN_INDEX_FIELDS = 3;
+/** block list of a run file: quadruples (byte offset, stored bytes, records, layer) */
+export const RUN_INDEX_FIELDS = 4;
 /** records per run block */
 export const RUN_BLOCK = 4096;
 export const genDir = (dir: string, layer: number) => join(dir, 'gen', `L${layer}`);
@@ -109,10 +110,44 @@ export const genFile = (dir: string, layer: number, worker: number) =>
 export const indexFile = (bin: string) => bin.replace(/\.bin$/, '.idx');
 export const INDEX_FIELDS = 6;
 
-/** partition of a state from its 32-bit hash (parts: power of two) */
-export const partOf = (hash: number, parts: number) => hash & (parts - 1);
-/** sub-pass of a record when a bucket does not fit in memory (high hash bits) */
-export const passOf = (hash: number, passes: number) => (hash >>> 20) % passes;
+/**
+ * bits of the keys still on the ground in a state key (word 0 excluded). The "core" of a state
+ * is its key without word 0 (player, keys in hand) and without these bits: its blocks, filled
+ * waters and closed doors. States are partitioned by the hash of their core, so a state and
+ * every state that may dominate it (see expander.ts) lie in the same partition.
+ */
+export function keyMaskOf(model: CompactModel): Uint32Array {
+  const mask = new Uint32Array(model.words);
+  for (let f = 0; f < model.fixedCount; f++) {
+    if (!model.fixedIsKey[f]) continue;
+    const bit = model.fixedBit[model.fixedCell[f]!]!;
+    mask[bit >>> 5]! |= 1 << (bit & 31);
+  }
+  return mask;
+}
+
+/** hash of the core of the key a[off…] (see keyMaskOf) */
+export function coreHash(a: Uint32Array, off: number, words: number, keyMask: Uint32Array): number {
+  let h = 0x3c6ef372 ^ words;
+  for (let i = 1; i < words; i++) {
+    let k = Math.imul(a[off + i]! & ~keyMask[i]!, 0xcc9e2d51);
+    k = (k << 15) | (k >>> 17);
+    h ^= Math.imul(k, 0x1b873593);
+    h = (h << 13) | (h >>> 19);
+    h = (Math.imul(h, 5) + 0xe6546b64) | 0;
+  }
+  h ^= h >>> 16;
+  h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35);
+  h ^= h >>> 16;
+  return h >>> 0;
+}
+
+/** partition of a state from the hash of its core (parts: power of two) */
+export const partOf = (core: number, parts: number) => core & (parts - 1);
+/** sub-pass of a record when a bucket does not fit in memory (high bits of the core hash) */
+export const passOf = (core: number, passes: number) => (core >>> 20) % passes;
 
 /** shared counters (SharedArrayBuffer) between the coordinator and the workers */
 export interface Shared {
@@ -214,6 +249,8 @@ export interface JobResult {
   dead: number;
   /** successors dropped by the strong bound at generation (genStrongSlack) */
   genPruned: number;
+  /** dominated by a state expanded at an earlier layer (see expander.ts) */
+  dominated: number;
   /** written to the run file and expanded */
   expanded: number;
   /** successors emitted (after pruning) */
@@ -227,7 +264,11 @@ export interface JobResult {
   /** blocks appended to the run file, and their bytes */
   runBlocks: number[];
   runBytes: number;
-  ms: { load: number; closed: number; expand: number };
+  /** dominance: closed states compared (candidates) and walking BFS run */
+  candidates: number;
+  bfs: number;
+  /** thread time per phase (dom: the dominance test, part of closed) */
+  ms: { load: number; closed: number; expand: number; dom: number };
 }
 
 export interface LayerEnd {

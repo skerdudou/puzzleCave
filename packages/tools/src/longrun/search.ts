@@ -23,6 +23,10 @@
 // on any path with fewer than best moves). Hence C* ≥ that minimum; and if C* ≥ U the bound U is
 // the claim "nothing shorter than U". When no record is pending below the best goal, the search
 // is complete: the goal (if any) is optimal, otherwise no solution has fewer than U moves.
+// With dominance pruning (a bucket state dropped because a state expanded at an earlier layer
+// reaches an at-least-as-good state by walking, at no greater cost), states are no longer all
+// expanded at their optimal cost; the same bound is proven by a covering argument at the top
+// of expander.ts. Partitions are by the hash of the state's core (blocks, waters, doors).
 import { createHash } from 'node:crypto';
 import {
   existsSync,
@@ -50,13 +54,14 @@ import {
   type BatchHostMessage,
   type BatchLane,
 } from '@puzzlecave/gpu';
-import { CompactModel, DIRS, hashWords, type Dir, type LevelData } from '@puzzlecave/core';
-import { Expander, readRunBlock } from './expander';
+import { CompactModel, DIRS, type Dir, type LevelData } from '@puzzlecave/core';
+import { Expander, readRunBlock, type Dominance } from './expander';
 import {
   INDEX_FIELDS,
   RUN_INDEX_FIELDS,
   compress,
-  decompress,
+  coreHash,
+  keyMaskOf,
   MAX_LAYER,
   ROOT_LAYER,
   genDir,
@@ -105,6 +110,8 @@ export interface LongRunOptions {
   genStrongSlack?: number | undefined;
   /** dead-state test before expansion (see ExpanderOptions) */
   deadPruning?: boolean | undefined;
+  /** dominance pruning (see expander.ts): 'keys' (default), 'player' or 'off' */
+  dominance?: Dominance | undefined;
   /** compressed blocks (see ExpanderOptions), 'gen' by default */
   compress?: 'none' | 'gen' | 'all' | undefined;
   /** expansion on the GPU: auto (if available), on (required), off (default) */
@@ -125,6 +132,8 @@ export interface LongRunStats {
   loaded: number;
   /** successors written to the buckets */
   emitted: number;
+  /** states dropped by dominance */
+  dominated: number;
   /** layers processed (all calls) */
   layers: number;
   /** last layer done */
@@ -147,7 +156,7 @@ export type LongRunResult = { stats: LongRunStats; upperBound: number } & (
 );
 
 interface Manifest {
-  version: 4;
+  version: 5;
   level: string;
   fingerprint: string;
   upperBound: number;
@@ -383,7 +392,7 @@ export class LongRun {
     const manifestFile = join(dir, 'manifest.json');
     if (opts.resume && existsSync(manifestFile)) {
       m = JSON.parse(readFileSync(manifestFile, 'utf8')) as Manifest;
-      if (m.version !== 4) throw new Error(`${manifestFile}: checkpoint of an older version`);
+      if (m.version !== 5) throw new Error(`${manifestFile}: checkpoint of an older version`);
       if (m.fingerprint !== fp || m.words !== words)
         throw new Error(`${manifestFile}: checkpoint of another level or level version`);
       if (opts.parts !== undefined && opts.parts !== m.parts)
@@ -403,14 +412,14 @@ export class LongRun {
       const rec = new Uint32Array(R);
       rec.set(model.encode(model.start));
       rec[words] = (ROOT_LAYER << 16) >>> 0;
-      const part = partOf(hashWords(rec, 0, words), parts);
+      const part = partOf(coreHash(rec, 0, words, keyMaskOf(model)), parts);
       const bin = genFile(dir, ROOT_SOURCE, 0);
       mkdirSync(genDir(dir, ROOT_SOURCE), { recursive: true });
       const z = compress(new Uint8Array(rec.buffer), R);
       writeFileSync(bin, z);
       writeFileSync(indexFile(bin), new Float64Array([0, part, 0, 1, 0, z.length]));
       m = {
-        version: 4,
+        version: 5,
         level: level.id,
         fingerprint: fp,
         upperBound: U,
@@ -424,7 +433,7 @@ export class LongRun {
         runBlocks: Array.from({ length: parts }, () => []),
         layerSizes: [],
         gens: [{ layer: ROOT_SOURCE, worker: 0, maxTarget: 0 }],
-        stats: { expanded: 0, loaded: 0, emitted: 0, layers: 0, layer: -1, ms: 0 },
+        stats: { expanded: 0, loaded: 0, emitted: 0, dominated: 0, layers: 0, layer: -1, ms: 0 },
       };
       this.save(m);
     }
@@ -497,6 +506,9 @@ export class LongRun {
       genStrongSlack: opts.genStrongSlack,
       deadPruning: opts.deadPruning,
       compress: opts.compress,
+      dominance: opts.dominance,
+      // the process has 8192 descriptors on Windows: ~6000 for the threads
+      maxOpenFiles: Math.max(64, Math.floor(6000 / Math.max(1, threads))),
     };
     // GPU: one thread owns the card, each lane sends it batches of states to expand
     let host: Worker | undefined;
@@ -686,14 +698,18 @@ export class LongRun {
         let pruned = 0;
         let cached = 0;
         let dead = 0;
+        let dominated = 0;
         let genPruned = 0;
         let passes = 1;
-        const ms = { load: 0, closed: 0, expand: 0 };
+        const ms = { load: 0, closed: 0, expand: 0, dom: 0 };
+        let candidates = 0;
+        let bfs = 0;
         for (const r of results) {
           m.runRecords[r.part]! += r.expanded;
           m.runBytes[r.part]! += r.runBytes;
           for (const v of r.runBlocks) m.runBlocks[r.part]!.push(v);
           dead += r.dead;
+          dominated += r.dominated;
           genPruned += r.genPruned;
           expanded += r.expanded;
           loaded += r.loaded;
@@ -706,6 +722,9 @@ export class LongRun {
           ms.load += r.ms.load;
           ms.closed += r.ms.closed;
           ms.expand += r.ms.expand;
+          ms.dom += r.ms.dom;
+          candidates += r.candidates;
+          bfs += r.bfs;
           if (r.truncated) m.truncated = true;
           if (r.goal && r.goal.cost < m.best) {
             m.best = r.goal.cost;
@@ -726,6 +745,7 @@ export class LongRun {
         m.stats.expanded += expanded;
         m.stats.loaded += loaded;
         m.stats.emitted += emitted;
+        m.stats.dominated += dominated;
         m.stats.layers++;
         m.stats.layer = G;
         m.stats.ms = msBefore + performance.now() - t0;
@@ -745,8 +765,8 @@ export class LongRun {
         for (const p of pending.values()) pendingRecords += p.records;
         const bound = lowerBound();
         this.log(
-          `layer ${G}: ${expanded} expanded (${loaded} loaded in ${bucket.segs.length / 5} segments, ${unique} distinct, ${closedDup} seen, ${pruned} pruned${opts.deadPruning ? `, ${dead} dead` : ''}${passes > 1 ? `, ${passes} passes` : ''}), ${emitted} emitted (${cached} cached${opts.genStrongSlack !== undefined ? `, ${genPruned} cut by the strong bound` : ''}) in ${sec.toFixed(1)} s` +
-            ` [load ${(ms.load / 1000).toFixed(1)} closed ${(ms.closed / 1000).toFixed(1)} expand ${(ms.expand / 1000).toFixed(1)} thread-s]` +
+          `layer ${G}: ${expanded} expanded (${loaded} loaded in ${bucket.segs.length / 5} segments, ${unique} distinct, ${closedDup} seen, ${dominated} dominated, ${pruned} pruned${opts.deadPruning ? `, ${dead} dead` : ''}${passes > 1 ? `, ${passes} passes` : ''}), ${emitted} emitted (${cached} cached${opts.genStrongSlack !== undefined ? `, ${genPruned} cut by the strong bound` : ''}) in ${sec.toFixed(1)} s` +
+            ` [load ${(ms.load / 1000).toFixed(1)} closed ${(ms.closed / 1000).toFixed(1)}${candidates > 0 ? ` (dominance ${(ms.dom / 1000).toFixed(1)}: ${candidates} candidates, ${bfs} BFS)` : ''} expand ${(ms.expand / 1000).toFixed(1)} thread-s]` +
             ` — total ${m.stats.expanded} states, ${(Number(this.shared.disk[0]) / GB).toFixed(2)} GB on disk, ${pendingRecords} pending, lower bound ≥ ${bound}${m.goal ? `, best ${m.best}` : ''}`,
         );
       }

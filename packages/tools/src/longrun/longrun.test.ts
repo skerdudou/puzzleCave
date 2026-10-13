@@ -68,6 +68,37 @@ describe('long run (external search)', () => {
     expect(solved).toBeGreaterThan(30);
   }, 60_000);
 
+  it('dominance (player, keys) prunes states and keeps the optimal lengths', async () => {
+    const pruned = { player: 0, keys: 0 };
+    let checked = 0;
+    for (const level of levels.slice(0, 160)) {
+      const ref = solve(level, { timeoutMs: 20_000 });
+      const off = await new LongRun(level, opts({ dominance: 'off' })).run();
+      expect(off.stats.dominated).toBe(0);
+      for (const mode of ['player', 'keys'] as const) {
+        const r = await new LongRun(level, opts({ dominance: mode })).run();
+        pruned[mode] += r.stats.dominated;
+        expect(r.stats.expanded, level.id).toBeLessThanOrEqual(off.stats.expanded);
+        if (ref.status === 'solved') {
+          expect(r.status, level.id).toBe('solved');
+          if (r.status !== 'solved') continue;
+          expect(r.moves.length, level.id).toBe(ref.moves.length);
+          expect(replay(level, r.moves).status, level.id).toBe('won');
+          // proof at the optimum: nothing shorter
+          const at = await new LongRun(
+            level,
+            opts({ dominance: mode, upperBound: ref.moves.length }),
+          ).run();
+          expect(at.status, level.id).toBe('exhausted');
+          checked++;
+        } else expect(r.status, level.id).toBe('exhausted');
+      }
+    }
+    expect(checked).toBeGreaterThan(20);
+    expect(pruned.player).toBeGreaterThan(0);
+    expect(pruned.keys).toBeGreaterThan(pruned.player);
+  }, 120_000);
+
   it('upper bound: = optimum → exhausted, optimum + 1 → same length', async () => {
     let checked = 0;
     for (const level of levels.slice(120, 220)) {

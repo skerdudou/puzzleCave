@@ -6,12 +6,13 @@ import { join } from 'node:path';
 import { formatMoves, parseMoves, replay, type Dir, type LevelData } from '@puzzlecave/core';
 import { loadPack, setMapProperty } from '@puzzlecave/tiled';
 import { solutionHeader, type CommandResult } from '../commands';
+import type { Dominance } from './expander';
 import { LongRun, type LongRunResult } from './search';
 
 const MB = 1024 ** 2;
 
 export const LONGRUN_USAGE =
-  'usage: longrun <id> [--work-dir d] [--max-disk GB] [--max-memory MB] [--threads n] [--partitions n] [--timeout s] [--bound n] [--watch file]… [--gen-strong slack] [--dead-pruning] [--compress none|gen|all] [--gpu auto|on|off] [--resume] [--apply]';
+  'usage: longrun <id> [--work-dir d] [--max-disk GB] [--max-memory MB] [--threads n] [--partitions n] [--timeout s] [--bound n] [--watch file]… [--gen-strong slack] [--dead-pruning] [--dominance off|player|keys] [--compress none|gen|all] [--gpu auto|on|off] [--resume] [--apply]';
 
 export interface LongRunCommandOptions {
   id: string;
@@ -26,6 +27,7 @@ export interface LongRunCommandOptions {
   watch: string[];
   genStrongSlack: number | undefined;
   deadPruning: boolean;
+  dominance: Dominance;
   compress: 'none' | 'gen' | 'all';
   gpu: 'auto' | 'on' | 'off';
   resume: boolean;
@@ -45,6 +47,7 @@ export function parseLongRunArgs(args: string[]): LongRunCommandOptions | { erro
     '--gen-strong',
     '--compress',
     '--gpu',
+    '--dominance',
   ]);
   const value = (name: string) => {
     const i = args.indexOf(name);
@@ -72,6 +75,8 @@ export function parseLongRunArgs(args: string[]): LongRunCommandOptions | { erro
   if (ids.length !== 1) return { error: LONGRUN_USAGE };
   if (!['auto', 'on', 'off'].includes(value('--gpu') ?? 'auto'))
     return { error: `--gpu expects auto, on or off\n${LONGRUN_USAGE}` };
+  if (!['off', 'player', 'keys'].includes(value('--dominance') ?? 'keys'))
+    return { error: `--dominance expects off, player or keys\n${LONGRUN_USAGE}` };
   if (!['none', 'gen', 'all'].includes(value('--compress') ?? 'gen'))
     return { error: `--compress expects none, gen or all\n${LONGRUN_USAGE}` };
   return {
@@ -86,6 +91,7 @@ export function parseLongRunArgs(args: string[]): LongRunCommandOptions | { erro
     watch: args.flatMap((a, i) => (args[i - 1] === '--watch' ? [a] : [])),
     genStrongSlack: nums.genStrong ?? undefined,
     deadPruning: args.includes('--dead-pruning'),
+    dominance: (value('--dominance') ?? 'keys') as Dominance,
     compress: (value('--compress') ?? 'gen') as 'none' | 'gen' | 'all',
     gpu: (value('--gpu') ?? 'auto') as 'auto' | 'on' | 'off',
     resume: args.includes('--resume'),
@@ -132,9 +138,8 @@ export async function longRunCommand(
   mkdirSync(workDir, { recursive: true });
   const saved = savedSolution(dir, level);
   const bound = () => {
-    // explicit --bound: the saved solution is ignored
-    if (o.bound !== undefined) return o.bound;
-    let b = savedSolution(dir, level)?.length ?? Infinity;
+    // explicit --bound: replaces the saved solution (the watched files still lower it)
+    let b = o.bound ?? savedSolution(dir, level)?.length ?? Infinity;
     for (const file of o.watch) b = Math.min(b, winning(file, level)?.length ?? Infinity);
     return b;
   };
@@ -160,6 +165,7 @@ export async function longRunCommand(
     timeoutMs: o.timeoutMs,
     genStrongSlack: o.genStrongSlack,
     deadPruning: o.deadPruning,
+    dominance: o.dominance,
     compress: o.compress,
     gpu: o.gpu,
     log,
