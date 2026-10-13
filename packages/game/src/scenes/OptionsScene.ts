@@ -133,7 +133,15 @@ export class OptionsScene extends Phaser.Scene {
       this.buttons[`lang-${lang}`] = [cx / dpr(), by / dpr()];
       this.langMenu.push(item);
     });
-    setDebug({ langMenuOpen: true, buttons: this.buttons });
+    // Phaser hit-tests these objects only once its next pre-update has taken them in, and
+    // orders the hits by the last frame drawn: until then a click still lands on the screen
+    // without the list. So the tests learn that the list is open once it has been drawn.
+    const menu = this.langMenu;
+    this.events.once(Phaser.Scenes.Events.PRE_UPDATE, () =>
+      this.events.once(Phaser.Scenes.Events.RENDER, () => {
+        if (this.langMenu === menu) setDebug({ langMenuOpen: true, buttons: this.buttons });
+      }),
+    );
   }
 
   private closeLangMenu(): void {

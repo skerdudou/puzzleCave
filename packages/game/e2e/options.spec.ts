@@ -35,3 +35,35 @@ test('the language is picked from a drop-down list', async ({ page }) => {
   await expect.poll(async () => (await debug(page)).langMenuOpen).toBe(false);
   expect((await debug(page)).lang).toBe('de');
 });
+
+// A loaded machine gives slow frames, and a click can then come before the next frame. Phaser
+// only hit-tests an object made interactive from the next frame on (and orders the hits by
+// the last frame drawn): a click before that frame does not see the list yet. The test hook
+// must therefore say the list is open only once it is drawn and answers clicks.
+test('the drop-down list is reported open only once it answers clicks (slow frames)', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const raf = window.requestAnimationFrame.bind(window);
+    window.requestAnimationFrame = (cb) => {
+      setTimeout(() => raf(cb), 300);
+      return 0;
+    };
+  });
+  await page.goto('/');
+  await expect.poll(async () => (await debug(page)).scene, { timeout: 15_000 }).toBe('Menu');
+  await page.mouse.click(640, 360 + 56);
+  await expect.poll(async () => (await debug(page)).scene).toBe('Options');
+
+  const [lx, ly] = await button(page, 'lang');
+  await page.mouse.click(lx, ly);
+  await expect.poll(async () => (await debug(page)).langMenuOpen).toBe(true);
+  await page.mouse.click(20, 700);
+  await expect.poll(async () => (await debug(page)).langMenuOpen).toBe(false);
+
+  await page.mouse.click(lx, ly);
+  await expect.poll(async () => (await debug(page)).langMenuOpen).toBe(true);
+  const [dx, dy] = await button(page, 'lang-de');
+  await page.mouse.click(dx, dy);
+  await expect.poll(async () => (await debug(page)).lang).toBe('de');
+});
