@@ -4,7 +4,7 @@
   <property name="name" value="Key Eater"/>
   <property name="author" value="moineau"/>
   <property name="initialKeys" type="int" value="-12"/>
-  <property name="goldMoves" type="int" value="1346"/>
+  <property name="goldMoves" type="int" value="1338"/>
  </properties>
  <tileset firstgid="1" source="tileset.tsx"/>
  <layer id="1" name="terrain" width="18" height="18">
