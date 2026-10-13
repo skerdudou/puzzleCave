@@ -70,7 +70,7 @@ test('invalid settings replaced by defaults', () => {
   const kv = mem({
     [SAVE_KEY]: JSON.stringify({
       version: 1,
-      settings: { sound: 'yes', lang: 'xx', dragStep: 'far', vibration: 0 },
+      settings: { sound: 'yes', lang: 'xx', dragStep: 'far', vibration: 0, tapZones: 'centre' },
       levels: {},
     }),
   });
@@ -80,10 +80,11 @@ test('invalid settings replaced by defaults', () => {
     dragStep: 24,
     repeatRate: 10,
     vibration: true,
+    tapZones: 'off',
   });
 });
 
-test('a save from before the drag and vibration options: defaults (24 px, on)', () => {
+test('a save from before the drag, vibration and tap zone options: defaults (24 px, on, off)', () => {
   const kv = mem({
     [SAVE_KEY]: JSON.stringify({
       version: 1,
@@ -97,6 +98,7 @@ test('a save from before the drag and vibration options: defaults (24 px, on)', 
     dragStep: 24,
     repeatRate: 12,
     vibration: true,
+    tapZones: 'off',
   });
 });
 
@@ -110,6 +112,13 @@ test.each([
     [SAVE_KEY]: JSON.stringify({ version: 1, settings: { dragStep: raw }, levels: {} }),
   });
   expect(new SaveStore(kv).load().settings.dragStep).toBe(expected);
+});
+
+test.each(['off', 'screen', 'player'])('tap zones %s are kept', (tapZones) => {
+  const kv = mem({
+    [SAVE_KEY]: JSON.stringify({ version: 1, settings: { tapZones }, levels: {} }),
+  });
+  expect(new SaveStore(kv).load().settings.tapZones).toBe(tapZones);
 });
 
 test('vibration off is kept', () => {

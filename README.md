@@ -56,11 +56,17 @@ next one; finish a few levels of a chapter to open the next chapter.
 - **Touch**:
   - **drag** anywhere on the play area and keep your finger down: you take one step each time
     your finger travels a short distance, so a long drag walks several cells; steer by dragging
-    the other way (right, then up…) without lifting your finger. A simple tap does nothing. Set
+    the other way (right, then up…) without lifting your finger. A simple tap does nothing (unless tap zones are on, below). Set
     the distance per step in Options (**Drag: distance per move**, 24 px by default; lower is
     more sensitive);
   - or use the on-screen **d-pad**: tap for one step, hold a button to keep walking (at the
     **Repeat** rate set in Options);
+  - optional **tap zones** (Options, **Tap zones**: off by default, around the centre of the
+    play area, or around the player): the play area is cut in an X into four triangles, up,
+    down, left and right. Tap a triangle for one step that way (the step is taken when you lift
+    your finger), or keep your finger still on it to keep walking (after the same delay and at
+    the same rate as the d-pad). A finger that moves turns into a normal drag. Taps on a
+    diagonal or right at the centre do nothing, so that no step goes the wrong way;
   - the undo and restart buttons are on screen;
   - on phones that support it (not iPhone), a short **vibration** confirms a push, a bump into
     a wall, a key, a door, filled water; longer ones mark drowning and the end of a level. Turn

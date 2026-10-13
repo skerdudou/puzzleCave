@@ -76,6 +76,12 @@ export class BoardView {
     this.root?.setPosition(layout.x, layout.y).setScale(layout.scale);
   }
 
+  /** Centre of cell `p` in world coordinates (device px). */
+  cellCentre(p: Pos): [number, number] {
+    const { x, y, scale } = this.layout;
+    return [x + (p.x + 0.5) * TILE * scale, y + (p.y + 0.5) * TILE * scale];
+  }
+
   /** Immediately finishes all running animations (final positions). */
   finishAll(): void {
     const list = this.pending;

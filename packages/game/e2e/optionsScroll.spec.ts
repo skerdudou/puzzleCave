@@ -146,11 +146,13 @@ test.describe('phone in landscape', () => {
   test('the language drop-down opens entirely on the screen after scrolling', async ({ page }) => {
     await openOptions(page);
     const f = await Finger.on(page);
-    await dragFrom(page, 600, 300, -400);
+    // scrolled a little: the language button stays on the screen
+    await dragFrom(page, 600, 300, -80);
     const y = await restingScroll(page);
     expect(y).toBeGreaterThan(0);
 
     const [lx, ly] = await button(page, 'lang');
+    expect(ly).toBeGreaterThan(10);
     await f.tap(lx, ly);
     await expect.poll(async () => (await debug(page)).langMenuOpen).toBe(true);
     for (const lang of ['en', 'fr', 'de', 'es', 'it']) {

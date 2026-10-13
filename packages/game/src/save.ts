@@ -1,6 +1,7 @@
 import type { LevelRecord, Medal } from '@puzzlecave/core';
 import { isLang, type Lang } from './i18n';
 import { DRAG_STEP_DEFAULT, nearestDragStep } from './input/drag';
+import { isTapZoneMode, type TapZoneMode } from './input/tapZones';
 
 export interface Settings {
   sound: boolean;
@@ -9,6 +10,8 @@ export interface Settings {
   dragStep: number;
   vibration: boolean;
   repeatRate: number;
+  /** optional tap zones, around the centre of the play area or around the player */
+  tapZones: TapZoneMode;
 }
 export interface SaveData {
   version: 1;
@@ -32,6 +35,7 @@ export function defaultSave(): SaveData {
       dragStep: DRAG_STEP_DEFAULT,
       repeatRate: 10,
       vibration: true,
+      tapZones: 'off',
     },
     levels: {},
   };
@@ -69,6 +73,8 @@ function sanitiseSettings(raw: unknown): Settings {
         : d.dragStep,
     repeatRate: clampNumber(s.repeatRate, 4, 20, d.repeatRate),
     vibration: typeof s.vibration === 'boolean' ? s.vibration : d.vibration,
+    // older saves have none: off
+    tapZones: isTapZoneMode(s.tapZones) ? s.tapZones : d.tapZones,
   };
 }
 

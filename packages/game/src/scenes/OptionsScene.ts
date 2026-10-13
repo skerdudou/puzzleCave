@@ -5,6 +5,7 @@ import { LANGS, getLang, messages, setLang, t, type Lang } from '../i18n';
 import { canVibrate, vibrate } from '../haptics';
 import { shiftDragStep } from '../input/drag';
 import { onSceneKeyDown } from '../input/sceneKeys';
+import { nextTapZoneMode } from '../input/tapZones';
 import {
   clampScroll,
   dropDownTop,
@@ -140,6 +141,13 @@ export class OptionsScene extends Phaser.Scene {
       () => (s.repeatRate = clamp(s.repeatRate - 1, 4, 20)),
       () => (s.repeatRate = clamp(s.repeatRate + 1, 4, 20)),
     );
+    // tap zones: off → around the screen centre → around the player → off
+    label(t('tapZones'));
+    const zones = { off: t('off'), screen: t('zonesScreen'), player: t('zonesPlayer') };
+    button('tapZones', cx, y, zones[s.tapZones], () =>
+      change(() => (s.tapZones = nextTapZoneMode(s.tapZones))),
+    );
+    y += px(44);
     // vibrations: only offered where the browser can vibrate (not iOS Safari)
     if (canVibrate()) {
       label(t('vibration'));
