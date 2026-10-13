@@ -472,3 +472,21 @@ The start values stay far below the proven bounds (those come from searches that
 **Certification**: on pc-19 (`--bound 95`, stopped at layer 27) the checkpoint bound 40 becomes 58 (optimum 88); on pc-12 (`--bound 130`, layer 56) 58 → 74 (optimum 122).
 
 **pc-11** (checkpoint of the 284 GB long run, layer 131, 7.25 G pending records, its own bound ≥ 134; read-only): `npm run certify -- <dir> --target 150 --threads 8 --skip-fingerprint` (the level differs only by its old `goldMoves` 310, checked against the manifest fingerprint) read 3.32 G records, evaluated 2.02 G with the strong bound, 5.3 h on 8 threads (machine shared with another long run): no pending record has g + h < 150, so **pc-11 ≥ 150** (was 134). On a 2,000-record sample of layer 131 the smallest g + h is 160, so a higher target would likely certify more, at a cost growing with the number of layers below it (~0.25 G records per layer, 30–150 µs each).
+
+### Proof triage of the unproven levels (2026-10-13)
+
+A 10-minute long run per level (`--threads 10 --gpu auto --compress all`, dominance `keys`) measures the growth of the first layers. Growth of the expanded states over two layers (odd and even layers differ, so pairs are compared), at the last layers reached:
+
+| level | best known | layer reached | lower bound | ×/2 layers | gap to close |
+|---|---|---|---|---|---|
+| pc-17 | 92 | 25 | 36 | ×4.3 | 56 |
+| pc-16 | 122 | 31 | 40 | ×2.5 | 82 |
+| pc-18 | 1338 | 41 | 54 | ×2.2 | > 1000 |
+| pc-08 | 581 | 72 | 83 | ×1.8 | ~500 |
+| pc-09 | 490 | 79 | 87 | ×1.5 | ~400 |
+| pc-04 | 278 | 73 | 76 | ×1.5 | ~200 |
+| pc-13 | 430 | 105 | **108** | ×1.25 | ~320 |
+| pc-14 | 554 | 104 | **108** | ×1.25 | ~450 |
+| pc-07 | 388 | 114 | 118 | ×1.22 | ~270 |
+
+The practical ceiling is a few 10⁹ states (pc-11 ≥ 156: 2 G states, 259 GB). Even the slowest growth (×1.1 per layer) over 200+ layers is beyond 10²⁰ states, and the dense levels (pc-17, pc-16) would need ×4 every two layers over 50+ layers: **no proof is reachable** for any of them with this search, so no long run was started. The proven bounds are kept where higher; pc-13 and pc-14 rise from ≥ 100 to ≥ 108.
