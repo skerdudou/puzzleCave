@@ -1,7 +1,7 @@
 // `npm run plan -- <id…> [--timeout s] [--keys auto|explicit] [planner limits] [--improve s]
 // [--max-memory MB] [--apply]`: event planner (sub-goals with frozen blocks), then optionally the improve pipeline
 // started from the plan. --apply saves the result only if it wins and is shorter than the saved
-// solution, and lowers goldMoves when it is shorter.
+// solution, and lowers platinumMoves when it is shorter (goldMoves only for a level without one).
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
@@ -15,8 +15,8 @@ import {
   type PlanOptions,
   type PlanStats,
 } from '@puzzlecave/core';
-import { loadPack, setMapProperty } from '@puzzlecave/tiled';
-import { savedLowerBound, solutionHeader, type CommandResult } from './commands';
+import { loadPack } from '@puzzlecave/tiled';
+import { applyThresholds, savedLowerBound, solutionHeader, type CommandResult } from './commands';
 
 export interface PlanCommandOptions {
   timeoutMs: number;
@@ -175,7 +175,7 @@ export function planCommand(dir: string, ids: string[], o: PlanCommandOptions): 
   return { ok, lines };
 }
 
-/** writes the solution if it wins and beats the saved one; lowers goldMoves accordingly */
+/** writes the solution if it wins and beats the saved one; sets the thresholds (applyThresholds) */
 export function applySolution(
   dir: string,
   level: LevelData,
@@ -197,10 +197,6 @@ export function applySolution(
   }
   mkdirSync(join(dir, 'solutions'), { recursive: true });
   writeFileSync(file, `${solutionHeader(false, lowerBound)}\n${formatMoves(moves)}`);
-  const gold = level.thresholds.goldMoves;
-  if (gold === undefined || moves.length < gold) {
-    const tmx = join(dir, `${level.id}.tmx`);
-    writeFileSync(tmx, setMapProperty(readFileSync(tmx, 'utf8'), 'goldMoves', moves.length));
-  }
+  applyThresholds(dir, level, moves.length);
   return [`${level.id}: solution written (${moves.length} moves)`];
 }

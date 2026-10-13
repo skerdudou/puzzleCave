@@ -1,7 +1,7 @@
 import type { GameState, LevelData, LevelObject, ObjKind, Pos, Terrain } from './types';
 
 export type AsciiOptions = Partial<
-  Pick<LevelData, 'id' | 'name' | 'author' | 'initialKeys' | 'platinum' | 'thresholds'>
+  Pick<LevelData, 'id' | 'name' | 'author' | 'initialKeys' | 'thresholds'>
 >;
 
 const LEGEND: Record<string, { terrain: Terrain; obj?: ObjKind; start?: true }> = {
@@ -53,7 +53,6 @@ export function fromAscii(rows: string[], opts: AsciiOptions = {}): LevelData {
     objects,
     start: starts[0]!,
     initialKeys: opts.initialKeys ?? 0,
-    platinum: opts.platinum ?? false,
     thresholds: opts.thresholds ?? {},
   };
 }

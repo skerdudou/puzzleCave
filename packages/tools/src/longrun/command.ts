@@ -4,8 +4,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { availableParallelism, freemem } from 'node:os';
 import { join } from 'node:path';
 import { formatMoves, parseMoves, replay, type Dir, type LevelData } from '@puzzlecave/core';
-import { loadPack, setMapProperty } from '@puzzlecave/tiled';
-import { solutionHeader, type CommandResult } from '../commands';
+import { loadPack } from '@puzzlecave/tiled';
+import { applyThresholds, solutionHeader, type CommandResult } from '../commands';
 import type { Dominance } from './expander';
 import { LongRun, type LongRunResult } from './search';
 
@@ -202,11 +202,7 @@ function report(
     );
     if (apply && (!saved || n < saved.length)) {
       writeFileSync(solFile, text);
-      const gold = level.thresholds.goldMoves;
-      if (gold === undefined || n < gold) {
-        const tmx = join(dir, `${id}.tmx`);
-        writeFileSync(tmx, setMapProperty(readFileSync(tmx, 'utf8'), 'goldMoves', n));
-      }
+      applyThresholds(dir, level, n);
       lines.push(`${id}: written to solutions/${id}.txt (optimal, proven)`);
     }
     return { ok: true, lines };

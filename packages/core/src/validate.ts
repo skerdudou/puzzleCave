@@ -45,6 +45,10 @@ export function validateLevel(l: LevelData): string[] {
     if (v !== undefined && !(Number.isFinite(v) && v > 0))
       e.push(`invalid threshold ${name} (${v})`);
   }
+  const { goldMoves: gold, platinumMoves: plat } = l.thresholds;
+  if (plat !== undefined && gold === undefined) e.push('platinumMoves without goldMoves');
+  if (plat !== undefined && gold !== undefined && plat > gold)
+    e.push(`platinumMoves (${plat}) > goldMoves (${gold})`);
   return e;
 }
 

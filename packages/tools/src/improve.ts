@@ -14,8 +14,10 @@ import {
   type LevelData,
   type StageName,
 } from '@puzzlecave/core';
-import { loadPack, setMapProperty } from '@puzzlecave/tiled';
+import { loadPack } from '@puzzlecave/tiled';
 import {
+  applyThresholds,
+  impossibleThreshold,
   savedLowerBound,
   solutionHeader,
   type CommandResult,
@@ -74,8 +76,8 @@ export type ImproveOutcome = 'proven' | 'best' | 'none';
 
 /**
  * Report of a level and, with --apply, writing of the solution (with its status header, if the
- * text changes) and goldMoves: an existing goldMoves is only lowered by a strictly shorter
- * solution (or always with --force).
+ * text changes) and thresholds: goldMoves only for a level without one, otherwise platinumMoves,
+ * only lowered by a strictly shorter solution (or always with --force).
  */
 export function reportImprove(
   dir: string,
@@ -86,7 +88,6 @@ export function reportImprove(
   notes: string[] = [],
 ): CommandResult & { outcome: ImproveOutcome; summary: string } {
   const id = level.id;
-  const gold = level.thresholds.goldMoves;
   const len = (v?: number) => (v === undefined ? '—' : String(v));
   const stages = r.stages.map(
     (s) => `  ${STAGE[s.stage]}: ${len(s.before)} → ${len(s.after)} (${seconds(s.ms)}) — ${s.note}`,
@@ -128,17 +129,15 @@ export function reportImprove(
     ...notes,
   ];
   let ok = true;
-  if (gold !== undefined && r.proven && gold < n) {
+  const impossible = r.proven
+    ? impossibleThreshold(level, n, 'proven optimum')
+    : impossibleThreshold(level, r.lowerBound, 'proven lower bound');
+  if (impossible) {
     ok = false;
-    lines.push(`${id}: goldMoves (${gold}) < proven optimum (${n}) — impossible threshold`);
-  } else if (gold !== undefined && gold < r.lowerBound) {
-    ok = false;
-    lines.push(
-      `${id}: goldMoves (${gold}) < proven lower bound (${r.lowerBound}) — impossible threshold`,
-    );
+    lines.push(impossible);
   }
   // an unreadable or losing saved solution (designer input to fix) is never overwritten without
-  // --force: the found solution is written next to it, goldMoves is left untouched
+  // --force: the found solution is written next to it, the thresholds are left untouched
   const keepSaved = savedIsInvalid(dir, level) && !o.force;
   if (savedIsInvalid(dir, level)) ok = false;
   // --from-scratch ignored the saved solution: it is only replaced by a strictly shorter one
@@ -161,15 +160,12 @@ export function reportImprove(
       }
       if (keepSaved)
         lines.push(
-          `${id}: saved solution kept (invalid) — found solution written to solutions/${id}.found.txt, goldMoves unchanged; --force to replace`,
+          `${id}: saved solution kept (invalid) — found solution written to solutions/${id}.found.txt, thresholds unchanged; --force to replace`,
         );
       else {
         // the saved solution is valid again, or --force: the .found.txt is stale
         rmSync(join(dir, 'solutions', `${id}.found.txt`), { force: true });
-        if (o.force || gold === undefined || n < gold) {
-          const tmx = join(dir, `${id}.tmx`);
-          writeFileSync(tmx, setMapProperty(readFileSync(tmx, 'utf8'), 'goldMoves', n));
-        }
+        applyThresholds(dir, level, n, o.force);
       }
     } catch (err) {
       ok = false;

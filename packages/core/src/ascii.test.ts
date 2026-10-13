@@ -13,7 +13,6 @@ test('fromAscii builds terrain, objects and start', () => {
   ]);
   expect(l.start).toEqual({ x: 0, y: 0 });
   expect(l.initialKeys).toBe(2);
-  expect(l.platinum).toBe(false);
   expect(l.thresholds).toEqual({});
 });
 

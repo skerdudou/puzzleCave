@@ -39,7 +39,7 @@ test('no undo after a win or a drowning', () => {
   expect(s.state.status).toBe('won');
   expect(s.undo()).toBe(false);
 
-  const p = new Session(fromAscii(['@~E']), 'platinum');
+  const p = new Session(fromAscii(['@~E']), 'master');
   p.move('right');
   expect(p.state.status).toBe('drowned');
   expect(p.undo()).toBe(false);
@@ -89,9 +89,22 @@ test('restart on a fresh game or after drowning: nothing to restore', () => {
   expect(s.undo()).toBe(true);
   expect(s.moveLog).toEqual(['right']);
 
-  const p = new Session(fromAscii(['@~E']), 'platinum');
+  const p = new Session(fromAscii(['@~E']), 'master');
   p.move('right');
   p.restart();
   expect(p.canUndoRestart).toBe(false);
   expect(p.undo()).toBe(false);
+});
+
+test('master mode: no undo of a move, and a restart cannot be undone', () => {
+  const s = new Session(level, 'master');
+  expect(s.canUndo).toBe(false);
+  s.move('right');
+  expect(s.undo()).toBe(false);
+  expect(s.state.moves).toBe(1);
+  s.restart();
+  expect(s.canUndoRestart).toBe(false);
+  expect(s.undo()).toBe(false);
+  expect(s.state.moves).toBe(0);
+  expect(s.moveLog).toEqual([]);
 });

@@ -3,6 +3,7 @@
     "id": "easy",
     "name": { "en": "Easy", "fr": "Facile", "de": "Leicht", "es": "Fácil", "it": "Facile" },
     "unlockAfter": 0,
+    "masterMode": false,
     "levels": [
       "pc-01",
       "pc-20",

@@ -3,7 +3,8 @@
  <properties>
   <property name="name" value="Brain Teaser"/>
   <property name="author" value="moineau"/>
-  <property name="goldMoves" type="int" value="388"/>
+  <property name="goldMoves" type="int" value="402"/>
+  <property name="platinumMoves" type="int" value="388"/>
  </properties>
  <tileset firstgid="1" source="tileset.tsx"/>
  <layer id="1" name="terrain" width="18" height="18">

@@ -66,8 +66,11 @@ export function drawThresholdLine(
   const head = scene.add.text(0, y, label, textStyle(size, COLORS.dim)).setOrigin(0, 0.5);
   const r = px(size / 2.5);
   const dot = 2 * r + px(4);
-  const gap = px(12);
-  const width = head.width + items.reduce((w, i) => w + gap + dot + i.text.width, 0);
+  // four medals (with platinum) on a narrow phone: the gaps shrink to keep the line on screen
+  const content = head.width + items.reduce((w, i) => w + dot + i.text.width, 0);
+  const room = scene.scale.width - px(16) - content;
+  const gap = items.length ? Math.max(px(4), Math.min(px(12), room / items.length)) : px(12);
+  const width = content + gap * items.length;
   let x = cx - width / 2;
   head.setX(x);
   x += head.width;

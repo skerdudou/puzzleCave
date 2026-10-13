@@ -36,12 +36,18 @@ export class Session {
     return r.events;
   }
 
+  /** Master mode has no undo at all: neither of a move nor of a restart. */
+  get canUndo(): boolean {
+    return this.mode !== 'master';
+  }
+
   /** True right after a restart (before any new move): undo() will restore the previous game. */
   get canUndoRestart(): boolean {
-    return this.beforeRestart !== null && this.stack.length <= 1;
+    return this.canUndo && this.beforeRestart !== null && this.stack.length <= 1;
   }
 
   undo(): boolean {
+    if (!this.canUndo) return false;
     if (this.canUndoRestart) {
       this.stack = this.beforeRestart!;
       this.beforeRestart = null;
@@ -54,7 +60,10 @@ export class Session {
 
   restart(): void {
     // Only a game in progress and already started is saved; a repeated restart keeps the saved game.
-    if (this.state.status === 'playing' && this.stack.length > 1) this.beforeRestart = this.stack;
+    // In master mode a restart is a new attempt from scratch: the previous game is dropped.
+    if (!this.canUndo) this.beforeRestart = null;
+    else if (this.state.status === 'playing' && this.stack.length > 1)
+      this.beforeRestart = this.stack;
     else if (this.state.status !== 'playing') this.beforeRestart = null;
     this.stack = [{ state: initialState(this.level, this.mode), dir: null }];
   }

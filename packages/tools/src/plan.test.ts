@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from 'vitest';
 import { fromAscii } from '@puzzlecave/core';
+import { writeTmx } from '@puzzlecave/tiled';
 import { applySolution, parsePlanArgs } from './plan';
 
 test('applySolution keeps the lower bound proven for the replaced solution', () => {
@@ -20,6 +21,21 @@ test('applySolution keeps the lower bound proven for the replaced solution', () 
     expect(readFileSync(file, 'utf8').split('\n')[0]).toBe(
       '# best known — not proven optimal (proven lower bound ≥ 4)',
     );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('applySolution: a level with a goldMoves gets platinumMoves, goldMoves stays', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'plan-'));
+  try {
+    const level = fromAscii(['@....E'], { id: 'p', thresholds: { goldMoves: 9 } });
+    writeFileSync(join(dir, 'p.tmx'), writeTmx(level));
+    const five = ['right', 'right', 'right', 'right', 'right'] as const;
+    expect(applySolution(dir, level, [...five], 0)).toEqual(['p: solution written (5 moves)']);
+    const tmx = readFileSync(join(dir, 'p.tmx'), 'utf8');
+    expect(tmx).toMatch(/name="goldMoves" type="int" value="9"/);
+    expect(tmx).toMatch(/name="platinumMoves" type="int" value="5"/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

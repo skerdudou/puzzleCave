@@ -4,7 +4,6 @@
   <property name="name" value="In the Red"/>
   <property name="author" value="moineau"/>
   <property name="initialKeys" type="int" value="-2"/>
-  <property name="platinum" type="bool" value="true"/>
   <property name="goldMoves" type="int" value="52"/>
  </properties>
  <tileset firstgid="1" source="tileset.tsx"/>

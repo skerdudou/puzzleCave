@@ -1,8 +1,10 @@
 import { expect, test } from 'vitest';
 import {
   completedCount,
+  hasMasterMode,
   isChapterUnlocked,
   isLevelUnlocked,
+  isMasterUnlocked,
   recordRun,
   validateChapters,
   type Chapter,
@@ -44,7 +46,7 @@ test('recordRun keeps the best results', () => {
   });
   const r2 = recordRun(
     r1,
-    { moves: 40, timeMs: 5000, mode: 'platinum' },
+    { moves: 40, timeMs: 5000, mode: 'master' },
     { moves: 'bronze', time: 'gold', platinum: true },
   );
   expect(r2).toEqual({
@@ -71,6 +73,36 @@ test.each<[string, unknown, string[], RegExp]>([
     /unlockAfter/,
   ],
   ['missing name', [{ id: 'x', unlockAfter: 0, levels: ['a'] }], ['a'], /name/],
+  [
+    'masterMode not a boolean',
+    [{ ...chapters[0]!, masterMode: 'no' }, chapters[1]],
+    ['a', 'b', 'c', 'd', 'e'],
+    /masterMode must be true or false/,
+  ],
 ])('validateChapters : %s', (_n, value, ids, re) => {
   expect(validateChapters(value, new Set(ids))).toContainEqual(expect.stringMatching(re));
+});
+
+test('masterMode: allowed as a boolean, on by default', () => {
+  const easy = { ...chapters[0]!, masterMode: false };
+  expect(validateChapters([easy, chapters[1]], new Set(['a', 'b', 'c', 'd', 'e']))).toEqual([]);
+  expect(hasMasterMode(easy)).toBe(false);
+  expect(hasMasterMode(chapters[1])).toBe(true);
+  expect(hasMasterMode({ ...chapters[1]!, masterMode: true })).toBe(true);
+});
+
+test('master mode opens with gold on the level (or a platinum from an older save)', () => {
+  expect(isMasterUnlocked(undefined)).toBe(false);
+  expect(isMasterUnlocked({ completed: true, medals: { moves: 'silver', time: 'gold' } })).toBe(
+    false,
+  );
+  expect(isMasterUnlocked({ completed: true, medals: { moves: 'gold' } })).toBe(true);
+  expect(isMasterUnlocked({ completed: true, medals: { platinum: true } })).toBe(true);
+  // a gold earned in master mode counts too: recordRun keeps it
+  const r = recordRun(
+    undefined,
+    { moves: 9, timeMs: 1, mode: 'master' },
+    { moves: 'gold', platinum: false },
+  );
+  expect(isMasterUnlocked(r)).toBe(true);
 });

@@ -14,8 +14,8 @@ import { setDebug } from '../debug';
 import { formatTime } from '../format';
 import { t } from '../i18n';
 import { onSceneKeyDown } from '../input/sceneKeys';
-import { chapters, levelById, locate } from '../levels';
-import { platinumText, thresholdRows, type ThresholdRow } from '../medalInfo';
+import { chapters, hasMaster, levelById, locate } from '../levels';
+import { thresholdRows, type ThresholdRow } from '../medalInfo';
 import { COLORS, drawMedal, drawThresholdLine, makeButton, px, textStyle } from '../ui';
 import {
   authorServerAvailable,
@@ -59,11 +59,14 @@ export class ResultScene extends Phaser.Scene {
     this.add.text(cx, y, t('won'), textStyle(26, COLORS.accent)).setOrigin(0.5);
     y += px(36);
     this.add.text(cx, y, level.name, textStyle(16)).setOrigin(0.5);
+    if (mode === 'master')
+      this.add.text(cx, y + px(22), t('masterMode'), textStyle(12, '#9be7ff')).setOrigin(0.5);
     y += px(48);
 
     const g = this.add.graphics();
-    const th = resolveThresholds(level.thresholds, level.platinum);
-    const rows = thresholdRows(th);
+    const th = resolveThresholds(level.thresholds);
+    const master = hasMaster(levelId);
+    const rows = thresholdRows(th, master);
     const line = (
       label: string,
       value: string,
@@ -108,10 +111,11 @@ export class ResultScene extends Phaser.Scene {
       previous?.bestTimeMs === undefined || result.timeMs < previous.bestTimeMs,
       'time',
     );
-    const plat = platinumText(th, level.platinum, t('platinumSurvive'));
-    if (mode === 'platinum' && plat) {
+    if (mode === 'master' && master && th.platinumMoves !== undefined) {
       drawMedal(g, cx - px(130), y, px(10), award.platinum ? 'platinum' : undefined);
-      this.add.text(cx - px(110), y, `${t('platinum')} ${plat}`, textStyle(14)).setOrigin(0, 0.5);
+      this.add
+        .text(cx - px(110), y, `${t('platinum')} : ≤ ${th.platinumMoves}`, textStyle(14))
+        .setOrigin(0, 0.5);
       y += px(40);
     }
 

@@ -41,6 +41,8 @@ const level = (id: string, goldMoves?: number) =>
 const tmx = (dir: string, id = 'k') => readFileSync(join(dir, `${id}.tmx`), 'utf8');
 const gold = (dir: string, id = 'k') =>
   /name="goldMoves" type="int" value="(\d+)"/.exec(tmx(dir, id))?.[1];
+const platinum = (dir: string, id = 'k') =>
+  /name="platinumMoves" type="int" value="(\d+)"/.exec(tmx(dir, id))?.[1];
 const solution = (dir: string, id = 'k') =>
   readFileSync(join(dir, 'solutions', `${id}.txt`), 'utf8');
 const opts = { timeoutMs: 20_000, maxStates: 100_000, apply: false, force: false };
@@ -69,15 +71,24 @@ test('improve: the designer solution is the starting point; without --apply noth
   expect(gold(dir)).toBe('10');
 });
 
-test('improve --apply: solution with its comment, goldMoves lowered', () => {
+test('improve --apply: solution with its comment, platinumMoves lowered, goldMoves kept', () => {
   const dir = fixture([level('k', 10)], { k: LONG });
   expect(improveCommand(dir, ['k'], { ...opts, apply: true }).ok).toBe(true);
   expect(solution(dir)).toBe('# optimal (proven)\nRRRR\n');
-  expect(gold(dir)).toBe('4');
+  // goldMoves is the designer's "good honest" solution: the best length goes to platinumMoves
+  expect(gold(dir)).toBe('10');
+  expect(platinum(dir)).toBe('4');
   expect(validateCommand(dir).ok).toBe(true);
 });
 
-test('improve --apply: goldMoves only lowered by a shorter solution', () => {
+test('improve --apply: a level without goldMoves gets goldMoves (no platinumMoves)', () => {
+  const dir = fixture([level('k')], { k: LONG });
+  expect(improveCommand(dir, ['k'], { ...opts, apply: true }).ok).toBe(true);
+  expect(gold(dir)).toBe('4');
+  expect(platinum(dir)).toBeUndefined();
+});
+
+test('improve --apply: thresholds only lowered by a shorter solution', () => {
   // equal goldMoves: unchanged, the .tmx is not rewritten
   const same = fixture([level('k', 4)], { k: 'RRRR\n' });
   const before = tmx(same);
@@ -92,6 +103,17 @@ test('improve --apply: goldMoves only lowered by a shorter solution', () => {
   expect(gold(low)).toBe('3');
   improveCommand(low, ['k'], { ...opts, apply: true, force: true });
   expect(gold(low)).toBe('4');
+  expect(platinum(low)).toBe('4');
+  // a platinumMoves below the proven optimum is the one flagged
+  const plat = fixture(
+    [fromAscii(ROWS, { id: 'k', thresholds: { goldMoves: 9, platinumMoves: 3 } })],
+    {
+      k: LONG,
+    },
+  );
+  const rp = improveCommand(plat, ['k'], { ...opts, apply: true });
+  expect(rp.lines).toContain('k: platinumMoves (3) < proven optimum (4) — impossible threshold');
+  expect(platinum(plat)).toBe('3');
 });
 
 test('improve --apply: best known but unproven, comment with the lower bound', () => {
@@ -153,7 +175,7 @@ test.each([
     expect(r.lines).toContain(`k: warning — ${warning}`);
     expect(r.lines.some((l) => /^k: solution found/.test(l))).toBe(true);
     expect(r.lines).toContain(
-      'k: saved solution kept (invalid) — found solution written to solutions/k.found.txt, goldMoves unchanged; --force to replace',
+      'k: saved solution kept (invalid) — found solution written to solutions/k.found.txt, thresholds unchanged; --force to replace',
     );
     expect(solution(dir)).toBe(text);
     expect(tmx(dir)).toBe(before);
@@ -162,7 +184,8 @@ test.each([
     improveCommand(dir, ['k'], { ...opts, apply: true, force: true });
     expect(solution(dir)).toBe('# optimal (proven)\nRRRR\n');
     expect(replay(level('k'), parseMoves(solution(dir))).status).toBe('won');
-    expect(gold(dir)).toBe('4');
+    expect(gold(dir)).toBe('9');
+    expect(platinum(dir)).toBe('4');
     expect(existsSync(join(dir, 'solutions', 'k.found.txt'))).toBe(false);
   },
 );
@@ -227,7 +250,8 @@ test('parallel improve: same level lines, writes by the parent', async () => {
   expect(par.lines.join('\n')).toMatch(/proven \(1\):\n {2}k: 4 moves/);
   expect(par.lines.at(-1)).toMatch(/total time/);
   expect(solution(dir)).toBe('# optimal (proven)\nRRRR\n');
-  expect(gold(dir)).toBe('4');
+  expect(gold(dir)).toBe('10');
+  expect(platinum(dir)).toBe('4');
 }, 60_000);
 
 test('improve: compact engine memory cap — --max-memory, otherwise the budget under 70%', () => {
@@ -258,4 +282,44 @@ test('validate: warns about a goldMoves longer than the saved solution', () => {
   expect(r.lines).toContain(
     'k: warning — goldMoves (6) is longer than the saved solution (4 moves)',
   );
+});
+
+const withThresholds = (goldMoves: number, platinumMoves?: number) =>
+  fromAscii(ROWS, {
+    id: 'k',
+    thresholds: { goldMoves, ...(platinumMoves !== undefined ? { platinumMoves } : {}) },
+  });
+
+test('validate: the platinum limit against the saved solution and its header', () => {
+  // platinumMoves equal to the solution: nothing to say
+  const equal = validateCommand(fixture([withThresholds(10, 4)], { k: 'RRRR\n' }));
+  expect(equal.ok).toBe(true);
+  expect(equal.lines.filter((l) => l.startsWith('k:'))).toEqual([]);
+  // a solution longer than the limit, nothing proven: warning only
+  const longer = validateCommand(fixture([withThresholds(12, 9)], { k: LONG }));
+  expect(longer.ok).toBe(true);
+  expect(longer.lines).toContain(
+    'k: warning — the saved solution (10 moves) is longer than platinumMoves (9)',
+  );
+  // a limit under the proven optimum, or under the proven lower bound: error
+  const optimum = validateCommand(
+    fixture([withThresholds(10, 3)], { k: '# optimal (proven)\nRRRR\n' }),
+  );
+  expect(optimum.ok).toBe(false);
+  expect(optimum.lines).toContain(
+    'k: platinumMoves (3) < proven optimum (4) — impossible threshold',
+  );
+  const bound = validateCommand(
+    fixture([withThresholds(3)], {
+      k: '# best known — not proven optimal (proven lower bound ≥ 4)\nRRRR\n',
+    }),
+  );
+  expect(bound.ok).toBe(false);
+  expect(bound.lines).toContain('k: goldMoves (3) < proven lower bound (4) — impossible threshold');
+});
+
+test('validate: platinumMoves above goldMoves is an error', () => {
+  const r = validateCommand(fixture([withThresholds(4, 5)], { k: 'RRRR\n' }));
+  expect(r.ok).toBe(false);
+  expect(r.lines.join('\n')).toMatch(/platinumMoves \(5\) > goldMoves \(4\)/);
 });

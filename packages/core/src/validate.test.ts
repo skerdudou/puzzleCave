@@ -41,8 +41,18 @@ test.each([NaN, 0, -5, Infinity])('seuil goldMoves %j rejected', (v) => {
 
 test('absent or valid thresholds accepted', () => {
   expect(
-    validateLevel({ ...ok, thresholds: { goldMoves: 12, goldTime: 4.5, platinumTime: 30 } }),
+    validateLevel({ ...ok, thresholds: { goldMoves: 12, goldTime: 4.5, platinumMoves: 10 } }),
   ).toEqual([]);
+});
+
+test('platinumMoves: at most goldMoves, and only with a goldMoves', () => {
+  expect(validateLevel({ ...ok, thresholds: { goldMoves: 12, platinumMoves: 12 } })).toEqual([]);
+  expect(validateLevel({ ...ok, thresholds: { goldMoves: 12, platinumMoves: 13 } })).toEqual([
+    'platinumMoves (13) > goldMoves (12)',
+  ]);
+  expect(validateLevel({ ...ok, thresholds: { platinumMoves: 13 } })).toEqual([
+    'platinumMoves without goldMoves',
+  ]);
 });
 
 test('a start on water is valid', () => {

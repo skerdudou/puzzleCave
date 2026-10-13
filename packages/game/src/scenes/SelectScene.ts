@@ -2,16 +2,17 @@ import Phaser from 'phaser';
 import {
   isChapterUnlocked,
   isLevelUnlocked,
+  isMasterUnlocked,
   resolveThresholds,
-  type Medal,
+  type Mode,
 } from '@puzzlecave/core';
 import { app } from '../app';
 import { setDebug } from '../debug';
 import { formatTime } from '../format';
 import { getLang, t } from '../i18n';
 import { onSceneKeyDown } from '../input/sceneKeys';
-import { chapters, levelById, locate } from '../levels';
-import { platinumText, thresholdRows } from '../medalInfo';
+import { chapters, hasMaster, levelById, locate } from '../levels';
+import { thresholdRows, type MedalKind } from '../medalInfo';
 import { syncMusic } from '../music';
 import { COLORS, drawMedal, drawThresholdLine, makeButton, px, textStyle } from '../ui';
 import { authorServerAvailable, fetchSolution } from '../author/client';
@@ -61,6 +62,16 @@ export class SelectScene extends Phaser.Scene {
   private levelOpen(ci: number, li: number): boolean {
     return app.author || isLevelUnlocked(chapters, ci, li, app.data.levels);
   }
+  /** the current chapter has master mode (all its levels do) */
+  private masterChapter(): boolean {
+    return hasMaster(chapters[this.ci]!.levels[0]!);
+  }
+  /** master mode of the current level: absent from its chapter, locked (no gold yet) or open */
+  private masterState(): 'none' | 'locked' | 'open' {
+    const id = this.currentId();
+    if (!hasMaster(id)) return 'none';
+    return isMasterUnlocked(app.data.levels[id]) ? 'open' : 'locked';
+  }
   private currentId(): string {
     return chapters[this.ci]!.levels[this.li]!;
   }
@@ -86,11 +97,16 @@ export class SelectScene extends Phaser.Scene {
     // The help can wrap to two lines on a small screen: it stays anchored at the bottom.
     const help = this.chapterOpen(this.ci)
       ? this.add
-          .text(cx, this.scale.height - px(14), t('selectHelp'), {
-            ...textStyle(11, COLORS.dim),
-            align: 'center',
-            wordWrap: { width: this.scale.width - px(32) },
-          })
+          .text(
+            cx,
+            this.scale.height - px(14),
+            t(this.masterChapter() ? 'selectHelp' : 'selectHelpBasic'),
+            {
+              ...textStyle(11, COLORS.dim),
+              align: 'center',
+              wordWrap: { width: this.scale.width - px(32) },
+            },
+          )
           .setOrigin(0.5, 1)
       : undefined;
     const menu = makeButton(
@@ -144,11 +160,12 @@ export class SelectScene extends Phaser.Scene {
         .setOrigin(0.5);
       const my = y + cell * 0.75;
       // Without a gold threshold for a criterion, no medal can be awarded: no slot.
-      const th = resolveThresholds(level.thresholds, level.platinum);
-      const slots: (Medal | 'platinum' | undefined)[] = [];
+      const th = resolveThresholds(level.thresholds);
+      const slots: (MedalKind | undefined)[] = [];
       if (th.moves) slots.push(rec?.medals.moves);
       if (th.time) slots.push(rec?.medals.time);
-      if (level.platinum) slots.push(rec?.medals.platinum ? 'platinum' : undefined);
+      if (hasMaster(id) && th.platinumMoves !== undefined)
+        slots.push(rec?.medals.platinum ? 'platinum' : undefined);
       slots.forEach((m, k) =>
         drawMedal(g, x + (cell * (k + 1)) / (slots.length + 1), my, px(5), m),
       );
@@ -176,43 +193,42 @@ export class SelectScene extends Phaser.Scene {
         .text(cx, y, t('by', { author: level.author }), textStyle(12, COLORS.dim))
         .setOrigin(0.5);
     y += px(22);
-    const th = resolveThresholds(level.thresholds, level.platinum);
-    const rows = thresholdRows(th);
+    const th = resolveThresholds(level.thresholds);
+    const master = this.masterState();
+    const rows = thresholdRows(th, master !== 'none');
     const tg = this.add.graphics();
     for (const r of rows) {
       drawThresholdLine(this, tg, cx, y, t(r.kind), r.tiers);
       y += px(18);
     }
-    const plat = platinumText(th, level.platinum, t('platinumSurvive'));
-    if (plat) {
-      drawThresholdLine(this, tg, cx, y, t('platinum'), [{ medal: 'platinum', text: plat }]);
-      y += px(18);
-    }
-    setDebug({ thresholds: rows, platinumLimit: plat });
-    if (rows.length || plat) y += px(4);
+    setDebug({ thresholds: rows, master });
+    if (rows.length) y += px(4);
     if (rec?.completed) {
       const time = rec.bestTimeMs !== undefined ? formatTime(rec.bestTimeMs) : '–';
       this.add
         .text(
           cx,
           y,
-          `${t('record')} : ${rec.bestMoves ?? '–'} ${t('moves').toLowerCase()} · ${time}`,
+          t('recordLine', { moves: rec.bestMoves ?? '–', time }),
           textStyle(12, COLORS.dim),
         )
         .setOrigin(0.5);
     }
     y += px(36);
     if (this.levelOpen(this.ci, this.li)) {
-      makeButton(
-        this,
-        level.platinum ? cx - px(90) : cx,
-        y,
-        t('play'),
-        () => this.play('normal'),
-        16,
-      );
-      if (level.platinum)
-        makeButton(this, cx + px(90), y, t('platinum'), () => this.play('platinum'), 14);
+      const open = master === 'open';
+      makeButton(this, open ? cx - px(80) : cx, y, t('play'), () => this.play('normal'), 16);
+      if (open) makeButton(this, cx + px(80), y, t('master'), () => this.play('master'), 14);
+      else if (master === 'locked') {
+        y += px(30);
+        this.add
+          .text(cx, y, `🔒 ${t('masterLocked')}`, {
+            ...textStyle(11, COLORS.dim),
+            align: 'center',
+            wordWrap: { width: this.scale.width - px(32) },
+          })
+          .setOrigin(0.5);
+      }
     }
     if (authorServerAvailable()) {
       // the button only appears if a solution is saved (asynchronous read)
@@ -234,10 +250,10 @@ export class SelectScene extends Phaser.Scene {
     this.redraw();
   }
 
-  private play(mode: 'normal' | 'platinum'): void {
+  private play(mode: Mode): void {
     if (!this.levelOpen(this.ci, this.li)) return;
     const level = levelById(this.currentId());
-    if (mode === 'platinum' && !level.platinum) return;
+    if (mode === 'master' && this.masterState() !== 'open') return;
     this.scene.start('Game', { levelId: level.id, mode });
   }
 
@@ -293,7 +309,7 @@ export class SelectScene extends Phaser.Scene {
         this.scene.start('Menu');
         return;
       default:
-        if (e.key.toLowerCase() === 'p') this.play('platinum');
+        if (e.key.toLowerCase() === 'p') this.play('master');
         else if (e.key.toLowerCase() === 's') void this.replaySaved();
     }
   }

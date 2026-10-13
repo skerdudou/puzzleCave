@@ -2,7 +2,8 @@ export type Terrain = 'floor' | 'gravel' | 'water' | 'wall' | 'exit';
 export type ObjKind = 'key' | 'door' | 'block';
 export type TileKind = Terrain | ObjKind | 'start';
 export type Dir = 'up' | 'down' | 'left' | 'right';
-export type Mode = 'normal' | 'platinum';
+/** master: water drowns the player and undo is disabled */
+export type Mode = 'normal' | 'master';
 export type Status = 'playing' | 'won' | 'drowned';
 
 export interface Pos {
@@ -21,7 +22,8 @@ export interface ThresholdOverrides {
   goldTime?: number;
   silverTime?: number;
   bronzeTime?: number;
-  platinumTime?: number;
+  /** best known solution length: the platinum move limit (goldMoves when absent) */
+  platinumMoves?: number;
 }
 
 export interface LevelData {
@@ -35,7 +37,6 @@ export interface LevelData {
   objects: LevelObject[];
   start: Pos;
   initialKeys: number;
-  platinum: boolean;
   thresholds: ThresholdOverrides;
 }
 

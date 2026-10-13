@@ -3,7 +3,6 @@
  <properties>
   <property name="name" value="Castaway"/>
   <property name="author" value="moineau"/>
-  <property name="platinum" type="bool" value="true"/>
   <property name="goldMoves" type="int" value="44"/>
  </properties>
  <tileset firstgid="1" source="tileset.tsx"/>

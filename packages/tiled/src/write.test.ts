@@ -11,8 +11,7 @@ test('writeTmx → parseTmx gives back the same level', () => {
     name: 'Round trip',
     author: 'moineau',
     initialKeys: -1,
-    platinum: true,
-    thresholds: { goldMoves: 9 },
+    thresholds: { goldMoves: 9, platinumMoves: 8 },
   });
   expect(parseTmx(writeTmx(level), 'rt', read)).toEqual(level);
 });
@@ -32,5 +31,7 @@ test('setMapProperty creates <properties> when missing', () => {
     '',
   );
   expect(xml).not.toContain('<properties>');
-  expect(parseTmx(setMapProperty(xml, 'platinum', true), 'q', read).platinum).toBe(true);
+  expect(parseTmx(setMapProperty(xml, 'platinumMoves', 7), 'q', read).thresholds).toEqual({
+    platinumMoves: 7,
+  });
 });

@@ -3,8 +3,8 @@
  <properties>
   <property name="name" value="Triathlon"/>
   <property name="author" value="moineau"/>
-  <property name="platinum" type="bool" value="true"/>
-  <property name="goldMoves" type="int" value="490"/>
+  <property name="goldMoves" type="int" value="574"/>
+  <property name="platinumMoves" type="int" value="490"/>
  </properties>
  <tileset firstgid="1" source="tileset.tsx"/>
  <layer id="1" name="terrain" width="18" height="18">

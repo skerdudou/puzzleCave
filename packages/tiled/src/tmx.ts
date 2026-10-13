@@ -18,7 +18,7 @@ const THRESHOLD_KEYS: (keyof ThresholdOverrides)[] = [
   'goldTime',
   'silverTime',
   'bronzeTime',
-  'platinumTime',
+  'platinumMoves',
 ];
 const FLIP_MASK = 0x1fffffff;
 
@@ -121,7 +121,6 @@ export function parseTmx(
     objects,
     start: starts[0]!,
     initialKeys: Number(props.get('initialKeys') ?? 0),
-    platinum: props.get('platinum') === 'true',
     thresholds,
   };
 }

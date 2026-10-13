@@ -3,7 +3,8 @@
  <properties>
   <property name="name" value="Bomberman 2 D"/>
   <property name="author" value="moineau"/>
-  <property name="goldMoves" type="int" value="554"/>
+  <property name="goldMoves" type="int" value="582"/>
+  <property name="platinumMoves" type="int" value="554"/>
  </properties>
  <tileset firstgid="1" source="tileset.tsx"/>
  <layer id="1" name="terrain" width="17" height="17">

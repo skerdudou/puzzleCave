@@ -3,9 +3,9 @@
  <properties>
   <property name="name" value="Bomberman"/>
   <property name="author" value="moineau"/>
-  <property name="platinum" type="bool" value="true"/>
   <property name="initialKeys" type="int" value="2"/>
-  <property name="goldMoves" type="int" value="278"/>
+  <property name="goldMoves" type="int" value="430"/>
+  <property name="platinumMoves" type="int" value="278"/>
  </properties>
  <tileset firstgid="1" source="tileset.tsx"/>
  <layer id="1" name="terrain" width="17" height="17">

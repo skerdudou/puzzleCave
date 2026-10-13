@@ -83,8 +83,8 @@ describe('water', () => {
     expect(s.moves).toBe(0);
   });
 
-  test('platinum mode: water drowns', () => {
-    const r = step(lvl(['@~E'], {}, 'platinum'), 'right');
+  test('master mode: water drowns', () => {
+    const r = step(lvl(['@~E'], {}, 'master'), 'right');
     expect(r.state.status).toBe('drowned');
     expect(r.state.moves).toBe(1);
     expect(r.events).toContainEqual({ type: 'drowned', at: { x: 1, y: 0 } });

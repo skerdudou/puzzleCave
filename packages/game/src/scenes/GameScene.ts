@@ -14,7 +14,7 @@ import { formatTime } from '../format';
 import { t } from '../i18n';
 import { InputController, type Action } from '../input/InputController';
 import { directionLabels } from '../input/keyboardLabels';
-import { levelById } from '../levels';
+import { hasMaster, levelById } from '../levels';
 import { syncMusic } from '../music';
 import { AnimClock } from '../render/animTiming';
 import { BoardView } from '../render/BoardView';
@@ -43,6 +43,7 @@ export class GameScene extends Phaser.Scene {
   private timeText?: Phaser.GameObjects.Text;
   private keysText?: Phaser.GameObjects.Text;
   private overlay?: Phaser.GameObjects.Text;
+  private rulesNote?: Phaser.GameObjects.Text;
 
   constructor() {
     super('Game');
@@ -57,6 +58,7 @@ export class GameScene extends Phaser.Scene {
     this.finished = false;
     this.anim.reset();
     this.overlay = undefined;
+    this.rulesNote = undefined;
     this.hud = [];
   }
 
@@ -95,7 +97,12 @@ export class GameScene extends Phaser.Scene {
     const onResize = () => {
       this.board.setLayout(this.computeLayout());
       this.buildHud();
+      if (this.rulesNote) {
+        this.rulesNote.destroy();
+        this.showRules();
+      }
     };
+    if (this.mode === 'master') this.showRules();
     this.scale.on('resize', onResize);
     this.events.once('shutdown', () => {
       window.removeEventListener('keydown', down);
@@ -105,7 +112,12 @@ export class GameScene extends Phaser.Scene {
       this.controls.reset();
     });
     syncMusic(this, app.data.settings.sound, 'music-game');
-    setDebug({ scene: 'Game', levelId: this.level.id, mode: this.mode });
+    setDebug({
+      scene: 'Game',
+      levelId: this.level.id,
+      mode: this.mode,
+      canUndo: this.session.canUndo,
+    });
   }
 
   override update(): void {
@@ -133,10 +145,10 @@ export class GameScene extends Phaser.Scene {
     return this.sidePad() ? px(48) * 3 + px(16) * 2 : 0;
   }
 
-  /** Narrow screen: the PLATINE label moves to a 3rd line, so room must be reserved for it. */
+  /** Narrow screen: the MASTER label moves to a 3rd line, so room must be reserved for it. */
   private topReserve(): number {
     if (!this.narrow()) return px(40);
-    return this.mode === 'platinum' ? px(84) : px(64);
+    return this.mode === 'master' ? px(84) : px(64);
   }
 
   protected computeLayout(): BoardLayout {
@@ -161,13 +173,13 @@ export class GameScene extends Phaser.Scene {
     this.timeText = this.add.text(px(120), sy, '', textStyle(14)).setOrigin(0, 0.5);
     this.keysText = this.add.text(px(250), sy, '', textStyle(14)).setOrigin(0, 0.5);
     this.hud.push(this.movesText, this.timeText, this.keysText);
-    if (this.mode === 'platinum') {
+    if (this.mode === 'master') {
       this.hud.push(
         this.add
           .text(
             this.narrow() ? px(12) : px(330),
             this.narrow() ? sy + px(20) : sy,
-            t('platinumMode'),
+            t('masterMode'),
             textStyle(14, '#9be7ff'),
           )
           .setOrigin(0, 0.5),
@@ -176,8 +188,9 @@ export class GameScene extends Phaser.Scene {
     const buttons: [string, Action][] = [
       [t('menu'), { type: 'menu' }],
       [t('restart'), { type: 'restart' }],
-      [t('undo'), { type: 'undo' }],
     ];
+    // master mode: no undo, so no button for it
+    if (this.session.canUndo) buttons.push([t('undo'), { type: 'undo' }]);
     let x = w - px(12);
     for (const [label, action] of buttons) {
       const b = makeButton(this, x, y, label, () => this.handle(action), 13).setOrigin(1, 0.5);
@@ -207,7 +220,7 @@ export class GameScene extends Phaser.Scene {
         .setOrigin(0.5);
       this.hud.push(help);
       void directionLabels().then((dirs) => {
-        if (help.active) help.setText(t('help', { dirs }));
+        if (help.active) help.setText(t(this.session.canUndo ? 'help' : 'helpMaster', { dirs }));
       });
     }
     this.updateHud();
@@ -216,7 +229,7 @@ export class GameScene extends Phaser.Scene {
   private updateHud(): void {
     const s = this.session.state;
     this.movesText?.setText(`${t('moves')} ${s.moves}`);
-    setDebug({ moves: s.moves });
+    setDebug({ moves: s.moves, status: s.status });
     this.keysText?.setText(`${t('keys')} ${s.keys}`);
     if (this.startTime === null) this.timeText?.setText(`${t('time')} ${formatTime(0)}`);
   }
@@ -266,9 +279,25 @@ export class GameScene extends Phaser.Scene {
     const moved = after.moves > before.moves;
     if (moved && this.startTime === null) this.startTime = now;
     this.board.apply(after, events, moved ? this.anim.next(now) : 0);
+    this.rulesNote?.destroy();
+    this.rulesNote = undefined;
     this.updateHud();
     if (after.status === 'won') this.finish(now);
     else if (after.status === 'drowned') this.showDrowned();
+  }
+
+  /** Master mode: its rules over the board until the first move. */
+  private showRules(): void {
+    this.rulesNote = this.add
+      .text(this.scale.width / 2, this.scale.height / 2, t('masterRules'), {
+        ...textStyle(16, '#9be7ff'),
+        align: 'center',
+        backgroundColor: '#000000cc',
+        padding: { x: px(14), y: px(10) },
+        wordWrap: { width: this.scale.width - px(64) },
+      })
+      .setOrigin(0.5)
+      .setDepth(10);
   }
 
   private showDrowned(): void {
@@ -291,11 +320,11 @@ export class GameScene extends Phaser.Scene {
       timeMs: Math.round(now - (this.startTime ?? now)),
       mode: this.mode,
     };
-    const medals = award(this.level, result);
+    const medals = award(this.level, result, hasMaster(this.level.id));
     const previous = app.data.levels[this.level.id];
     app.data.levels[this.level.id] = recordRun(previous, result, medals);
     app.persist();
-    setDebug({ lastResult: result });
+    setDebug({ lastResult: result, lastAward: medals });
     const moveLog = this.session.moveLog;
     this.time.delayedCall(250, () =>
       this.scene.start('Result', {

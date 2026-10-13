@@ -7,6 +7,7 @@ import {
   replay,
   solve,
   type LevelData,
+  type ThresholdOverrides,
   type ExactEngine,
   type SolveResult,
 } from '@puzzlecave/core';
@@ -28,6 +29,60 @@ export function savedLowerBound(file: string): number {
   return m ? Number(m[1]) : 0;
 }
 
+/** the platinum move limit of a level and the property that sets it (undefined: no goldMoves) */
+export function platinumLimit(
+  t: ThresholdOverrides,
+): { name: 'platinumMoves' | 'goldMoves'; value: number } | undefined {
+  if (t.platinumMoves !== undefined) return { name: 'platinumMoves', value: t.platinumMoves };
+  if (t.goldMoves !== undefined) return { name: 'goldMoves', value: t.goldMoves };
+  return undefined;
+}
+
+export type ThresholdChanges = Partial<Record<'goldMoves' | 'platinumMoves', number>>;
+
+/**
+ * Thresholds a new best solution of `n` moves sets. goldMoves is a "good honest" solution chosen
+ * by the designer: it is only written for a level that has none. Otherwise the best length goes
+ * to platinumMoves, when strictly shorter than the platinum limit — or always with `force` (a
+ * goldMoves below a forced length is raised to it, so that platinumMoves ≤ goldMoves holds).
+ */
+export function thresholdChanges(
+  t: ThresholdOverrides,
+  n: number,
+  force = false,
+): ThresholdChanges {
+  const gold = t.goldMoves;
+  if (gold === undefined) return { goldMoves: n };
+  const limit = t.platinumMoves ?? gold;
+  if (force) {
+    if (n > gold) return { goldMoves: n, platinumMoves: n };
+    return n === limit ? {} : { platinumMoves: n };
+  }
+  return n < limit ? { platinumMoves: n } : {};
+}
+
+/** writes the threshold changes of a new best length into the level's .tmx; true if any */
+export function applyThresholds(dir: string, level: LevelData, n: number, force = false): boolean {
+  const changes = Object.entries(thresholdChanges(level.thresholds, n, force));
+  if (!changes.length) return false;
+  const tmx = join(dir, `${level.id}.tmx`);
+  let xml = readFileSync(tmx, 'utf8');
+  for (const [name, value] of changes) xml = setMapProperty(xml, name, value);
+  writeFileSync(tmx, xml);
+  return true;
+}
+
+/** "<id>: platinumMoves (x) < proven optimum (n) — impossible threshold", if so */
+export function impossibleThreshold(
+  level: LevelData,
+  bound: number,
+  what: 'proven optimum' | 'proven lower bound',
+): string | undefined {
+  const p = platinumLimit(level.thresholds);
+  if (p === undefined || p.value >= bound) return undefined;
+  return `${level.id}: ${p.name} (${p.value}) < ${what} (${bound}) — impossible threshold`;
+}
+
 export interface CommandResult {
   ok: boolean;
   lines: string[];
@@ -43,14 +98,29 @@ export function validateCommand(dir: string): CommandResult {
     if (!existsSync(file)) continue;
     checked++;
     try {
-      const end = replay(level, parseMoves(readFileSync(file, 'utf8')));
+      const text = readFileSync(file, 'utf8');
+      const end = replay(level, parseMoves(text));
       if (end.status !== 'won')
         lines.push(`${level.id}: the solution does not win (status ${end.status})`);
-      const gold = level.thresholds.goldMoves;
-      if (end.status === 'won' && gold !== undefined && gold > end.moves)
-        warnings.push(
-          `${level.id}: warning — goldMoves (${gold}) is longer than the saved solution (${end.moves} moves)`,
-        );
+      const p = platinumLimit(level.thresholds);
+      if (end.status === 'won' && p !== undefined) {
+        // the header proves that nothing shorter than the optimum / the lower bound exists
+        const head = text.split('\n', 1)[0]!;
+        const optimum = /^#\s*optimal \(proven\)/.test(head) ? end.moves : undefined;
+        const bound = optimum ?? savedLowerBound(file);
+        if (p.value < bound)
+          lines.push(
+            `${level.id}: ${p.name} (${p.value}) < ${optimum !== undefined ? 'proven optimum' : 'proven lower bound'} (${bound}) — impossible threshold`,
+          );
+        else if (p.value < end.moves)
+          warnings.push(
+            `${level.id}: warning — the saved solution (${end.moves} moves) is longer than ${p.name} (${p.value})`,
+          );
+        else if (p.value > end.moves)
+          warnings.push(
+            `${level.id}: warning — ${p.name} (${p.value}) is longer than the saved solution (${end.moves} moves)`,
+          );
+      }
     } catch (err) {
       lines.push(`${level.id}: unreadable solution — ${(err as Error).message}`);
     }
@@ -85,9 +155,10 @@ export interface SolveCommandOptions {
 }
 
 /**
- * Report lines for a solver result and, with --apply, writing of the solution and goldMoves. An
- * existing goldMoves is only replaced by a strictly shorter proven optimum (or always with
- * --force); the solution is only written if it is missing or goldMoves changes.
+ * Report lines for a solver result and, with --apply, writing of the solution and thresholds
+ * (thresholdChanges: goldMoves for a level without one, otherwise platinumMoves lowered to a
+ * strictly shorter proven optimum, or always with --force); the solution is only written if it
+ * is missing or a threshold changes.
  */
 export function reportSolve(
   dir: string,
@@ -96,17 +167,14 @@ export function reportSolve(
   o: Pick<SolveCommandOptions, 'apply' | 'force'>,
 ): CommandResult {
   const id = level.id;
-  const gold = level.thresholds.goldMoves;
   if (r.status === 'unsolvable')
     return { ok: false, lines: [`${id}: unsolvable (${r.explored} states)`] };
   if (r.status === 'timeout') {
     const lines = [
       `${id}: limit reached without a solution (${r.explored} states) — proven lower bound: ≥ ${r.lowerBound} moves`,
     ];
-    if (gold !== undefined && r.lowerBound > gold)
-      lines.push(
-        `${id}: goldMoves (${gold}) < proven lower bound (${r.lowerBound}) — impossible threshold`,
-      );
+    const impossible = impossibleThreshold(level, r.lowerBound, 'proven lower bound');
+    if (impossible) lines.push(impossible);
     return { ok: false, lines };
   }
   // safeguard: the solution is replayed before any report or write
@@ -119,24 +187,23 @@ export function reportSolve(
       ],
     };
   const n = r.moves.length;
-  const lines = [`${id}: ${n} moves (${r.explored} states) — proposed goldMoves = ${n}`];
+  const proposed = level.thresholds.goldMoves === undefined ? 'goldMoves' : 'platinumMoves';
+  const lines = [`${id}: ${n} moves (${r.explored} states) — proposed ${proposed} = ${n}`];
   let ok = true;
-  if (gold !== undefined && n > gold) {
+  const impossible = impossibleThreshold(level, n, 'proven optimum');
+  if (impossible) {
     ok = false;
-    lines.push(`${id}: goldMoves (${gold}) < proven optimum (${n}) — impossible threshold`);
+    lines.push(impossible);
   }
   if (o.apply) {
     try {
       const solution = join(dir, 'solutions', `${id}.txt`);
-      const setGold = o.force || gold === undefined || n < gold;
-      if (setGold || !existsSync(solution)) {
+      const better = Object.keys(thresholdChanges(level.thresholds, n, o.force)).length > 0;
+      if (o.force || better || !existsSync(solution)) {
         mkdirSync(join(dir, 'solutions'), { recursive: true });
         writeFileSync(solution, `${solutionHeader(true, n)}\n${formatMoves(r.moves)}`);
       }
-      if (setGold) {
-        const tmx = join(dir, `${id}.tmx`);
-        writeFileSync(tmx, setMapProperty(readFileSync(tmx, 'utf8'), 'goldMoves', n));
-      }
+      applyThresholds(dir, level, n, o.force);
     } catch (err) {
       ok = false;
       lines.push(`${id}: write error — ${(err as Error).message}`);

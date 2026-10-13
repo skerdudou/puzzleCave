@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { expect, test } from 'vitest';
 import { fromAscii, solve, type LevelData } from '@puzzlecave/core';
 import { TILE_ORDER, writeTmx } from '@puzzlecave/tiled';
-import { reportSolve, solveCommand, validateCommand } from './commands';
+import { reportSolve, solveCommand, thresholdChanges, validateCommand } from './commands';
 import { childNeedBytes, inProcessMemoryMb, planJobs, solveParallel } from './parallel';
 
 const TSX = `<tileset name="pc" tilewidth="16" tileheight="16">${TILE_ORDER.map((k, i) => `<tile id="${i}"><properties><property name="kind" value="${k}"/></properties></tile>`).join('')}</tileset>`;
@@ -83,14 +83,38 @@ test('solve --apply does not rewrite an equal goldMoves nor its solution', () =>
   expect(tmxOf(dir)).toMatch(/name="goldMoves" type="int" value="3"/);
 });
 
-test('solve --apply replaces a longer goldMoves with the proven optimum', () => {
+test('solve --apply keeps an existing goldMoves and sets platinumMoves to the proven optimum', () => {
   const dir = fixture();
   solveCommand(dir, ['a'], { ...opts, apply: true });
   setGold(dir, 3, 7);
   writeFileSync(join(dir, 'solutions', 'a.txt'), 'RLRRR\n');
-  expect(solveCommand(dir, ['a'], { ...opts, apply: true }).ok).toBe(true);
-  expect(tmxOf(dir)).toMatch(/name="goldMoves" type="int" value="3"/);
+  const r = solveCommand(dir, ['a'], { ...opts, apply: true });
+  expect(r.ok).toBe(true);
+  expect(r.lines[0]).toMatch(/proposed platinumMoves = 3$/);
+  expect(tmxOf(dir)).toMatch(/name="goldMoves" type="int" value="7"/);
+  expect(tmxOf(dir)).toMatch(/name="platinumMoves" type="int" value="3"/);
   expect(solutionOf(dir)).toBe('# optimal (proven)\nRRR\n');
+  // an equal platinumMoves: nothing rewritten
+  const before = tmxOf(dir);
+  solveCommand(dir, ['a'], { ...opts, apply: true });
+  expect(tmxOf(dir)).toBe(before);
+});
+
+test('thresholdChanges: goldMoves for a new level, platinumMoves otherwise', () => {
+  expect(thresholdChanges({}, 50)).toEqual({ goldMoves: 50 });
+  expect(thresholdChanges({ goldMoves: 60 }, 50)).toEqual({ platinumMoves: 50 });
+  expect(thresholdChanges({ goldMoves: 60 }, 60)).toEqual({});
+  expect(thresholdChanges({ goldMoves: 60, platinumMoves: 50 }, 50)).toEqual({});
+  expect(thresholdChanges({ goldMoves: 60, platinumMoves: 50 }, 52)).toEqual({});
+  expect(thresholdChanges({ goldMoves: 60, platinumMoves: 50 }, 48)).toEqual({ platinumMoves: 48 });
+  // --force: always the new length; a goldMoves below it is raised too
+  expect(thresholdChanges({ goldMoves: 60, platinumMoves: 50 }, 52, true)).toEqual({
+    platinumMoves: 52,
+  });
+  expect(thresholdChanges({ goldMoves: 60 }, 70, true)).toEqual({
+    goldMoves: 70,
+    platinumMoves: 70,
+  });
 });
 
 test('solve: a goldMoves below the optimum is flagged, kept without --force, replaced with it', () => {

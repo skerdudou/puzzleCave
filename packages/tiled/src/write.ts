@@ -22,7 +22,6 @@ export function writeTmx(level: LevelData, tilesetSource = 'tileset.tsx'): strin
   const props: string[] = [propLine('name', level.name)];
   if (level.author) props.push(propLine('author', level.author));
   if (level.initialKeys !== 0) props.push(propLine('initialKeys', level.initialKeys));
-  if (level.platinum) props.push(propLine('platinum', true));
   for (const [k, v] of Object.entries(level.thresholds) as [
     keyof ThresholdOverrides,
     number | undefined,

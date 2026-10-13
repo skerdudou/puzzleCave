@@ -20,16 +20,29 @@ running out — take your time, every move counts.
   Some levels give you more doors than keys, or start you in debt: choose which doors to open.
 - **Exit** — step onto it to win.
 
-Made a mistake? **Undo** as many moves as you like, or **restart** the level.
+Made a mistake? **Undo** as many moves as you like, or **restart** the level (master mode, below,
+has no undo).
 
 ## Medals
 
-Each level awards a medal for the number of **moves** and one for the **time** you took — gold, silver
-or bronze. The level selection screen shows the limits for each medal. Gold usually means the
-shortest solution known.
+Each level awards a medal for the number of **moves** — gold, silver or bronze (a few levels also
+have a medal for the **time** you took). The level selection screen shows the limits for each
+medal. Gold means a good, honest solution; you do not need to find the cleverest route to get it.
 
-Some levels also have a **platinum challenge**: the same level against the clock, but water no longer
-stops you… it drowns you.
+### Master mode and platinum
+
+From the **Medium** chapter on, earning gold on a level unlocks its **master mode** (the
+**Master** button, or **P** on the selection screen). In master mode:
+
+- **no undo** — and restarting starts a brand-new attempt;
+- water no longer stops you… **it drowns you**.
+
+Finish in master mode within the **platinum** limit (the light-blue medal next to the gold one on
+the selection screen) to earn the **platinum medal**. The platinum limit is the best solution
+known, often a different, cleverer route than the gold one. A master finish also counts for the
+gold, silver and bronze medals it qualifies for. There is no clock: take your time.
+
+The Easy chapter has no master mode.
 
 ## Chapters
 

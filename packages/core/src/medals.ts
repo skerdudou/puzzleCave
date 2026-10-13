@@ -9,7 +9,8 @@ export interface Tier {
 export interface Thresholds {
   moves?: Tier;
   time?: Tier;
-  platinumTime?: number;
+  /** platinum move limit (master mode): platinumMoves, else goldMoves */
+  platinumMoves?: number;
 }
 export interface RunResult {
   moves: number;
@@ -26,7 +27,7 @@ export const MEDAL_RANK: Record<Medal, number> = { gold: 3, silver: 2, bronze: 1
 
 const centi = (x: number) => Math.round(x * 100) / 100;
 
-export function resolveThresholds(o: ThresholdOverrides, platinum: boolean): Thresholds {
+export function resolveThresholds(o: ThresholdOverrides): Thresholds {
   const t: Thresholds = {};
   if (o.goldMoves !== undefined) {
     const g = o.goldMoves;
@@ -45,10 +46,8 @@ export function resolveThresholds(o: ThresholdOverrides, platinum: boolean): Thr
       bronze: o.bronzeTime ?? centi(Math.max(g * 1.5, g + 6)),
     };
   }
-  if (platinum) {
-    const p = o.platinumTime ?? o.goldTime;
-    if (p !== undefined) t.platinumTime = p;
-  }
+  const p = o.platinumMoves ?? o.goldMoves;
+  if (p !== undefined) t.platinumMoves = p;
   return t;
 }
 
@@ -60,15 +59,20 @@ export function medalFor(tier: Tier | undefined, value: number): Medal | undefin
   return undefined;
 }
 
-export function award(level: LevelData, r: RunResult): Award {
-  const th = resolveThresholds(level.thresholds, level.platinum);
+/**
+ * Medals of a finished run. The move and time medals do not depend on the mode (a master finish
+ * within the gold limit is gold too); platinum needs master mode and at most the platinum moves.
+ * `masterMode` is false for levels of a chapter without master mode: no platinum there.
+ */
+export function award(level: LevelData, r: RunResult, masterMode = true): Award {
+  const th = resolveThresholds(level.thresholds);
   const seconds = r.timeMs / 1000;
-  // Platinum: finish the drowning mode; under the time limit when the level has one.
   const a: Award = {
     platinum:
-      r.mode === 'platinum' &&
-      level.platinum &&
-      (th.platinumTime === undefined || seconds <= th.platinumTime),
+      masterMode &&
+      r.mode === 'master' &&
+      th.platinumMoves !== undefined &&
+      r.moves <= th.platinumMoves,
   };
   const m = medalFor(th.moves, r.moves);
   if (m) a.moves = m;

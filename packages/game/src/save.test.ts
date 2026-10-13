@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
 import { CORRUPT_KEY, SAVE_KEY, SaveStore, defaultSave, type KV } from './save';
+import { isMasterUnlocked } from '@puzzlecave/core';
 
 const mem = (init: Record<string, string> = {}): KV & { data: Record<string, string> } => {
   const data = { ...init };
@@ -132,4 +133,19 @@ test('invalid fields of a record: removed', () => {
     medals: { moves: 'gold', platinum: true },
   });
   expect(levels.c).toEqual({ completed: true, medals: {} });
+});
+
+test('save from before master mode: medals kept, master mode open where gold or platinum', () => {
+  const levels = loadLevels({
+    // gold earned under an older, higher threshold stays gold
+    'pc-04': { completed: true, bestMoves: 300, medals: { moves: 'gold' } },
+    // platinum of the former drowning challenge (no gold): kept, and it opens master mode
+    'pc-06': { completed: true, bestMoves: 250, medals: { moves: 'bronze', platinum: true } },
+    'pc-09': { completed: true, bestMoves: 600, medals: { moves: 'silver' } },
+  });
+  expect(levels['pc-04']!.medals).toEqual({ moves: 'gold' });
+  expect(levels['pc-06']!.medals).toEqual({ moves: 'bronze', platinum: true });
+  expect(isMasterUnlocked(levels['pc-04'])).toBe(true);
+  expect(isMasterUnlocked(levels['pc-06'])).toBe(true);
+  expect(isMasterUnlocked(levels['pc-09'])).toBe(false);
 });

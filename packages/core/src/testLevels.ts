@@ -60,7 +60,6 @@ export function randomLevel(rnd: () => number, n: number): LevelData {
     objects,
     start,
     initialKeys: int(3) - 1,
-    platinum: false,
     thresholds: {},
   };
 }
@@ -131,7 +130,6 @@ export function validRandomLevel(rnd: () => number, n: number): LevelData {
     objects,
     start,
     initialKeys: int(5) - 2,
-    platinum: false,
     thresholds: {},
   };
 }

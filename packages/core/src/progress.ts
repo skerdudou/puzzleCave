@@ -6,6 +6,20 @@ export interface Chapter {
   name: { en: string; fr: string } & Partial<Record<string, string>>;
   unlockAfter: number;
   levels: string[];
+  /** false: no master mode (nor platinum) on this chapter's levels; true when absent */
+  masterMode?: boolean;
+}
+
+export function hasMasterMode(chapter: Chapter | undefined): boolean {
+  return chapter?.masterMode !== false;
+}
+
+/**
+ * Master mode opens on a level once gold (moves) is earned there. A platinum already earned
+ * (older saves) also keeps it open.
+ */
+export function isMasterUnlocked(record: LevelRecord | undefined): boolean {
+  return record?.medals.moves === 'gold' || record?.medals.platinum === true;
 }
 
 export interface LevelRecord {
@@ -88,6 +102,8 @@ export function validateChapters(value: unknown, levelIds: ReadonlySet<string>):
     if (typeof ua !== 'number' || !Number.isInteger(ua) || ua < 0 || ua > prevLen) {
       e.push(`${label}: unlockAfter must be an integer between 0 and ${prevLen}`);
     }
+    if (c.masterMode !== undefined && typeof c.masterMode !== 'boolean')
+      e.push(`${label}: masterMode must be true or false`);
   });
   for (const id of levelIds) if (!used.has(id)) e.push(`level "${id}" missing from the chapters`);
   return e;

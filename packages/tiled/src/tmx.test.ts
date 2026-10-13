@@ -36,7 +36,7 @@ test('CSV terrain + objects anchored at the bottom left + properties', () => {
     tmx(
       '1,2,3,\n4,1,5',
       '<object id="1" gid="6" x="0" y="16" width="16" height="16"/><object id="2" gid="7" x="16" y="32" width="16" height="16"/>',
-      '<property name="name" value="Essai"/><property name="initialKeys" type="int" value="-2"/><property name="platinum" type="bool" value="true"/><property name="goldMoves" type="int" value="12"/><property name="goldTime" type="float" value="7.5"/>',
+      '<property name="name" value="Essai"/><property name="initialKeys" type="int" value="-2"/><property name="platinum" type="bool" value="true"/><property name="goldMoves" type="int" value="12"/><property name="platinumMoves" type="int" value="10"/><property name="goldTime" type="float" value="7.5"/>',
     ),
     'essai',
     read,
@@ -50,8 +50,7 @@ test('CSV terrain + objects anchored at the bottom left + properties', () => {
     objects: [{ x: 1, y: 1, kind: 'key' }],
     start: { x: 0, y: 0 },
     initialKeys: -2,
-    platinum: true,
-    thresholds: { goldMoves: 12, goldTime: 7.5 },
+    thresholds: { goldMoves: 12, platinumMoves: 10, goldTime: 7.5 },
   });
 });
 
