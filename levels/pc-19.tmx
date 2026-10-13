@@ -4,6 +4,7 @@
   <property name="name" value="The Long Way Round"/>
   <property name="author" value="moineau"/>
   <property name="goldMoves" type="int" value="88"/>
+  <property name="goldTime" type="int" value="15"/>
  </properties>
  <tileset firstgid="1" source="tileset.tsx"/>
  <layer id="1" name="terrain" width="13" height="9">

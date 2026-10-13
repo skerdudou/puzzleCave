@@ -10,6 +10,7 @@ import { parsePlanArgs, planCommand } from './plan';
 import { parseSubgoalArgs, subgoalCommand } from './subgoal';
 import { longRunCommand, parseLongRunArgs } from './longrun/command';
 import { certifyCommand, parseCertifyArgs } from './longrun/certify';
+import { parseTimesArgs, timesCommand } from './times';
 
 if (process.argv[2] === 'plan') {
   const p = parsePlanArgs(process.argv.slice(3));
@@ -18,6 +19,16 @@ if (process.argv[2] === 'plan') {
     process.exit(2);
   }
   const r = planCommand(LEVELS_DIR, p.ids, p.opts);
+  for (const line of r.lines) console.log(line);
+  process.exit(r.ok ? 0 : 1);
+}
+if (process.argv[2] === 'times') {
+  const p = parseTimesArgs(process.argv.slice(3));
+  if ('error' in p) {
+    console.error(p.error);
+    process.exit(2);
+  }
+  const r = timesCommand(LEVELS_DIR, p);
   for (const line of r.lines) console.log(line);
   process.exit(r.ok ? 0 : 1);
 }

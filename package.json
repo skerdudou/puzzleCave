@@ -23,6 +23,7 @@
     "longrun": "tsx packages/tools/src/cli.ts longrun",
     "certify": "tsx packages/tools/src/cli.ts certify",
     "explore": "tsx packages/tools/src/cli.ts explore",
+    "times": "tsx packages/tools/src/cli.ts times",
     "dev": "npm run dev -w @puzzlecave/game",
     "build": "npm run build -w @puzzlecave/game",
     "e2e": "npm run e2e -w @puzzlecave/game"

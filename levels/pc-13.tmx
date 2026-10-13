@@ -5,6 +5,7 @@
   <property name="author" value="moineau"/>
   <property name="goldMoves" type="int" value="450"/>
   <property name="platinumMoves" type="int" value="430"/>
+  <property name="goldTime" type="int" value="65"/>
  </properties>
  <tileset firstgid="1" source="tileset.tsx"/>
  <layer id="1" name="terrain" width="17" height="17">

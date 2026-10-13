@@ -33,7 +33,8 @@ tests before building; pushes to `main` do not deploy anything.
    `platinumMoves` and, if needed, `silverMoves`, `bronzeMoves`, `goldTime` (seconds),
    `silverTime`, `bronzeTime`. An old `platinum` or `platinumTime` property is ignored.
 5. Save as `levels/<id>.tmx` and add `<id>` to `levels/chapters.json`.
-6. `npm run validate`, then `npm run solve -- <id> --apply` to compute the optimal solution (and `goldMoves`, if the level has none).
+6. `npm run validate`, then `npm run solve -- <id> --apply` to compute the optimal solution (and `goldMoves`, if the level has none),
+   and `npm run times -- <id> --apply` for `goldTime` (see “Time medals” below).
    A start placed on water is allowed (the player can leave it but never come back); `validate`
    reports it with a warning so that it is a deliberate choice.
 
@@ -249,6 +250,36 @@ All goals of a line must hold together. Everything not allowed is frozen as a wa
 Blocks are named by identity (the block that started on a cell), so a moved stage still frees the same blocks wherever they stand; a block that has already sunk is simply not free. Every stage search is memoised (start state, stage, block cells): variants share most stages, so a level rebuilds from ~5 variants per second (pc-18, 1,500 moves) to several thousand (pc-11, pc-16). A local search accepts variants that are not longer and restarts from a kept one after 150 steps without progress; the `--improve-top` (3) shortest distinct variants, never the saved solution itself, then get improve's windows and spare keys pass (no proof: its time goes to the variants). A round takes `--screen` (0.3) of the time for the screening and at most (1 − screen) / k per improved variant; rounds repeat until `--timeout` (300 s), each from the best solution so far, with another seed and never the same variant twice. `--variants` caps the variants per round (default: time only).
 
 The line per level gives saved → best length, rounds, variants (feasible), the rebuild of the plan as is, the best variant of the first round and each improve run. Rounds start from the shortest solution so far, and a screened variant shorter than it is kept even if improve does not shorten it. `--from dir` starts from the shortest winning `dir/<id>-<n>.txt` when it beats the saved solution (to chain runs); the saved solution stays the reference for writing. Without `--apply` or `--save`, nothing is written; `--save dir` writes each shorter solution as `dir/<id>-<length>.txt` (moves only); `--apply` writes it with the rules of `plan --apply` (only if it wins and is strictly shorter, platinumMoves lowered only when shorter, the proven lower bound of the saved header kept). It is a separate command rather than an `improve` flag: it needs a winning solution, has its own knobs, and `improve` stays the reference pipeline with its proof. Measurements in `docs/solver-study.md`.
+
+## Time medals: `times`
+
+    npm run times -- [<id…>] [--apply] [--force]
+
+Proposes `goldTime` (seconds) for each level from the shape of its saved solution; silver and bronze
+follow from it (×1.25 and ×1.5, with minimum gaps, see `resolveThresholds`). Without `--apply`
+it only prints the table (moves, turns, interactions, estimate, proposed and current goldTime);
+`--apply` writes goldTime into levels that have none, `--force` also replaces an existing one.
+
+The rule (`TIME_RULE` in `packages/tools/src/times.ts`) is
+
+    goldTime ≈ max(0.05 s × moves + 0.3 s × turns, 0.1 s × moves)
+
+rounded to the second (to 5 s above one minute), where turns are the direction changes of the
+solution. It comes from player statistics of an earlier version of the game (same rules, 18×18
+boards, clock started by the player after studying the map): 238 maps with at least five
+finishers, each solved, and the mean of the three best times fitted against the solution's
+features. Moves and turns explain most of it (pushes, keys and doors add nothing measurable once
+turns are counted); the fit is coarse — within ×1.2 on half the maps, ×1.5 on 80% — and the
+coefficients were rounded up by 10–20%: a strong player (around the top three on most maps)
+gets gold on ~60% of the maps and silver on most others, the median finisher at least bronze on
+~60%. The levels of this game that existed in that earlier version are harder than the average
+map (their recorded times are 0.9–2.3× the rule), so expect gold to be demanding on the long
+puzzle levels; adjust a level by hand when play-testing says so (`times --apply` without
+`--force` never overwrites it). Our game takes the next move while the previous one is still
+animated, so the floor is the human input rate (10 moves/s), not the animation.
+
+Touch play (D-pad or swipes, no key repeat) is slower than the keyboard; the thresholds are
+calibrated for the keyboard.
 
 ## Designer tools in the game (`npm run dev` only)
 

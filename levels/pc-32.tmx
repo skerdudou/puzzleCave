@@ -4,6 +4,7 @@
   <property name="name" value="Crossroads"/>
   <property name="author" value="moineau"/>
   <property name="goldMoves" type="int" value="60"/>
+  <property name="goldTime" type="int" value="15"/>
  </properties>
  <tileset firstgid="1" source="tileset.tsx"/>
  <layer id="1" name="terrain" width="13" height="9">

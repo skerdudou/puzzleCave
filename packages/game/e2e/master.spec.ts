@@ -99,6 +99,7 @@ test('master mode: locked before gold, no undo, water drowns, platinum', async (
   await expect.poll(() => field(page, 'moves')).toBe(0);
   await play(page, solution);
   await expect.poll(() => field(page, 'scene')).toBe('Result');
-  expect(await field(page, 'lastAward')).toEqual({ moves: 'gold', platinum: true });
+  // the scripted run is fast enough for a time medal too
+  expect(await field(page, 'lastAward')).toMatchObject({ moves: 'gold', platinum: true });
   expect(((await field(page, 'lastResult')) as { mode: string }).mode).toBe('master');
 });

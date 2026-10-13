@@ -4,6 +4,7 @@
   <property name="name" value="Two Ponds"/>
   <property name="author" value="moineau"/>
   <property name="goldMoves" type="int" value="21"/>
+  <property name="goldTime" type="int" value="3"/>
  </properties>
  <tileset firstgid="1" source="tileset.tsx"/>
  <layer id="1" name="terrain" width="10" height="6">
