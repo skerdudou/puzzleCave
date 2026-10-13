@@ -70,16 +70,53 @@ test('invalid settings replaced by defaults', () => {
   const kv = mem({
     [SAVE_KEY]: JSON.stringify({
       version: 1,
-      settings: { sound: 'yes', lang: 'xx', swipeThreshold: 1000 },
+      settings: { sound: 'yes', lang: 'xx', dragStep: 'far', vibration: 0 },
       levels: {},
     }),
   });
   expect(new SaveStore(kv).load().settings).toEqual({
     sound: true,
     lang: null,
-    swipeThreshold: 80,
+    dragStep: 24,
     repeatRate: 10,
+    vibration: true,
   });
+});
+
+test('a save from before the drag and vibration options: defaults (24 px, on)', () => {
+  const kv = mem({
+    [SAVE_KEY]: JSON.stringify({
+      version: 1,
+      settings: { sound: false, lang: 'fr', swipeThreshold: 45, repeatRate: 12 },
+      levels: {},
+    }),
+  });
+  expect(new SaveStore(kv).load().settings).toEqual({
+    sound: false,
+    lang: 'fr',
+    dragStep: 24,
+    repeatRate: 12,
+    vibration: true,
+  });
+});
+
+test.each([
+  [16, 16],
+  [33, 32],
+  [1000, 64],
+  [-5, 16],
+])('dragStep %j → %i (snapped to an offered distance)', (raw, expected) => {
+  const kv = mem({
+    [SAVE_KEY]: JSON.stringify({ version: 1, settings: { dragStep: raw }, levels: {} }),
+  });
+  expect(new SaveStore(kv).load().settings.dragStep).toBe(expected);
+});
+
+test('vibration off is kept', () => {
+  const kv = mem({
+    [SAVE_KEY]: JSON.stringify({ version: 1, settings: { vibration: false }, levels: {} }),
+  });
+  expect(new SaveStore(kv).load().settings.vibration).toBe(false);
 });
 
 test.each(['en', 'fr', 'de', 'es', 'it'])('language %s is kept', (lang) => {

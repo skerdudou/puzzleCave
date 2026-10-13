@@ -19,9 +19,11 @@ import { syncMusic } from '../music';
 import { AnimClock } from '../render/animTiming';
 import { BoardView } from '../render/BoardView';
 import { boardLayout, type BoardLayout } from '../render/layout';
-import { swipeDir } from '../input/swipe';
+import { hapticFor, vibrate } from '../haptics';
+import { DragSteps } from '../input/drag';
+import { HoldRepeat } from '../input/holdRepeat';
 import { dpadLayout, dpadLayoutSide, isLandscape, isTouchDevice } from '../touch';
-import { COLORS, makeButton, px, textStyle } from '../ui';
+import { COLORS, dpr, makeButton, px, textStyle } from '../ui';
 
 export interface GameSceneData {
   levelId: string;
@@ -35,6 +37,12 @@ export class GameScene extends Phaser.Scene {
   protected board!: BoardView;
   protected hud: Phaser.GameObjects.GameObject[] = [];
   private controls!: InputController;
+  /** hold to repeat on the on-screen d-pad */
+  private hold!: HoldRepeat;
+  /** continuous drags in progress, by pointer id */
+  private readonly drags = new Map<number, DragSteps>();
+  /** a drag has moved the player since the last press: its release is not a button click */
+  private dragMoved = false;
   private readonly anim = new AnimClock();
   private startTime: number | null = null;
   private startBeforeRestart: number | null = null;
@@ -64,6 +72,10 @@ export class GameScene extends Phaser.Scene {
 
   create(): void {
     this.board = new BoardView(this, this.session.state, this.computeLayout());
+    this.hold = new HoldRepeat(
+      (dir) => this.handle({ type: 'move', dir }),
+      () => app.data.settings.repeatRate,
+    );
     this.buildHud();
     this.controls = new InputController((a) => this.handle(a), app.data.settings.repeatRate);
     const down = (e: KeyboardEvent) => {
@@ -74,26 +86,37 @@ export class GameScene extends Phaser.Scene {
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
     window.addEventListener('blur', blur);
-    const downAt = new Map<number, { x: number; y: number }>();
+    // Continuous drag anywhere but on a button: one move per `dragStep` CSS pixels travelled.
+    // Phaser handles each DOM pointer event as it comes (no queue replayed, unlike its keyboard).
+    this.drags.clear();
     this.input.on(
       'pointerdown',
       (p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
-        if (over.length) downAt.delete(p.id);
-        else downAt.set(p.id, { x: p.x, y: p.y });
+        this.dragMoved = false;
+        if (over.length) this.drags.delete(p.id);
+        else
+          this.drags.set(p.id, new DragSteps(p.x / dpr(), p.y / dpr(), app.data.settings.dragStep));
       },
     );
-    this.input.on('pointerup', (p: Phaser.Input.Pointer) => {
-      const start = downAt.get(p.id);
-      if (!start) return;
-      downAt.delete(p.id);
-      const r = window.devicePixelRatio || 1;
-      const dir = swipeDir(
-        (p.x - start.x) / r,
-        (p.y - start.y) / r,
-        app.data.settings.swipeThreshold,
-      );
-      if (dir) this.handle({ type: 'move', dir });
+    this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
+      const drag = this.drags.get(p.id);
+      if (!drag) return;
+      if (!p.isDown) {
+        this.drags.delete(p.id);
+        return;
+      }
+      for (const dir of drag.move(p.x / dpr(), p.y / dpr())) {
+        this.dragMoved = true;
+        this.handle({ type: 'move', dir });
+      }
     });
+    // touchend and touchcancel both come as a pointer up (outside: released off the canvas)
+    const release = (p: Phaser.Input.Pointer) => {
+      this.drags.delete(p.id);
+      this.hold.release(p.id);
+    };
+    this.input.on('pointerup', release);
+    this.input.on('pointerupoutside', release);
     const onResize = () => {
       this.board.setLayout(this.computeLayout());
       this.buildHud();
@@ -110,6 +133,8 @@ export class GameScene extends Phaser.Scene {
       window.removeEventListener('blur', blur);
       this.scale.off('resize', onResize);
       this.controls.reset();
+      this.hold.reset();
+      this.drags.clear();
     });
     syncMusic(this, app.data.settings.sound, 'music-game');
     setDebug({
@@ -193,10 +218,15 @@ export class GameScene extends Phaser.Scene {
     if (this.session.canUndo) buttons.push([t('undo'), { type: 'undo' }]);
     let x = w - px(12);
     for (const [label, action] of buttons) {
-      const b = makeButton(this, x, y, label, () => this.handle(action), 13).setOrigin(1, 0.5);
+      // a drag that ends on a button is not a click on it
+      const click = () => {
+        if (!this.dragMoved) this.handle(action);
+      };
+      const b = makeButton(this, x, y, label, click, 13).setOrigin(1, 0.5);
       x -= b.width + px(8);
       this.hud.push(b);
     }
+    this.hold.reset();
     if (isTouchDevice()) {
       const pad = this.sidePad()
         ? dpadLayoutSide(w, this.scale.height, px(48), px(16))
@@ -208,12 +238,34 @@ export class GameScene extends Phaser.Scene {
           .rectangle(r.x, r.y, r.w, r.h, 0x2c2838, 0.8)
           .setOrigin(0)
           .setInteractive();
-        box.on('pointerdown', () => this.handle({ type: 'move', dir }));
+        // hold to repeat; stops on release, when the finger slides off or the touch is cancelled
+        const onBox = (p: Phaser.Input.Pointer) =>
+          p.isDown && box.active && p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h;
+        box.on('pointerdown', (p: Phaser.Input.Pointer) =>
+          this.hold.press(p.id, dir, () => onBox(p)),
+        );
+        box.on('pointerout', (p: Phaser.Input.Pointer) => this.hold.release(p.id));
+        box.on('pointerup', (p: Phaser.Input.Pointer) => this.hold.release(p.id));
         const label = this.add
           .text(r.x + r.w / 2, r.y + r.h / 2, glyphs[dir], textStyle(20))
           .setOrigin(0.5);
         this.hud.push(box, label);
       }
+      // for the e2e tests: button centres in CSS pixels, once drawn (Phaser hit-tests a new
+      // interactive object only from its next pre-update on)
+      const dpad = Object.fromEntries(
+        Object.entries(pad).map(([d, r]) => [
+          d,
+          [(r.x + r.w / 2) / dpr(), (r.y + r.h / 2) / dpr()],
+        ]),
+      );
+      const hud = this.hud;
+      setDebug({ dpad: null });
+      this.events.once(Phaser.Scenes.Events.PRE_UPDATE, () =>
+        this.events.once(Phaser.Scenes.Events.RENDER, () => {
+          if (this.hud === hud) setDebug({ dpad });
+        }),
+      );
     } else {
       const help = this.add
         .text(w / 2, this.scale.height - px(12), '', textStyle(11, COLORS.dim))
@@ -229,7 +281,7 @@ export class GameScene extends Phaser.Scene {
   private updateHud(): void {
     const s = this.session.state;
     this.movesText?.setText(`${t('moves')} ${s.moves}`);
-    setDebug({ moves: s.moves, status: s.status });
+    setDebug({ moves: s.moves, status: s.status, player: s.player });
     this.keysText?.setText(`${t('keys')} ${s.keys}`);
     if (this.startTime === null) this.timeText?.setText(`${t('time')} ${formatTime(0)}`);
   }
@@ -273,6 +325,7 @@ export class GameScene extends Phaser.Scene {
     const before = this.session.state;
     if (before.status !== 'playing') return;
     const events = this.session.move(dir);
+    vibrate(hapticFor(events), app.data.settings.vibration);
     if (events.length === 0) return;
     const after = this.session.state;
     const now = performance.now();
@@ -315,6 +368,7 @@ export class GameScene extends Phaser.Scene {
   private finish(now: number): void {
     this.finished = true;
     this.controls.reset();
+    this.hold.reset();
     const result: RunResult = {
       moves: this.session.state.moves,
       timeMs: Math.round(now - (this.startTime ?? now)),

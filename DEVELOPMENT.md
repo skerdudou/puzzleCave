@@ -278,8 +278,8 @@ puzzle levels; adjust a level by hand when play-testing says so (`times --apply`
 `--force` never overwrites it). Our game takes the next move while the previous one is still
 animated, so the floor is the human input rate (10 moves/s), not the animation.
 
-Touch play (D-pad or swipes, no key repeat) is slower than the keyboard; the thresholds are
-calibrated for the keyboard.
+Touch play (continuous drag, or the D-pad with hold to repeat) is slower than the keyboard; the
+thresholds are calibrated for the keyboard.
 
 ## Designer tools in the game (`npm run dev` only)
 

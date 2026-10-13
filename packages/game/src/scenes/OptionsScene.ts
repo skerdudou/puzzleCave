@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import { app } from '../app';
 import { setDebug } from '../debug';
 import { LANGS, getLang, messages, setLang, t, type Lang } from '../i18n';
+import { canVibrate, vibrate } from '../haptics';
+import { shiftDragStep } from '../input/drag';
 import { onSceneKeyDown } from '../input/sceneKeys';
 import { syncMusic } from '../music';
 import { COLORS, dpr, makeButton, px, textStyle } from '../ui';
@@ -75,12 +77,12 @@ export class OptionsScene extends Phaser.Scene {
     button('lang', cx, y, `${t('langName')} ▾`, () => this.toggleLangMenu(cx, langY));
     y += px(44);
 
-    label(t('swipe'));
+    label(t('drag'));
     stepper(
-      'swipe',
-      `${s.swipeThreshold} px`,
-      () => (s.swipeThreshold = clamp(s.swipeThreshold - 5, 10, 80)),
-      () => (s.swipeThreshold = clamp(s.swipeThreshold + 5, 10, 80)),
+      'drag',
+      `${s.dragStep} px`,
+      () => (s.dragStep = shiftDragStep(s.dragStep, -1)),
+      () => (s.dragStep = shiftDragStep(s.dragStep, 1)),
     );
     label(t('repeat'));
     stepper(
@@ -89,6 +91,17 @@ export class OptionsScene extends Phaser.Scene {
       () => (s.repeatRate = clamp(s.repeatRate - 1, 4, 20)),
       () => (s.repeatRate = clamp(s.repeatRate + 1, 4, 20)),
     );
+    // vibrations: only offered where the browser can vibrate (not iOS Safari)
+    if (canVibrate()) {
+      label(t('vibration'));
+      button('vibration', cx, y, s.vibration ? t('on') : t('off'), () =>
+        change(() => {
+          s.vibration = !s.vibration;
+          vibrate('push', s.vibration); // a sample when turned on
+        }),
+      );
+      y += px(44);
+    }
 
     button('back', cx, y + px(12), t('back'), () => this.scene.start('Menu'), 16);
     onSceneKeyDown(this, (e) => {

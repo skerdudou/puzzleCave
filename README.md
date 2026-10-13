@@ -53,7 +53,18 @@ next one; finish a few levels of a chapter to open the next chapter.
 
 - **Keyboard**: arrows or ZQSD (WASD on a QWERTY keyboard, detected automatically) to move, **U** to
   undo, **R** to restart, **Esc** for the menu.
-- **Touch**: swipe, or use the on-screen d-pad; the undo and restart buttons are on screen.
+- **Touch**:
+  - **drag** anywhere on the play area and keep your finger down: you take one step each time
+    your finger travels a short distance, so a long drag walks several cells; steer by dragging
+    the other way (right, then up…) without lifting your finger. A simple tap does nothing. Set
+    the distance per step in Options (**Drag: distance per move**, 24 px by default; lower is
+    more sensitive);
+  - or use the on-screen **d-pad**: tap for one step, hold a button to keep walking (at the
+    **Repeat** rate set in Options);
+  - the undo and restart buttons are on screen;
+  - on phones that support it (not iPhone), a short **vibration** confirms a push, a bump into
+    a wall, a key, a door, filled water; longer ones mark drowning and the end of a level. Turn
+    it off in Options (**Vibration**).
 
 The game is available in English, French, German, Spanish and Italian (it follows your browser's language; change it in Options).
 

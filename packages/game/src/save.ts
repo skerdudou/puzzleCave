@@ -1,10 +1,13 @@
 import type { LevelRecord, Medal } from '@puzzlecave/core';
 import { isLang, type Lang } from './i18n';
+import { DRAG_STEP_DEFAULT, nearestDragStep } from './input/drag';
 
 export interface Settings {
   sound: boolean;
   lang: Lang | null;
-  swipeThreshold: number;
+  /** continuous drag: CSS pixels per move (one of DRAG_STEPS) */
+  dragStep: number;
+  vibration: boolean;
   repeatRate: number;
 }
 export interface SaveData {
@@ -23,7 +26,13 @@ export const CORRUPT_KEY = 'puzzlecave.save.corrupt';
 export function defaultSave(): SaveData {
   return {
     version: 1,
-    settings: { sound: true, lang: null, swipeThreshold: 30, repeatRate: 10 },
+    settings: {
+      sound: true,
+      lang: null,
+      dragStep: DRAG_STEP_DEFAULT,
+      repeatRate: 10,
+      vibration: true,
+    },
     levels: {},
   };
 }
@@ -53,8 +62,13 @@ function sanitiseSettings(raw: unknown): Settings {
   return {
     sound: typeof s.sound === 'boolean' ? s.sound : d.sound,
     lang,
-    swipeThreshold: clampNumber(s.swipeThreshold, 10, 80, d.swipeThreshold),
+    // older saves had a swipe threshold instead: they get the default distance
+    dragStep:
+      typeof s.dragStep === 'number' && Number.isFinite(s.dragStep)
+        ? nearestDragStep(s.dragStep)
+        : d.dragStep,
     repeatRate: clampNumber(s.repeatRate, 4, 20, d.repeatRate),
+    vibration: typeof s.vibration === 'boolean' ? s.vibration : d.vibration,
   };
 }
 

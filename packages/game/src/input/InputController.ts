@@ -30,6 +30,12 @@ function clampRate(r: number): number {
   return Number.isFinite(r) ? Math.min(RATE_MAX, Math.max(RATE_MIN, r)) : RATE_DEFAULT;
 }
 
+/** Delay before the first repeat of a held direction (like a keyboard's), then between repeats. */
+export function repeatDelays(rate: number): { initial: number; interval: number } {
+  const r = clampRate(rate);
+  return { initial: Math.max(200, 1000 / r), interval: 1000 / r };
+}
+
 export class InputController {
   private readonly emit: (a: Action) => void;
   private repeatRate: number;
@@ -79,7 +85,7 @@ export class InputController {
   }
 
   private initialDelay(): number {
-    return Math.max(200, 1000 / this.repeatRate);
+    return repeatDelays(this.repeatRate).initial;
   }
 
   private schedule(delay: number): void {
@@ -88,7 +94,7 @@ export class InputController {
       const d = [...this.held.values()].at(-1);
       if (!d) return;
       this.emit({ type: 'move', dir: d });
-      this.schedule(1000 / this.repeatRate);
+      this.schedule(repeatDelays(this.repeatRate).interval);
     }, delay);
   }
 
