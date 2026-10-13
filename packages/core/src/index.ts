@@ -62,4 +62,5 @@ export {
 export { DeadlockAnalysis, type DeadReason, type ExitEntrance } from './deadlock';
 // building blocks of external searches (long-run mode in @puzzlecave/tools)
 export { CompactBound } from './compactBound';
+export { StrongBound, type StrongBoundOptions } from './strongBound';
 export { hashWords } from './compactStore';

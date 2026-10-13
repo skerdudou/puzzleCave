@@ -17,17 +17,19 @@ const NO_DIST = 0xffff;
  *   twice). Each door crossed consumes a key and only opens with keys > 0, so need = dmin − keys
  *   keys (initial negative keys included) must be picked up before the exit.
  *   need ≤ 0 (or dmin = 0): toExit. need = 1: min_k d(p,k) + d(k,E) (v2 bound). need ≥ 2:
- *   min_{k1≠k2} d(p,k1) + max(d(k1,k2), (need−1)·δ) + d(k2,E) (k1 the first key picked up, k2
- *   the last), δ = smallest distance between two remaining keys; fewer than need keys
- *   remaining: dead state (UNREACHABLE). (The formula of bound2.ts, without the d(k1,k2) term,
- *   can be weaker than the v2 bound: fixed here, measured by the tests.)
+ *   min_{k1≠k2} d(p,k1) + max(d(k1,k2), S(k1)) + d(k2,E) (k1 the first key picked up, k2 the
+ *   last), S(k1) = sum of the need − 1 smallest nn(k) over the remaining keys k ≠ k1, nn(k) =
+ *   distance from k to the nearest other remaining key: the keys picked after k1 (at least
+ *   need − 1 of them, all ≠ k1) each end a distinct walk that starts on the previous key, of
+ *   length ≥ nn. Fewer than need keys remaining: dead state (UNREACHABLE). (This replaces
+ *   (need−1)·δ, δ = smallest key-key distance, which S(k1) dominates.)
  *   Consistency (h(s) ≤ walk + 1 + h(s')): picking up key k (cost c ≥ d(p,k)) leaves dmin
- *   unchanged (the walk crosses no door), lowers need by 1 and does not decrease δ; we take
- *   k1 = k in the formula for s, with d(k,k2') ≤ d(k,k1') + d(k1',k2') and
- *   δ ≤ d(k,k1'); opening door q (keys > 0) gives dmin(s) ≤ 1 + dmin(s') hence
- *   need(s) ≤ need(s'), and the bound grows with need; a push or an exit only changes the
- *   position (triangle inequality). Checked by the tests. It dominates the v2 bound
- *   (d(p,k1) + d(k1,k2) + d(k2,E) ≥ d(p,k2) + d(k2,E)).
+ *   unchanged (the walk crosses no door) and lowers need by 1; we take k1 = k in the formula
+ *   for s, with d(k,k2') ≤ d(k,k1') + d(k1',k2') and S_s(k) ≤ nn_s(k1') + S_s'(k1') ≤
+ *   d(k,k1') + S_s'(k1') (nn only grows when keys disappear); opening door q (keys > 0) gives
+ *   dmin(s) ≤ 1 + dmin(s') hence need(s) ≤ need(s'), and the bound grows with need; a push or
+ *   an exit only changes the position (triangle inequality). Checked by the tests. It dominates
+ *   the v2 bound (d(p,k1) + d(k1,k2) + d(k2,E) ≥ d(p,k2) + d(k2,E)).
  */
 export class CompactBound {
   readonly toExit: Int32Array;
@@ -44,8 +46,11 @@ export class CompactBound {
   private readonly leftExit: Int32Array;
   /** key indices by increasing distance to the exit */
   private readonly byExit: Int32Array;
-  /** key pairs (a, b, distance) by increasing distance, flattened */
-  private readonly pairsByDist: Int32Array;
+  /** per key: the key itself, then the other keys by increasing distance */
+  private readonly byDistFrom: Int32Array;
+  /** work: nearest other remaining key distance, remaining keys sorted by it */
+  private readonly nearest: Int32Array;
+  private readonly nnOrder: Int32Array;
   /** door bits among the key/door bits (words 1… of the state key) */
   private readonly doorMask: Uint32Array;
   private readonly sig: Uint32Array;
@@ -86,12 +91,18 @@ export class CompactBound {
     this.byExit = Int32Array.from(
       idx.sort((a, b) => this.toExit[keys[a]!]! - this.toExit[keys[b]!]!),
     );
-    const pairs: [number, number, number][] = [];
-    for (let a = 0; a < keys.length; a++)
-      for (let b = a + 1; b < keys.length; b++)
-        pairs.push([a, b, this.keyPair[a * keys.length + b]!]);
-    pairs.sort((x, y) => x[2] - y[2]);
-    this.pairsByDist = Int32Array.from(pairs.flat());
+    const m = keys.length;
+    this.byDistFrom = new Int32Array(m * m);
+    for (let a = 0; a < m; a++) {
+      const others = idx
+        .slice()
+        .sort((x, y) => this.keyPair[a * m + x]! - this.keyPair[a * m + y]!);
+      // the key itself first (distance 0), then the others by distance
+      const row = [a, ...others.filter((x) => x !== a)];
+      this.byDistFrom.set(row, a * m);
+    }
+    this.nearest = new Int32Array(m);
+    this.nnOrder = new Int32Array(m);
     const sw = Math.ceil(model.fixedCount / 32);
     this.doorMask = new Uint32Array(sw);
     for (let f = 0; f < model.fixedCount; f++)
@@ -121,7 +132,8 @@ export class CompactBound {
     return (
       this.keyDist.byteLength +
       this.keyPair.byteLength +
-      this.pairsByDist.byteLength +
+      this.byDistFrom.byteLength +
+      this.nearest.byteLength * 2 +
       this.model.n * 24
     );
   }
@@ -195,25 +207,45 @@ export class CompactBound {
       }
       return best;
     }
-    // δ: first pair (sorted by distance) whose two keys both remain
-    let delta = UNREACHABLE;
-    const pairs = this.pairsByDist;
-    for (let j = 0; j < pairs.length; j += 3) {
-      if (grid[kc[pairs[j]!]!] === KEY && grid[kc[pairs[j + 1]!]!] === KEY) {
-        delta = pairs[j + 2]!;
-        break;
-      }
-    }
-    if (delta >= UNREACHABLE) return UNREACHABLE;
-    // first key k1, last k2: between the two, at least d(k1,k2) and (need−1)·δ;
-    // k2 is scanned by increasing distance to the exit, stopping as soon as middle + d(k2,E)
-    // can no longer improve
-    const middle = (need - 1) * delta;
+    // nearest other remaining key of each remaining key (its incoming walk when it is picked
+    // after another key), then the need − 1 smallest of them
     const m = kc.length;
+    const nn = this.nearest;
+    const order = this.nnOrder;
+    for (let j = 0; j < count; j++) {
+      const i = left[j]!;
+      let v = UNREACHABLE;
+      const row = this.byDistFrom.subarray(i * m, i * m + m);
+      for (let r = 1; r < m; r++) {
+        const o = row[r]!;
+        if (grid[kc[o]!] === KEY) {
+          v = this.keyPair[i * m + o]!;
+          break;
+        }
+      }
+      nn[i] = v;
+      order[j] = i;
+    }
+    const ord = order.subarray(0, count).sort((a, b) => nn[a]! - nn[b]!);
+    let sumFirst = 0; // need − 1 smallest
+    for (let j = 0; j < need - 1; j++) sumFirst += nn[ord[j]!]!;
+    const nth = nn[ord[need - 1]!]!; // need-th smallest (count ≥ need)
+    if (sumFirst >= UNREACHABLE) return UNREACHABLE;
+    const rankLimit = nn[ord[need - 2]!]!;
+    // first key k1, last k2: between the two, at least d(k1,k2) and the incoming walks of the
+    // keys picked after k1 (need − 1 of them at least, k1 excluded); k2 is scanned by
+    // increasing distance to the exit, stopping as soon as middle + d(k2,E) can no longer
+    // improve
     const pair = this.keyPair;
     let best = UNREACHABLE;
     for (let j = 0; j < count; j++) {
       const i1 = left[j]!;
+      // k1 among the need − 1 smallest (ties: same sum either way): replace it by the next one
+      const v1 = nn[i1]!;
+      const middle =
+        v1 < rankLimit || (v1 === rankLimit && this.inFirst(i1, ord, need - 1))
+          ? Math.min(UNREACHABLE, sumFirst - v1 + nth)
+          : sumFirst;
       const a = kd[i1 * n + p]! + middle;
       if (a + leftExit[0]! >= best) continue;
       const row = i1 * m;
@@ -227,6 +259,11 @@ export class CompactBound {
       }
     }
     return best >= UNREACHABLE ? UNREACHABLE : best;
+  }
+
+  private inFirst(key: number, ord: Int32Array, k: number): boolean {
+    for (let j = 0; j < k; j++) if (ord[j] === key) return true;
+    return false;
   }
 
   /**

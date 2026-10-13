@@ -21,6 +21,7 @@
     "plan": "tsx packages/tools/src/cli.ts plan",
     "subgoal": "tsx packages/tools/src/cli.ts subgoal",
     "longrun": "tsx packages/tools/src/cli.ts longrun",
+    "certify": "tsx packages/tools/src/cli.ts certify",
     "explore": "tsx packages/tools/src/cli.ts explore",
     "dev": "npm run dev -w @puzzlecave/game",
     "build": "npm run build -w @puzzlecave/game",

@@ -440,3 +440,35 @@ The gain grows with the depth (the dominated fraction compounds: on pc-11 the la
 **pc-11 run** (`--bound 150 --threads 10 --gpu auto --max-disk 385`, dominance `keys`, started 2026-10-13 07:59 UTC, work dir `.oneshot/longrun/pc-11-dominance` of the main checkout): at layer 124, 562 M states (old run 651 M, −14 %), 86 GB on disk (old run 160 GB), 1.47 G pending (old run 4.15 G), lower bound ≥ 128. It stopped once at layer 124 on EMFILE (8,192 descriptors per process on Windows: 10 threads × (256 run files + one gen file per live layer)); the threads now cap their open descriptors (`maxOpenFiles`, 6,000 shared) and the run resumed from its checkpoint. Layer 130: 980 M states (old run 1.15 G), 130 GB (old run 284 GB), ≥ 134 as before; from layer ~134 the pending records shrink (the bound cuts them) and the layers end at 146. **Result: exhausted, no solution of fewer than 150 moves** (pc-11 ≥ 150, was ≥ 134): 2.12 G states expanded, 4.64 G successors written, disk peak 209 GB, 9,284 s (2 h 35 min, with another agent's 12 processes on the CPU). Per layer from 131 on: 3–4 min. A second run with `--bound 156 --compress all` was started next (`.oneshot/longrun/pc-11-b156`). Provenance: layers 0–123 of this first run ran an earlier, uncommitted version of the dominance code (only layers 124–146 ran the committed one); its per-layer counts match the committed run within 0.01 % and it never expanded fewer states, but the "≥ 150" claim is only recorded in the level once the `pc-11-b156` run, entirely on the committed code, passes 150.
 
 **Heuristic, measured along pc-11's saved 296-move solution:** toExit and the strong bound never exceed 16 while 286 to 150 moves remain (e.g. 6 at move 10 with 286 left, 16 at move 82 with 214 left); counting unfilled waters, doors or blocks on the best relaxed path to the exit gives 0–1 at the start. No cheap admissible heuristic closes this gap, so none was added; a new one plugs in where `CompactBound.strong()` is called (expansion, and `--gen-strong` on successors).
+
+## Stronger admissible bounds and checkpoint certification (2026-10-13)
+
+`packages/core/src/strongBound.ts` (`StrongBound`), `npm run certify` (`packages/tools/src/longrun/certify.ts`). Goal: raise proven bounds without new search, by evaluating a much stronger (admissible, not consistent) bound on the pending records of a long-run checkpoint. Soundness arguments are in the source comments; every bound is checked against exact costs on every reachable state of ~2,500 exhaustively solved small random levels (`strongBound.test.ts`, incl. levels built with water chains, keys and doors), and certify against `solve` on partial long runs.
+
+**Bounds** (all admissible, combined by max in `value()`):
+- *Key term* (in `CompactBound.strong`, consistent, used by the A\* too): `(need−1)·δ` replaced by the sum of the `need−1` smallest "nearest other key" distances (each key picked after the first ends its own walk from another key). Rarely binding on the saved levels.
+- *Timed relaxation* (`tdr`): earliest-arrival Dijkstra over (cell, picked keys ⊆ ≤ 4 tracked keys, doors opened), where clones act in parallel but only profit from clones of an earlier-or-equal key/door layer; a water is enterable once a fill is known, a fill needs the pusher cell and a block on the cell before the water; blocks are tracked one by one (time each block can reach each cell, pushed only from cells some clone reached; a block crosses a water only after another block filled it); fill times are floored by fill chains (a water whose push cell or block cell is water needs that one filled first by a distinct block: the push counts add up). Each refinement was kept only if sound; the measured gain at the pc-11 frontier (layer 131, sample): exit distance 3–17 → global clones 15 → per-block tracking 29 (min over the sample).
+- *Mandatory fills* (`fill`, h_fill): a water is mandatory if the timed relaxation cannot win with it forbidden (this includes waters guarding the keys the doors need); bound = walk to the first push spot + min-cost matching of distinct blocks to mandatory waters (Hungarian, relaxed push distance) + walk from the last fill to the exit. Slow (one relaxation per candidate water): measurements only.
+- *Fable's h_fetch* (Dijkstra over filled-water subsets, fetch = walk + push distance of a current block, blocks unlimited) is **not admissible**: a block pushed along the player's way during an earlier segment can later fill a water from close by while the fetch cost charges its original position (example: the player walks a long open corridor to fill w1 with a nearby block, pushing block b ahead for free; w2, reachable only after w1, is then filled by b in a few moves, but the relaxation charges b's original distance). The timed relaxation replaces it (time windows measured from now, not per segment).
+
+**Start states** (proven bounds for reference; one core, other jobs running):
+
+| level | proven | exit dist. | strong | tdr | h_fill | tdr time |
+|---|---|---|---|---|---|---|
+| pc-04 | 78 | 16 | 16 | 16 | 0 | 0.9 ms |
+| pc-07 | 126 | 2 | 2 | 24 | 0 | 1.0 ms |
+| pc-08 | 99 | 37 | 45 | 45 | 24 | 0.3 ms |
+| pc-09 | 87 | 17 | 17 | 44 | 0 | 2.4 ms |
+| pc-11 | 134 | 4 | 4 | 27 | 0 | 1.1 ms |
+| pc-12 | 122 (opt.) | 4 | 4 | 24 | 0 | 0.3 ms |
+| pc-13 | 100 | 4 | 4 | 22 | 15 | 0.3 ms |
+| pc-14 | 100 | 4 | 4 | 24 | 22 | 0.3 ms |
+| pc-16 | 46 | 26 | 26 | 34 | 0 | 1.3 ms |
+| pc-17 | 42 | 30 | 30 | 33 | 0 | 1.4 ms |
+| pc-18 | 93 | 46 | 83 | 50 | 46 | 1.7 ms |
+
+The start values stay far below the proven bounds (those come from searches that already explored ~10⁹ states): the bounds pay off on deep states, where the exit distance says almost nothing. Along the saved solutions the timed relaxation is 2–6× the exit distance on the block levels (pc-11: 27–40 versus 4–20), never above the remaining length. With `limit = best − g` it stops early: 30–150 µs per pc-11 frontier record.
+
+**Certification**: on pc-19 (`--bound 95`, stopped at layer 27) the checkpoint bound 40 becomes 58 (optimum 88); on pc-12 (`--bound 130`, layer 56) 58 → 74 (optimum 122).
+
+**pc-11** (checkpoint of the 284 GB long run, layer 131, 7.25 G pending records, its own bound ≥ 134; read-only): `npm run certify -- <dir> --target 150 --threads 8 --skip-fingerprint` (the level differs only by its old `goldMoves` 310, checked against the manifest fingerprint) read 3.32 G records, evaluated 2.02 G with the strong bound, 5.3 h on 8 threads (machine shared with another long run): no pending record has g + h < 150, so **pc-11 ≥ 150** (was 134). On a 2,000-record sample of layer 131 the smallest g + h is 160, so a higher target would likely certify more, at a cost growing with the number of layers below it (~0.25 G records per layer, 30–150 µs each).

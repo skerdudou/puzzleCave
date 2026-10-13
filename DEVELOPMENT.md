@@ -184,6 +184,28 @@ too fast for it.
 - Measurement options: `--dead-pruning` (dead-state test before expanding), `--gen-strong s`
   (strong bound on successors whose weak f is within `s` of the bound).
 
+### Certifying a long-run checkpoint: `certify`
+
+    npm run certify -- <work-dir> [--level id] [--threads n] [--target T] [--progress s] [--skip-fingerprint]
+
+Reads a `longrun` checkpoint (version 4, or 5 with dominance pruning) **read-only** (manifest and pending `gen` files; nothing is written,
+the run can be resumed afterwards) and reports a proven lower bound: the minimum of g + h over the
+pending records, h = `StrongBound.value` (compact bound and timed relaxation, see
+`packages/core/src/strongBound.ts`). Every optimal solution passes through a pending record at
+its optimal cost (proof at the top of `packages/tools/src/longrun/certify.ts`), so the minimum is a
+bound, usually well above the checkpoint's own (g + exit distance). Segments are scanned by
+increasing min f and the scan stops once nothing can lower the minimum.
+
+- `--target T`: only look for records with g + h < T; prints "≥ T" when there is none (much
+  faster: the relaxation stops at T − g).
+- `--threads`: worker threads (half the logical cores by default). Cost: 30–150 µs per record on
+  the 36-block levels (pc-11: ~60 k records/s on 8 threads).
+- `--skip-fingerprint`: accept a checkpoint whose level fingerprint differs (medal thresholds are
+  part of it) when its start state matches the level's; only use it when the rules did not change.
+- Pruning in an external search: `new StrongBound(model)`, then `layer + bound.value(best − layer)
+  ≥ best` drops a loaded state (admissible, not consistent: fine for the layered search, not for
+  the in-RAM A*).
+
 ### Fallback for large levels: `plan`
 
     npm run plan -- <id…> [--timeout s] [--keys auto|explicit] [--max-free n] [--fill-free n] [--exit-free n] [--tries n] [--sub-states n] [--alternatives k] [--widen n] [--all-doors level] [--side-keys on|off] [--improve s] [--max-memory MB] [--apply]
