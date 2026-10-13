@@ -40,6 +40,8 @@ export function hashWords(a: Uint32Array, off: number, words: number): number {
 }
 
 const MAX_LOAD = 0.75;
+/** load accepted when the budget refuses the doubling of the table */
+const FULL_LOAD = 0.9;
 const NODE_FIXED_BYTES = 4 + 2 + 2 + 2 + 1;
 
 /**
@@ -108,9 +110,13 @@ export class StateStore {
 
   /** adds an absent key; -1 if the budget is exhausted */
   insert(key: Uint32Array, h: number, off = 0): number {
-    if ((this.size + 1) / (this.mask + 1) > MAX_LOAD) {
-      if (!this.grow()) return -1;
-      this.freeSlot = -1;
+    const load = (this.size + 1) / (this.mask + 1);
+    if (load > MAX_LOAD) {
+      // the doubling needs the old and the new table at once: when the budget refuses it, keep
+      // filling the current table up to FULL_LOAD (slower probes) instead of stopping with that
+      // memory unused
+      if (this.grow()) this.freeSlot = -1;
+      else if (load > FULL_LOAD) return -1;
     }
     const id = this.size;
     const c = id >>> this.chunkBits;
@@ -270,8 +276,16 @@ export class TypedHeap {
 
   private grow(): boolean {
     const old = this.prio.length;
-    const cap = Math.max(1024, old * 2);
-    if (!this.budget.take(cap * 8)) return false;
+    // doubling, or a smaller growth when the budget refuses it (old and new arrays coexist)
+    let cap = 0;
+    for (const f of [2, 1.5, 1.25, 1.125]) {
+      const c = Math.max(1024, Math.ceil(old * f));
+      if (this.budget.take(c * 8)) {
+        cap = c;
+        break;
+      }
+    }
+    if (cap === 0) return false;
     const prio = new Uint32Array(cap);
     const vals = new Uint32Array(cap);
     prio.set(this.prio);

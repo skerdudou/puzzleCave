@@ -33,6 +33,28 @@ test('solve --all with limits and options', () => {
   });
 });
 
+test('improve: solution search options', () => {
+  expect(
+    parseArgs([
+      'improve',
+      'pc-11',
+      '--from-scratch',
+      '--find-timeout',
+      '600',
+      '--find-memory',
+      '4096',
+      '--key-closure',
+    ]),
+  ).toMatchObject({
+    kind: 'improve',
+    ids: ['pc-11'],
+    find: { fromScratch: true, timeoutMs: 600_000, memoryMb: 4096, keyClosure: true },
+  });
+  expect(parseArgs(['improve', 'pc-11'])).not.toHaveProperty('find');
+  expect(parseArgs(['solve', 'pc-11', '--key-closure'])).not.toHaveProperty('find');
+  expect(parseArgs(['improve', 'pc-11', '--find-memory', '0'])).toMatchObject({ kind: 'error' });
+});
+
 test('option values are not mistaken for ids', () => {
   const r = parseArgs(['solve', '--timeout', '5', 'pc-03']);
   expect(r).toMatchObject({ kind: 'solve', ids: ['pc-03'] });

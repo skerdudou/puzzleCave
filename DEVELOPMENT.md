@@ -89,6 +89,7 @@ Limits: maps of at most 32 × 32; weaker lower bound than the CPU's (distance to
 ### Best known solution: `improve`
 
     npm run improve -- <id…>|--all [--timeout <s per level>] [--max-memory MB] [--max-states n] [--jobs n] [--apply] [--force]
+                       [--from-scratch] [--find-timeout s] [--find-memory MB] [--key-closure]
 
 Same memory and parallelism rules as `solve` (same plan: processes, per-process cap; the whole budget when sequential). The steps of a level run one after another, a single search at a time, each capped at that budget; all use the compact engine's structures (packed state, typed table and heap). Without `--max-states`, there is no state limit (at most 2 M states per window).
 
@@ -99,6 +100,15 @@ Same memory and parallelism rules as `solve` (same plan: processes, per-process 
 3. **Spare keys**: the windows keep keys in hand and on the ground identical, so they never drop a useless key pickup. A pickup is droppable when, from it to the end, the keys in hand never fall below 1; windows of 2, 4, 8… 32 interactions around it then look for a shorter path to the same state but with that key left on the ground and one key fewer in hand. The best saving is applied (one key at a time), and the windows run again on the new solution if time remains.
 4. **Frozen blocks**: blocks the solution never pushes become walls, then an exact search on that restricted level (and greedy removal of other blocks if it does not finish). Optimum for that set of blocks only.
 5. **Proof**: global exact search bounded by the current length (only strictly shorter solutions are searched). If it finishes, the solution is proven optimal; otherwise its proven lower bound is kept. Like `solve`, it switches to partial expansion if memory stops it before the deadline.
+
+Solution search options (step 1, used only when no saved solution wins):
+
+- `--from-scratch`: ignore the saved solution and start from the solution search. With `--apply`, the result replaces the saved solution only if it is strictly shorter (or with `--force`).
+- `--find-timeout <s>`: duration of the search (default: 30% of `--timeout`). When given, it comes on top of `--timeout`: the later steps keep their usual 70% of `--timeout` after the search, and the watchdog waits that much longer.
+- `--find-memory <MB>`: memory cap of the search (default: the cap of every search, `--max-memory` or computed). It is not counted in the parallel memory plan: with several levels, set `--jobs` accordingly. The search needs ~65–76 bytes per stored state (measured), so 1 GB ≈ 15 M states, 5.5 GB ≈ 75–88 M; beyond ~3 GB no extra level was solved (`docs/solver-study.md`).
+- `--key-closure`: after each interaction, the player also picks up every key reachable by walking (one macro step). The search stays complete but is not optimal; off by default because the measured gains are inconsistent (`docs/solver-study.md`).
+
+For measurements, `npx tsx packages/tools/src/findBench.ts <id…> [--memory MB] [--timeout s] [--key-closure [--no-closure-filter]] [--save dir]` runs the search alone from scratch and prints its progress (states, memory, time when the peak crosses 1/2/4/8 GB) as JSON lines.
 
 Each step replays the solution: it always wins and is never longer than the input. One line per level gives the start (designer's or found solution), the length before → after, the status, the lower bound and the duration, followed by the detail of the steps.
 

@@ -110,6 +110,32 @@ test('without a designer solution: a solution is searched for', () => {
   expect(r.proven).toBe(true);
 });
 
+test('solution search options: time, memory and key closure; later stages keep their share', () => {
+  const find = vi.fn(findSolution);
+  let t = 0;
+  const now = () => t;
+  const r = improveLevel(LEVEL, {
+    ...opts,
+    timeoutMs: 1000,
+    maxMemoryMb: 100,
+    find: (level, o) => {
+      t += 5000; // the search takes 5 s, far beyond 30% of timeoutMs
+      return find(level, o);
+    },
+    findTimeoutMs: 7000,
+    findMemoryMb: 64,
+    keyClosure: true,
+    now,
+  });
+  expect(find).toHaveBeenCalledWith(
+    LEVEL,
+    expect.objectContaining({ timeoutMs: 7000, maxMemoryMb: 64, keyClosure: true }),
+  );
+  // the windows still ran (the deadline restarts after the search)
+  expect(r.stages.map((s) => s.stage)).toContain('reoptimize');
+  expect(r.moves).toHaveLength(4);
+});
+
 test('designer solution that does not win: flagged, then search', () => {
   const r = improveLevel(LEVEL, { ...opts, initial: ['down'] });
   expect(r.designerInvalid).toBe('playing');

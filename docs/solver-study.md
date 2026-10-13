@@ -382,3 +382,31 @@ Findings:
 - Limits: local search only (no proof that an order is the best); stage searches cost ~0.2 s on pc-18 (2 blocks, large free area), so it screens only ~5 variants/s there; the 3 improved variants of a round are often near-identical.
 
 Shorter solutions (files `.oneshot/<id>-<length>.txt`, all replayed and winning, not applied here): pc-04 278, pc-08 601, pc-09 490, pc-11 296, pc-13 430, pc-14 556, pc-16 122, pc-17 92, pc-18 1346.
+
+## findSolution budget and key closure (2026-10-12)
+
+Measured with `packages/tools/src/findBench.ts` (findSolution alone, from scratch: saved solutions ignored), Ryzen 7 3700X. The search is deterministic, so a run at a large budget also gives the result at every smaller one (the progress lines record the time and states when the memory peak crosses 1/2/4 GB). Budgets: 1 GB (5 processes at a time), 2.9 GB (2 at a time), 5.5 GB (one process; the RAM allowed to these measurements was ~6 GB, hence no 8 GB run). "mem" = memory cap reached; states in millions; kc = `keyClosure` (times marked * were measured before the closure filter below, which keeps the same states but is 1.7–2.5× faster).
+
+| level | saved | 1 GB | 2.9 GB | 5.5 GB | kc 1 GB | kc 2.9 GB | kc 5.5 GB |
+|---|---|---|---|---|---|---|---|
+| pc-07 | 388 | mem 15.1 M, 300 s | mem 43.8 M, 784 s | mem 81.4 M, 1356 s | mem 15.1 M, 573 s* | mem 43.8 M, 627 s | — |
+| pc-08 | 581 | mem 15.1 M, 315 s | mem 39.7 M, 722 s | mem 81.4 M, 1368 s | mem 15.1 M, 396 s* | mem 40.0 M, 1003 s* | mem 81.4 M, 1151 s |
+| pc-09 | 490 | mem 14.8 M, 244 s | mem 38.1 M, 597 s | mem 75.0 M, 799 s | mem 14.8 M, 510 s* | mem 37.9 M, 1122 s* | mem 72.7 M, 738 s |
+| pc-11 | 296 | mem 15.1 M, 239 s | mem 43.8 M, 541 s | mem 81.5 M, 738 s | mem 15.1 M, 781 s* | mem 43.8 M, 413 s | — |
+| pc-13 | 430 | mem 15.1 M, 361 s | **2390 moves**, 543 s (peak 2.25 GB) | — | **3612 moves**, 15 s (77 MB) | — | — |
+| pc-14 | 554 | mem 15.5 M, 410 s | mem 47.5 M, 1138 s | mem 88.4 M, 1193 s | mem 15.5 M, 894 s* | mem 47.5 M, 728 s | — |
+| pc-16 | 122 | **206 moves**, 31 s (136 MB) | — | — | mem 15.1 M, 567 s* | **282 moves**, 443 s (peak 2.88 GB) | — |
+| pc-17 | 92 | **786 moves**, 54 s (165 MB) | — | — | **604 moves**, 53 s (322 MB) | — | — |
+| pc-18 | 1338 | mem 15.1 M, 536 s | time (1200 s, 40.9 M) | mem 81.4 M, 1278 s | time (900 s*, 13.3 M) | mem 43.8 M, 768 s | — |
+
+Solved levels out of 9: without key closure 2 at 1 GB (300 or 900 s), 3 at 2.9 GB within 900 s (pc-13, 543 s), still 3 at 4 and 5.5 GB; with key closure 2 at 1 GB (pc-13, pc-17, both under 300 s), 3 at 2.9 GB within 900 s (pc-16). No found solution is shorter than the saved ones (pc-16 206/282 versus 122, pc-17 604/786 versus 92, pc-13 2390/3612 versus 430).
+
+What limits findSolution:
+- **Memory, linearly.** Every level that does not solve within ~2.5 GB hits the memory cap, not the time limit: ~60–80 k stored states per second, 65–76 bytes per stored state (pc-11 at 5.5 GB: 81.5 M states, 71 B/state). Going from 1 to 5.5 GB (×5.4 states) solves no extra level: raising the budget is not a cheap win beyond ~3 GB.
+- **Bytes per state**: the node (packed key 4 × words, i.e. 36–52 B, plus parent 4, cost/edge/bound 6 and a flag 1 B) is ~70% of it; the hash table 8 B per slot (9–21 B per state); the heap 8 B per open entry plus its growth slack. The BFWS novelty tables are negligible (1–4 MB in total, 18–68 tables).
+- **Generated, never expanded states**: 52–85% of the stored states are still open when the search stops (pc-08 at 5.5 GB: 14.4 M expanded out of 81.4 M stored). They must be stored for duplicate detection; compressing them would need a different state store (keys rebuilt from the parent), not a cheap change.
+- **Doubling transients** (fixed): the table doubling needs the old and the new table at once, and the heap doubling the old and the new arrays, so the search used to stop with up to ~25% of its budget unused (pc-11 at 1 GB: stopped at 12,582,912 = 0.75 · 2^24 states with a peak of 805 MB). The table now keeps filling up to 90% load when the budget refuses the doubling, and the heap tries growths of ×1.5, ×1.25, ×1.125: pc-11 at 1 GB **12.6 M → 15.1 M states** (97 → 122 s). This also applies to `solve` and the windows (same store).
+
+Key closure (`keyClosure`, ported from the proof of concept on branch `worktree-agent-ad38ca13791f276d0`): after each interaction, the player picks up every key reachable by walking (nearest first; a key on an exit is left, and a player standing on water — allowed start, pc-13 and pc-14 — is left alone, since the closure would strand them). Complete, not optimal. The first version ran a full walking BFS on every successor (2–3.3× slower per state than the plain search); since every stored state is already closed, only the cells the interaction opens outside the parent's walking region can expose a key, and a small flood from the interaction cell now decides whether the full closure is needed (same states and solutions, tested): at 400 MB, pc-11 165.6 → 66.0 s, pc-09 101.8 → 59.7 s (plain: 47.1, 52.5 s).
+
+Verdict: optional mode only, off by default (`improve --key-closure`). It solves pc-13 in 15 s where the plain search needs 2.25 GB and 543 s, and finds a shorter first solution on pc-17 (604 versus 786), but needs 2.9 GB on pc-16 where the plain search takes 136 MB, and changes nothing on the memory-bound levels (same states per second within ~30%, same cap). Worth a second try when the plain search fails.

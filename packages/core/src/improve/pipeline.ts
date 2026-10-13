@@ -33,6 +33,16 @@ export interface ImproveOptions {
   global?: ExactEngine;
   /** engine of the internal windows; `searchWindow` by default */
   window?: WindowEngine;
+  /**
+   * duration of the solution search (used when there is no winning initial solution); 30% of
+   * timeoutMs by default. When given, it comes on top: the later stages keep their usual share
+   * (70%) of timeoutMs after the search
+   */
+  findTimeoutMs?: number | undefined;
+  /** memory cap (MB) of the solution search; maxMemoryMb by default */
+  findMemoryMb?: number | undefined;
+  /** key closure in the solution search (FindOptions.keyClosure); off by default */
+  keyClosure?: boolean | undefined;
   /** search for any solution; `findSolution` by default */
   find?: (level: LevelData, opts: FindOptions) => FindResult;
   /**
@@ -93,7 +103,8 @@ const PLAN_FALLBACK: Omit<PlanOptions, 'timeoutMs'> = {};
  */
 export function improveLevel(level: LevelData, opts: ImproveOptions): ImproveResult {
   const now = opts.now ?? (() => performance.now());
-  const t0 = now();
+  // shifted after an explicit search time (findTimeoutMs), see below
+  let t0 = now();
   // when the planner ran, the stage ends after the starting point (windows … proof) are rescaled
   // over the time left, so that it does not eat the windows' share
   let rest0 = FIND_END;
@@ -133,12 +144,14 @@ export function improveLevel(level: LevelData, opts: ImproveOptions): ImproveRes
       result.start = 'designer';
     } else result.designerInvalid = n.status;
   }
-  if (!moves)
+  if (!moves) {
     run('find', () => {
       const f = find(level, {
         maxStates: opts.maxStates ?? Infinity,
         ...memory,
-        timeoutMs: until(FIND_END),
+        ...(opts.findMemoryMb !== undefined ? { maxMemoryMb: opts.findMemoryMb } : {}),
+        ...(opts.keyClosure ? { keyClosure: true } : {}),
+        timeoutMs: opts.findTimeoutMs ?? until(FIND_END),
         now,
       });
       if (f.status !== 'solved') return `no solution (${f.reason}, ${f.explored} states)`;
@@ -148,6 +161,9 @@ export function improveLevel(level: LevelData, opts: ImproveOptions): ImproveRes
       result.start = 'found';
       return `${f.explored} states`;
     });
+    // explicit search time: the later stages keep their share of timeoutMs after it
+    if (opts.findTimeoutMs !== undefined) t0 = now() - FIND_END * opts.timeoutMs;
+  }
   if (!moves && opts.planFallback !== false) {
     const share = Math.min(1 - FIND_END, Math.max(0, opts.planShare ?? 0.3));
     run('plan', () => {

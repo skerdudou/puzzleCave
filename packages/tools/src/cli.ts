@@ -89,6 +89,7 @@ try {
       maxMemoryMb: parsed.maxMemoryMb,
       apply: parsed.apply,
       force: parsed.force,
+      find: parsed.find,
     };
     const single = parsed.ids !== 'all' && parsed.ids.length === 1;
     const improve = parsed.kind === 'improve';

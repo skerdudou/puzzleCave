@@ -113,6 +113,30 @@ test('improve: without a designer solution, one is searched for', () => {
   expect(gold(dir)).toBe('4');
 });
 
+test('improve --from-scratch: saved solution ignored, only replaced by a strictly shorter one', () => {
+  // saved RRRR (optimal): the search from scratch finds 4 moves too, nothing is written
+  const dir = fixture([level('k', 4)], { k: '# optimal (proven)\nRRRR\n' });
+  const r = improveCommand(dir, ['k'], { ...opts, apply: true, find: { fromScratch: true } });
+  expect(r.lines[0]).toMatch(/^k: solution found \(\d+\) → 4 moves/);
+  expect(r.lines).toContain(
+    'k: from scratch, not shorter than the saved solution (4): nothing written',
+  );
+  expect(solution(dir)).toBe('# optimal (proven)\nRRRR\n');
+  // a longer saved solution is replaced
+  const long = fixture([level('k', 10)], { k: LONG });
+  improveCommand(long, ['k'], { ...opts, apply: true, find: { fromScratch: true } });
+  expect(solution(long)).toBe('# optimal (proven)\nRRRR\n');
+});
+
+test('improve: solution search options reach findSolution (time, memory, key closure)', () => {
+  const dir = fixture([level('k')]);
+  const r = improveCommand(dir, ['k'], {
+    ...opts,
+    find: { timeoutMs: 5000, memoryMb: 64, keyClosure: true },
+  });
+  expect(r.lines[0]).toMatch(/^k: solution found \(\d+\) → 4 moves/);
+});
+
 const found = (dir: string, id = 'k') =>
   readFileSync(join(dir, 'solutions', `${id}.found.txt`), 'utf8');
 

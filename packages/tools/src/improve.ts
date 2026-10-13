@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import {
   formatMoves,
   improveLevel,
+  normalizeMoves,
   parseMoves,
   replay,
   type Dir,
@@ -20,7 +21,7 @@ import {
   type CommandResult,
   type SolveCommandOptions,
 } from './commands';
-import type { GpuMode } from './args';
+import type { FindArgs, GpuMode } from './args';
 import type { ImproveReply, ImproveTask } from './improveWorker';
 import { inProcessMemoryMb } from './memory';
 import { runLevels, seconds } from './parallel';
@@ -34,6 +35,17 @@ const WATCHDOG_MARGIN_MS = 60_000;
 export interface ImproveCommandOptions extends SolveCommandOptions {
   /** engine of the global searches (frozen blocks, proof), e.g. GPU; `exact` by default */
   global?: ExactEngine | undefined;
+  /** solution search options (--from-scratch, --find-timeout, --find-memory, --key-closure) */
+  find?: FindArgs | undefined;
+}
+
+/** pipeline options from the solution search options */
+function findOptions(find: FindArgs | undefined) {
+  return {
+    ...(find?.timeoutMs !== undefined ? { findTimeoutMs: find.timeoutMs } : {}),
+    ...(find?.memoryMb !== undefined ? { findMemoryMb: find.memoryMb } : {}),
+    ...(find?.keyClosure ? { keyClosure: true } : {}),
+  };
 }
 
 const solutionFile = (dir: string, id: string) => join(dir, 'solutions', `${id}.txt`);
@@ -70,7 +82,7 @@ export function reportImprove(
   level: LevelData,
   r: ImproveResult,
   ms: number,
-  o: Pick<SolveCommandOptions, 'apply' | 'force'>,
+  o: Pick<SolveCommandOptions, 'apply' | 'force'> & { find?: FindArgs | undefined },
   notes: string[] = [],
 ): CommandResult & { outcome: ImproveOutcome; summary: string } {
   const id = level.id;
@@ -129,7 +141,14 @@ export function reportImprove(
   // --force: the found solution is written next to it, goldMoves is left untouched
   const keepSaved = savedIsInvalid(dir, level) && !o.force;
   if (savedIsInvalid(dir, level)) ok = false;
-  if (o.apply) {
+  // --from-scratch ignored the saved solution: it is only replaced by a strictly shorter one
+  const saved = o.find?.fromScratch && !keepSaved ? readSolution(dir, id) : undefined;
+  const savedLength = Array.isArray(saved) ? normalizeMoves(level, saved).moves.length : Infinity;
+  if (o.apply && savedLength <= n && !o.force)
+    lines.push(
+      `${id}: from scratch, not shorter than the saved solution (${savedLength}): nothing written`,
+    );
+  else if (o.apply) {
     try {
       const file = keepSaved ? join(dir, 'solutions', `${id}.found.txt`) : solutionFile(dir, id);
       const bound = keepSaved
@@ -206,7 +225,7 @@ export function improveCommand(
       ok = false;
       continue;
     }
-    const start = designerStart(dir, level);
+    const start = o.find?.fromScratch ? { notes: [] } : designerStart(dir, level);
     const t0 = performance.now();
     const r = improveLevel(level, {
       timeoutMs: o.timeoutMs,
@@ -215,6 +234,7 @@ export function improveCommand(
       ...(start.initial ? { initial: start.initial } : {}),
       ...(o.exact ? { exact: o.exact } : {}),
       ...(o.global ? { global: o.global } : {}),
+      ...findOptions(o.find),
     });
     const rep = reportImprove(dir, level, r, performance.now() - t0, o, [
       ...start.notes,
@@ -232,6 +252,7 @@ export interface ImproveParallelOptions extends SolveCommandOptions {
   /** global searches on the GPU, in a GPU lane (see runLevels); off by default */
   gpu?: GpuMode | undefined;
   maxVramMb?: number | undefined;
+  find?: FindArgs | undefined;
 }
 
 /**
@@ -250,14 +271,15 @@ export function improveParallel(
     ids,
     worker: WORKER,
     timeoutMs: o.timeoutMs,
-    watchdogMarginMs: WATCHDOG_MARGIN_MS,
+    // an explicit search time comes on top of --timeout (see improveLevel)
+    watchdogMarginMs: WATCHDOG_MARGIN_MS + (o.find?.timeoutMs ?? 0),
     maxStates: o.maxStates,
     maxMemoryMb: o.maxMemoryMb,
     jobs: o.jobs,
     onLine: o.onLine,
     gpu: { mode: o.gpu ?? 'off', maxVramMb: o.maxVramMb },
     task: (level, memoryMb, gpu) => {
-      const start = designerStart(dir, level);
+      const start = o.find?.fromScratch ? { notes: [] } : designerStart(dir, level);
       notes.set(level.id, start.notes);
       return {
         dir,
@@ -267,6 +289,7 @@ export function improveParallel(
         maxMemoryMb: memoryMb,
         ...(start.initial ? { initial: start.initial } : {}),
         ...(gpu ? { gpu } : {}),
+        ...findOptions(o.find),
       };
     },
     report: (level, reply) => {

@@ -16,6 +16,10 @@ export interface ImproveTask {
   initial?: Dir[];
   /** GPU lane: global searches (frozen blocks, proof) on the GPU */
   gpu?: GpuTask;
+  /** solution search: duration (ms), memory cap (MB), key closure (see ImproveOptions) */
+  findTimeoutMs?: number;
+  findMemoryMb?: number;
+  keyClosure?: boolean;
 }
 
 export interface ImproveReply {
@@ -46,6 +50,9 @@ process.once('message', async (task: ImproveTask) => {
       maxMemoryMb: task.maxMemoryMb,
       ...(task.initial ? { initial: task.initial } : {}),
       ...(backend?.engine ? { global: backend.engine } : {}),
+      findTimeoutMs: task.findTimeoutMs,
+      findMemoryMb: task.findMemoryMb,
+      keyClosure: task.keyClosure,
     });
   } finally {
     backend?.close();

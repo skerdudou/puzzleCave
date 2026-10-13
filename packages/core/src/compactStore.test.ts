@@ -159,3 +159,30 @@ test('typed heap: refuses to grow beyond the budget', () => {
   expect(pushed).toBeGreaterThan(1000);
   expect(pushed).toBeLessThan(10_000_000);
 });
+
+test('table: when the budget refuses the doubling, the table fills up to 90%', () => {
+  // 1 MB: the table of 32,768 slots (256 KB) cannot double (+512 KB) past 75% load
+  const budget = new MemoryBudget(2 ** 20);
+  const s = new StateStore(1, budget, 10);
+  const k = new Uint32Array(1);
+  let inserted = 0;
+  for (let i = 0; i < 1_000_000; i++) {
+    k[0] = i;
+    if (s.insert(k, hashWords(k, 0, 1)) < 0) break;
+    inserted++;
+  }
+  expect(inserted).toBe(Math.floor(0.9 * 32768));
+  expect(budget.peak).toBeLessThanOrEqual(budget.limit);
+  for (let i = 0; i < inserted; i += 997) {
+    k[0] = i;
+    expect(s.find(k, hashWords(k, 0, 1))).toBe(i);
+  }
+});
+
+test('typed heap: smaller growth when the budget refuses the doubling', () => {
+  // 1.2 MB: 65,536 entries (512 KB) cannot double (+1 MB) but can grow by 25%
+  const heap = new TypedHeap(new MemoryBudget(1.2 * 2 ** 20));
+  let pushed = 0;
+  while (heap.push(pushed, pushed) && pushed < 10_000_000) pushed++;
+  expect(pushed).toBe(81920);
+});

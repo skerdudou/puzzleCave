@@ -1,9 +1,22 @@
 export const USAGE =
-  'usage: validate | solve|improve <id…>|--all [--timeout s] [--max-states n] [--max-memory MB] [--jobs n] [--gpu auto|on|off] [--max-vram Mo] [--apply] [--force]';
+  'usage: validate | solve|improve <id…>|--all [--timeout s] [--max-states n] [--max-memory MB] [--jobs n] [--gpu auto|on|off] [--max-vram MB] [--apply] [--force]\n' +
+  '  improve only: [--from-scratch] [--find-timeout s] [--find-memory MB] [--key-closure]';
 
 /** engine for global exact searches: GPU when possible (auto), required (on), never (off) */
 export type GpuMode = 'auto' | 'on' | 'off';
 const GPU_MODES: readonly string[] = ['auto', 'on', 'off'];
+
+/** options of improve's solution search (findSolution) */
+export interface FindArgs {
+  /** ignore the saved solution: start from findSolution */
+  fromScratch?: boolean;
+  /** duration of the search (ms); default 30% of --timeout */
+  timeoutMs?: number;
+  /** memory cap of the search (MB); default --max-memory or the computed cap */
+  memoryMb?: number;
+  /** key closure (FindOptions.keyClosure) */
+  keyClosure?: boolean;
+}
 
 export type ParsedArgs =
   | { kind: 'validate' }
@@ -23,6 +36,8 @@ export type ParsedArgs =
       gpu: GpuMode;
       /** VRAM of each GPU search, in MB; undefined = GPU engine default */
       maxVramMb?: number | undefined;
+      /** improve only: solution search options (absent = defaults) */
+      find?: FindArgs;
     }
   | { kind: 'error'; message: string };
 
@@ -33,6 +48,8 @@ const VALUED = new Set([
   '--jobs',
   '--gpu',
   '--max-vram',
+  '--find-timeout',
+  '--find-memory',
 ]);
 
 /** strictly positive value of the option, undefined if absent, message if invalid */
@@ -79,6 +96,19 @@ export function parseArgs(argv: string[]): ParsedArgs {
       };
     gpu = raw as GpuMode;
   }
+  const find: FindArgs = {};
+  if (cmd === 'improve') {
+    const findTimeout = positive(args, '--find-timeout');
+    if (typeof findTimeout === 'string')
+      return { kind: 'error', message: `${findTimeout}\n${USAGE}` };
+    const findMemory = positive(args, '--find-memory');
+    if (typeof findMemory === 'string')
+      return { kind: 'error', message: `${findMemory}\n${USAGE}` };
+    if (args.includes('--from-scratch')) find.fromScratch = true;
+    if (findTimeout !== undefined) find.timeoutMs = findTimeout * 1000;
+    if (findMemory !== undefined) find.memoryMb = findMemory;
+    if (args.includes('--key-closure')) find.keyClosure = true;
+  }
   const all = args.includes('--all');
   const ids = args.filter((a, i) => !a.startsWith('--') && !VALUED.has(args[i - 1] ?? ''));
   if (!all && ids.length === 0) return { kind: 'error', message: `no level given\n${USAGE}` };
@@ -93,5 +123,6 @@ export function parseArgs(argv: string[]): ParsedArgs {
     force: args.includes('--force'),
     gpu,
     ...(maxVramMb !== undefined ? { maxVramMb } : {}),
+    ...(Object.keys(find).length > 0 ? { find } : {}),
   };
 }
