@@ -19,6 +19,7 @@ import {
   applyThresholds,
   impossibleThreshold,
   savedLowerBound,
+  savedWinningMoves,
   solutionHeader,
   type CommandResult,
   type SolveCommandOptions,
@@ -154,6 +155,7 @@ export function reportImprove(
         ? r.lowerBound
         : Math.max(r.lowerBound, savedLowerBound(solutionFile(dir, id)));
       const text = `${solutionHeader(r.proven, bound)}\n${formatMoves(r.moves)}`;
+      const previous = keepSaved ? undefined : savedWinningMoves(dir, level);
       if (!existsSync(file) || readFileSync(file, 'utf8') !== text) {
         mkdirSync(join(dir, 'solutions'), { recursive: true });
         writeFileSync(file, text);
@@ -165,7 +167,7 @@ export function reportImprove(
       else {
         // the saved solution is valid again, or --force: the .found.txt is stale
         rmSync(join(dir, 'solutions', `${id}.found.txt`), { force: true });
-        applyThresholds(dir, level, n, o.force);
+        lines.push(...applyThresholds(dir, level, r.moves, { force: o.force, previous }));
       }
     } catch (err) {
       ok = false;

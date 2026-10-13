@@ -62,3 +62,19 @@ test('warnings and impossible thresholds detected', () => {
     'pc-01: goldMoves (10) < proven optimum (17) — impossible threshold',
   ]);
 });
+
+test('goldTime written by the run (new level), not taken for a warning', () => {
+  const s = parseImproveOutput([
+    'lvl: solution saved (5) → 3 moves — optimal (proven) (0.1 s)',
+    'lvl: goldTime = 12 s written (from the 3-move gold solution)',
+  ]);
+  expect(s).toMatchObject({ after: 3, goldTime: 12 });
+  expect(s.warnings).toBeUndefined();
+  // missing (not guessed): a warning
+  const m = parseImproveOutput([
+    'lvl: solution saved (5) → 3 moves — optimal (proven) (0.1 s)',
+    'lvl: warning — goldTime missing: run npm run times -- lvl --apply [--from <folder of the 9-move gold solution>]',
+  ]);
+  expect(m.goldTime).toBeUndefined();
+  expect(m.warnings).toHaveLength(1);
+});

@@ -14,6 +14,7 @@ import {
 import { TILE_ORDER, writeTmx } from '@puzzlecave/tiled';
 import { validateCommand } from './commands';
 import { improveCommand, improveParallel, reportImprove, solutionHeader } from './improve';
+import { goldTimeFor, solutionFeatures } from './times';
 
 const TSX = `<tileset name="pc" tilewidth="16" tileheight="16">${TILE_ORDER.map((k, i) => `<tile id="${i}"><properties><property name="kind" value="${k}"/></properties></tile>`).join('')}</tileset>`;
 
@@ -88,9 +89,46 @@ test('improve --apply: a level without goldMoves gets goldMoves (no platinumMove
   expect(platinum(dir)).toBeUndefined();
 });
 
+const goldTime = (dir: string, id = 'k') =>
+  /name="goldTime" type="\w+" value="([\d.]+)"/.exec(tmx(dir, id))?.[1];
+const timeOf = (moves: string) =>
+  String(goldTimeFor(solutionFeatures(level('k'), parseMoves(moves))));
+
+test('improve --apply on a new level: goldMoves and goldTime from the improved solution', () => {
+  const dir = fixture([level('k')], { k: `# designer solution (not optimized)\n${LONG}` });
+  const r = improveCommand(dir, ['k'], { ...opts, apply: true });
+  expect(r.lines).toContain(
+    `k: goldTime = ${timeOf('RRRR')} s written (from the 4-move gold solution)`,
+  );
+  expect(gold(dir)).toBe('4');
+  expect(goldTime(dir)).toBe(timeOf('RRRR'));
+});
+
+test('improve --apply: existing goldMoves without goldTime, from the saved gold-length solution', () => {
+  const dir = fixture([level('k', 10)], { k: LONG });
+  const r = improveCommand(dir, ['k'], { ...opts, apply: true });
+  expect(r.lines).toContain(
+    `k: goldTime = ${timeOf(LONG)} s written (from the 10-move gold solution)`,
+  );
+  expect(platinum(dir)).toBe('4');
+  expect(goldTime(dir)).toBe(timeOf(LONG));
+  // a goldTime already there: kept, even when a gold-length solution is at hand
+  const kept = fixture(
+    [fromAscii(ROWS, { id: 'k', thresholds: { goldMoves: 10, goldTime: 99 } })],
+    {
+      k: LONG,
+    },
+  );
+  const rk = improveCommand(kept, ['k'], { ...opts, apply: true });
+  expect(rk.lines.join('\n')).not.toMatch(/goldTime/);
+  expect(goldTime(kept)).toBe('99');
+});
+
 test('improve --apply: thresholds only lowered by a shorter solution', () => {
-  // equal goldMoves: unchanged, the .tmx is not rewritten
-  const same = fixture([level('k', 4)], { k: 'RRRR\n' });
+  // equal goldMoves (and a goldTime): unchanged, the .tmx is not rewritten
+  const same = fixture([fromAscii(ROWS, { id: 'k', thresholds: { goldMoves: 4, goldTime: 9 } })], {
+    k: 'RRRR\n',
+  });
   const before = tmx(same);
   improveCommand(same, ['k'], { ...opts, apply: true });
   expect(tmx(same)).toBe(before);
@@ -287,7 +325,11 @@ test('validate: warns about a goldMoves longer than the saved solution', () => {
 const withThresholds = (goldMoves: number, platinumMoves?: number) =>
   fromAscii(ROWS, {
     id: 'k',
-    thresholds: { goldMoves, ...(platinumMoves !== undefined ? { platinumMoves } : {}) },
+    thresholds: {
+      goldMoves,
+      goldTime: 9,
+      ...(platinumMoves !== undefined ? { platinumMoves } : {}),
+    },
   });
 
 test('validate: the platinum limit against the saved solution and its header', () => {

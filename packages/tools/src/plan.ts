@@ -16,7 +16,13 @@ import {
   type PlanStats,
 } from '@puzzlecave/core';
 import { loadPack } from '@puzzlecave/tiled';
-import { applyThresholds, savedLowerBound, solutionHeader, type CommandResult } from './commands';
+import {
+  applyThresholds,
+  savedLowerBound,
+  savedWinningMoves,
+  solutionHeader,
+  type CommandResult,
+} from './commands';
 
 export interface PlanCommandOptions {
   timeoutMs: number;
@@ -185,6 +191,7 @@ export function applySolution(
   if (replay(level, moves).status !== 'won')
     return [`${level.id}: solution rejected (does not win)`];
   const file = join(dir, 'solutions', `${level.id}.txt`);
+  const previous = savedWinningMoves(dir, level);
   if (existsSync(file)) {
     try {
       lowerBound = Math.max(lowerBound, savedLowerBound(file));
@@ -197,6 +204,8 @@ export function applySolution(
   }
   mkdirSync(join(dir, 'solutions'), { recursive: true });
   writeFileSync(file, `${solutionHeader(false, lowerBound)}\n${formatMoves(moves)}`);
-  applyThresholds(dir, level, moves.length);
-  return [`${level.id}: solution written (${moves.length} moves)`];
+  return [
+    `${level.id}: solution written (${moves.length} moves)`,
+    ...applyThresholds(dir, level, moves, { previous }),
+  ];
 }

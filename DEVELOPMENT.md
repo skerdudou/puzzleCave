@@ -33,8 +33,10 @@ tests before building; pushes to `main` do not deploy anything.
    `platinumMoves` and, if needed, `silverMoves`, `bronzeMoves`, `goldTime` (seconds),
    `silverTime`, `bronzeTime`. An old `platinum` or `platinumTime` property is ignored.
 5. Save as `levels/<id>.tmx` and add `<id>` to `levels/chapters.json`.
-6. `npm run validate`, then `npm run solve -- <id> --apply` to compute the optimal solution (and `goldMoves`, if the level has none),
-   and `npm run times -- <id> --apply` for `goldTime` (see “Time medals” below).
+6. `npm run validate`, then `npm run solve -- <id> --apply` (or `improve`, `plan`, … `--apply`,
+   or "Save solution" in author mode) to compute the solution: on a level without `goldMoves` it
+   writes `goldMoves` and `goldTime` from that same solution (see “Time medals” below).
+   `validate` warns about a level without `goldTime`.
    A start placed on water is allowed (the player can leave it but never come back); `validate`
    reports it with a warning so that it is a deliberate choice.
 
@@ -253,12 +255,24 @@ The line per level gives saved → best length, rounds, variants (feasible), the
 
 ## Time medals: `times`
 
-    npm run times -- [<id…>] [--apply] [--force]
+    npm run times -- [<id…>] [--from <dir>] [--apply] [--force]
 
-Proposes `goldTime` (seconds) for each level from the shape of its saved solution; silver and bronze
-follow from it (×1.25 and ×1.5, with minimum gaps, see `resolveThresholds`). Without `--apply`
-it only prints the table (moves, turns, interactions, estimate, proposed and current goldTime);
-`--apply` writes goldTime into levels that have none, `--force` also replaces an existing one.
+Proposes `goldTime` (seconds) for each level from the shape of its saved solution (or of
+`<dir>/<id>.txt` with `--from`, e.g. the gold reference when the saved solution is the shorter
+platinum one); silver and bronze follow from it (×1.25 and ×1.5, with minimum gaps, see
+`resolveThresholds`). Without `--apply` it only prints the table (moves, turns, interactions,
+estimate, proposed and current goldTime); `--apply` writes goldTime into levels that have none,
+`--force` also replaces an existing one.
+
+New levels get it automatically: every tool that writes a solution (`solve`, `improve`, `plan`,
+`subgoal`, `explore`, `longrun` with `--apply`, and "Save solution" in author mode, which runs
+`improve --apply`) goes through the shared thresholds writer (`applyThresholds` in
+`packages/tools/src/commands.ts`), which, for a level without `goldTime`, computes it from the
+gold reference solution: the written one when the write sets `goldMoves`; otherwise the solution
+saved before the write if it has `goldMoves` moves, else the written one if it has; else nothing
+is guessed and the tool prints `goldTime missing: run npm run times -- <id> --apply [--from …]`.
+An existing `goldTime` is never replaced there (only `times --force` does), and `validate` warns
+about a level without one.
 
 The rule (`TIME_RULE` in `packages/tools/src/times.ts`) is
 
@@ -289,7 +303,7 @@ In author mode (development server only):
 - **Replay my solution / Replay optimized solution**: animated replay (8 moves/s at the start). Space: pause/play; ←/→: previous/next move; +/−: speed (1 to 20 moves/s); Home: back to the start; Esc: back. On-screen buttons do the same.
 - On the selection screen of a level that has a saved solution: "Replay solution" button (or S key).
 
-Settings: `PC_IMPROVE_TIMEOUT=<seconds>` (default 120) sets the maximum duration of an optimization; one job at a time per level; children are stopped when the server stops. The optimization may rewrite `platinumMoves` (or `goldMoves` on a level without one) in the `.tmx` (same rule as the CLI): the page is then not reloaded automatically, reload it to see the new threshold. The `/__pc/*` routes do not exist in the build, and nothing from `levels/solutions` is bundled in it.
+Settings: `PC_IMPROVE_TIMEOUT=<seconds>` (default 120) sets the maximum duration of an optimization; one job at a time per level; children are stopped when the server stops. The optimization may rewrite `platinumMoves` (or `goldMoves` and `goldTime` on a level without them; the result then shows the reference time) in the `.tmx` (same rule as the CLI): the page is then not reloaded automatically, reload it to see the new threshold. The `/__pc/*` routes do not exist in the build, and nothing from `levels/solutions` is bundled in it.
 
 Details: a short `PC_IMPROVE_TIMEOUT` may show "best known" on a level proven optimal with a longer budget; forcibly replacing a proven solution never degrades it, though (the old one is kept in `<id>.prev.txt` during the work, then restored if the new run proves nothing). A stuck job is killed by the server after the timeout + 90 s. The write routes rely on Vite's host checks: do not start the server with `--host` or `allowedHosts: true`.
 

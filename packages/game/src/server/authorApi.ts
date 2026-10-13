@@ -125,6 +125,7 @@ export function createAuthorApi(o: AuthorApiOptions) {
       proofKept: kept,
       warnings: s.warnings ?? [],
       tmxChanged: j.tmxChanged,
+      ...(s.goldTime !== undefined ? { goldTime: s.goldTime } : {}),
     };
   }
 

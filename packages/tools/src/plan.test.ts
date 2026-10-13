@@ -11,7 +11,7 @@ test('applySolution keeps the lower bound proven for the replaced solution', () 
   try {
     const base = fromAscii(['@....E']);
     // gold already below: the .tmx is never touched
-    const level = { ...base, thresholds: { ...base.thresholds, goldMoves: 1 } };
+    const level = { ...base, thresholds: { ...base.thresholds, goldMoves: 1, goldTime: 9 } };
     mkdirSync(join(dir, 'solutions'));
     const file = join(dir, 'solutions', `${level.id}.txt`);
     writeFileSync(file, '# best known — not proven optimal (proven lower bound ≥ 4)\nRRRRRLR\n');
@@ -32,10 +32,33 @@ test('applySolution: a level with a goldMoves gets platinumMoves, goldMoves stay
     const level = fromAscii(['@....E'], { id: 'p', thresholds: { goldMoves: 9 } });
     writeFileSync(join(dir, 'p.tmx'), writeTmx(level));
     const five = ['right', 'right', 'right', 'right', 'right'] as const;
-    expect(applySolution(dir, level, [...five], 0)).toEqual(['p: solution written (5 moves)']);
+    // no goldTime and no 9-move gold solution at hand: not guessed, reported
+    expect(applySolution(dir, level, [...five], 0)).toEqual([
+      'p: solution written (5 moves)',
+      'p: warning — goldTime missing: run npm run times -- p --apply [--from <folder of the 9-move gold solution>]',
+    ]);
     const tmx = readFileSync(join(dir, 'p.tmx'), 'utf8');
     expect(tmx).toMatch(/name="goldMoves" type="int" value="9"/);
     expect(tmx).toMatch(/name="platinumMoves" type="int" value="5"/);
+    expect(tmx).not.toMatch(/goldTime/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('applySolution: goldTime from the written solution when it has goldMoves moves', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'plan-'));
+  try {
+    const level = fromAscii(['@....E'], { id: 'p', thresholds: { goldMoves: 5 } });
+    writeFileSync(join(dir, 'p.tmx'), writeTmx(level));
+    const five = ['right', 'right', 'right', 'right', 'right'] as const;
+    expect(applySolution(dir, level, [...five], 0)).toEqual([
+      'p: solution written (5 moves)',
+      'p: goldTime = 1 s written (from the 5-move gold solution)',
+    ]);
+    const tmx = readFileSync(join(dir, 'p.tmx'), 'utf8');
+    expect(tmx).toMatch(/name="goldTime" type="\w+" value="1"/);
+    expect(tmx).not.toMatch(/platinumMoves/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

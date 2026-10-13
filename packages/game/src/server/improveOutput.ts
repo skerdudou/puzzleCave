@@ -5,8 +5,13 @@ export interface ImproveSummary {
   proven?: boolean;
   lowerBound?: number;
   unsolvable?: boolean;
+  /** goldTime (s) written into the level by this run (new level: gold reference time) */
+  goldTime?: number;
   warnings?: string[];
 }
+
+/** applyThresholds (packages/tools/src/commands.ts) */
+const GOLD_TIME = /^\S+: goldTime = (\d+(?:\.\d+)?) s written/;
 
 const RESULT =
   /^\S+: solution (?:saved|found) \((\d+)\) → (\d+) moves — (optimal \(proven\)|best known, proven lower bound ≥ (\d+))/;
@@ -24,6 +29,11 @@ export function parseImproveOutput(lines: readonly string[]): ImproveSummary {
       out.after = Number(m[2]);
       out.proven = m[4] === undefined;
       out.lowerBound = m[4] === undefined ? out.after : Number(m[4]);
+      continue;
+    }
+    const g = GOLD_TIME.exec(line);
+    if (g) {
+      out.goldTime = Number(g[1]);
       continue;
     }
     const n = NONE.exec(line);

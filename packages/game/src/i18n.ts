@@ -54,6 +54,7 @@ const fr = {
   optimizeFailed:
     'L’optimisation a échoué (voir la console du serveur) ; la solution reste enregistrée',
   tmxChanged: 'Seuils de médailles mis à jour dans le niveau : recharge la page pour les voir.',
+  goldTimeSet: 'Temps de référence (or) : {s} s',
   notShorter: 'Une solution de {n} coups, aussi courte ou plus courte, est déjà enregistrée.',
   replaceAnyway: 'Remplacer quand même',
   notShorterProven:
@@ -136,6 +137,7 @@ const en: Record<MessageKey, string> = {
   statusBest: 'best known, lower bound ≥ {lb}',
   optimizeFailed: 'Optimization failed (see the server console); the solution stays saved',
   tmxChanged: 'Medal thresholds updated in the level: reload the page to see them.',
+  goldTimeSet: 'Reference time (gold): {s} s',
   notShorter: 'A solution of {n} moves, as short or shorter, is already saved.',
   replaceAnyway: 'Replace anyway',
   notShorterProven:
@@ -216,6 +218,7 @@ const de: Record<MessageKey, string> = {
   optimizeFailed:
     'Die Optimierung ist fehlgeschlagen (siehe Serverkonsole); die Lösung bleibt gespeichert',
   tmxChanged: 'Medaillen-Schwellen im Level aktualisiert: lade die Seite neu, um sie zu sehen.',
+  goldTimeSet: 'Referenzzeit (Gold): {s} s',
   notShorter: 'Eine gleich lange oder kürzere Lösung mit {n} Zügen ist bereits gespeichert.',
   replaceAnyway: 'Trotzdem ersetzen',
   notShorterProven:
@@ -297,6 +300,7 @@ const es: Record<MessageKey, string> = {
   optimizeFailed:
     'La optimización ha fallado (consulta la consola del servidor); la solución sigue guardada',
   tmxChanged: 'Umbrales de medallas actualizados en el nivel: recarga la página para verlos.',
+  goldTimeSet: 'Tiempo de referencia (oro): {s} s',
   notShorter: 'Ya hay guardada una solución igual o más corta, de {n} movimientos.',
   replaceAnyway: 'Reemplazar de todos modos',
   notShorterProven:
@@ -378,6 +382,7 @@ const it: Record<MessageKey, string> = {
   optimizeFailed:
     'L’ottimizzazione non è riuscita (vedi la console del server); la soluzione resta salvata',
   tmxChanged: 'Soglie delle medaglie aggiornate nel livello: ricarica la pagina per vederle.',
+  goldTimeSet: 'Tempo di riferimento (oro): {s} s',
   notShorter: 'È già salvata una soluzione di {n} mosse, altrettanto corta o più corta.',
   replaceAnyway: 'Sostituisci comunque',
   notShorterProven:

@@ -202,8 +202,8 @@ function report(
     );
     if (apply && (!saved || n < saved.length)) {
       writeFileSync(solFile, text);
-      applyThresholds(dir, level, n);
       lines.push(`${id}: written to solutions/${id}.txt (optimal, proven)`);
+      lines.push(...applyThresholds(dir, level, r.moves, { previous: saved }));
     }
     return { ok: true, lines };
   }

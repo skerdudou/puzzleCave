@@ -89,3 +89,12 @@ test('proof kept: dedicated message', () => {
   expect(r.headline).toContain('3 coups');
   expect(r.improved).toBe(false);
 });
+
+test('done: the reference time written into the level is mentioned, before the warnings', () => {
+  const r = describeJob(
+    { ...base, before: 5, after: 3, proven: true, lowerBound: 3, goldTime: 12, warnings: ['w'] },
+    0,
+  );
+  expect(r.detail).toBe('Temps de référence (or) : 12 s\nw');
+  expect(describeJob({ ...base, before: 3, after: 3, proven: true }, 0).detail).toBe('');
+});

@@ -3,9 +3,11 @@ import { freemem, totalmem } from 'node:os';
 import { join } from 'node:path';
 import {
   formatMoves,
+  normalizeMoves,
   parseMoves,
   replay,
   solve,
+  type Dir,
   type LevelData,
   type ThresholdOverrides,
   type ExactEngine,
@@ -13,6 +15,7 @@ import {
 } from '@puzzlecave/core';
 import { loadPack, setMapProperty } from '@puzzlecave/tiled';
 import { inProcessMemoryMb } from './memory';
+import { goldTimeFor, solutionFeatures } from './times';
 
 /** first line (a comment, ignored by parseMoves) of a saved solution */
 export function solutionHeader(proven: boolean, lowerBound: number): string {
@@ -61,15 +64,95 @@ export function thresholdChanges(
   return n < limit ? { platinumMoves: n } : {};
 }
 
-/** writes the threshold changes of a new best length into the level's .tmx; true if any */
-export function applyThresholds(dir: string, level: LevelData, n: number, force = false): boolean {
-  const changes = Object.entries(thresholdChanges(level.thresholds, n, force));
-  if (!changes.length) return false;
+/** moves of the saved solution of a level (without refused moves), if it is readable and wins */
+export function savedWinningMoves(dir: string, level: LevelData): Dir[] | undefined {
+  const file = join(dir, 'solutions', `${level.id}.txt`);
+  if (!existsSync(file)) return undefined;
+  try {
+    const r = normalizeMoves(level, parseMoves(readFileSync(file, 'utf8')));
+    return r.status === 'won' ? r.moves : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** goldTime of a solution (undefined if it does not win) */
+function goldTimeOf(level: LevelData, moves: readonly Dir[]): number | undefined {
+  try {
+    return goldTimeFor(solutionFeatures(level, moves));
+  } catch {
+    return undefined;
+  }
+}
+
+/** goldTime to write and the length of the solution it comes from; {} when it is not guessed */
+export interface GoldTimeChoice {
+  goldTime?: number;
+  from?: number;
+}
+
+/**
+ * goldTime that goes with the threshold changes `changes` of a written solution `moves`, for a
+ * level without goldTime (undefined when it has one: an existing goldTime is only replaced by
+ * `times --force`). It comes from the gold reference solution: the written one when the write
+ * sets goldMoves; otherwise the solution saved before the write (`previous`) if its length is
+ * goldMoves, else the written one if its length is goldMoves; else it is not guessed ({}).
+ */
+export function goldTimeChoice(
+  level: LevelData,
+  changes: ThresholdChanges,
+  moves: readonly Dir[],
+  previous: readonly Dir[] | undefined,
+): GoldTimeChoice | undefined {
+  if (level.thresholds.goldTime !== undefined) return undefined;
+  const gold = changes.goldMoves ?? level.thresholds.goldMoves;
+  const written = normalizeMoves(level, moves).moves;
+  const candidates =
+    changes.goldMoves !== undefined
+      ? [written]
+      : [previous && normalizeMoves(level, previous).moves, written];
+  for (const c of candidates) {
+    if (c === undefined || c.length !== gold) continue;
+    const goldTime = goldTimeOf(level, c);
+    if (goldTime !== undefined) return { goldTime, from: c.length };
+  }
+  return {};
+}
+
+/**
+ * Writes into the level's .tmx the threshold changes of a new best solution `moves` (the one
+ * written to solutions/<id>.txt), and goldTime when the level has none (goldTimeChoice;
+ * `previous`: the winning solution saved before this write, if any). Returns the report lines
+ * about goldTime (written, or missing).
+ */
+export function applyThresholds(
+  dir: string,
+  level: LevelData,
+  moves: readonly Dir[],
+  o: { force?: boolean | undefined; previous?: readonly Dir[] | undefined } = {},
+): string[] {
+  const changes = thresholdChanges(level.thresholds, moves.length, o.force);
+  const time = goldTimeChoice(level, changes, moves, o.previous);
+  const props: [string, number][] = Object.entries(changes);
+  const lines: string[] = [];
+  if (time?.goldTime !== undefined) {
+    props.push(['goldTime', time.goldTime]);
+    lines.push(
+      `${level.id}: goldTime = ${time.goldTime} s written (from the ${time.from}-move gold solution)`,
+    );
+  } else if (time !== undefined) lines.push(goldTimeMissing(level));
+  if (!props.length) return lines;
   const tmx = join(dir, `${level.id}.tmx`);
   let xml = readFileSync(tmx, 'utf8');
-  for (const [name, value] of changes) xml = setMapProperty(xml, name, value);
+  for (const [name, value] of props) xml = setMapProperty(xml, name, value);
   writeFileSync(tmx, xml);
-  return true;
+  return lines;
+}
+
+/** warning for a level without goldTime whose gold reference solution is not at hand */
+export function goldTimeMissing(level: LevelData): string {
+  const gold = level.thresholds.goldMoves;
+  return `${level.id}: warning — goldTime missing: run npm run times -- ${level.id} --apply [--from <folder of the ${gold ?? 'gold'}-move gold solution>]`;
 }
 
 /** "<id>: platinumMoves (x) < proven optimum (n) — impossible threshold", if so */
@@ -127,6 +210,13 @@ export function validateCommand(dir: string): CommandResult {
   }
   const ok = lines.length === 0;
   lines.push(...warnings);
+  // no time medals without goldTime: allowed (e.g. a level in progress), but flagged
+  for (const level of pack.levels) {
+    if (level.thresholds.goldTime === undefined)
+      lines.push(
+        `${level.id}: warning — no goldTime (npm run times -- ${level.id} --apply [--from <folder>])`,
+      );
+  }
   // starting on water: allowed, but flagged so that it is a deliberate choice
   for (const level of pack.levels) {
     if (level.terrain[level.start.y * level.width + level.start.x] === 'water') {
@@ -199,11 +289,12 @@ export function reportSolve(
     try {
       const solution = join(dir, 'solutions', `${id}.txt`);
       const better = Object.keys(thresholdChanges(level.thresholds, n, o.force)).length > 0;
+      const previous = savedWinningMoves(dir, level);
       if (o.force || better || !existsSync(solution)) {
         mkdirSync(join(dir, 'solutions'), { recursive: true });
         writeFileSync(solution, `${solutionHeader(true, n)}\n${formatMoves(r.moves)}`);
       }
-      applyThresholds(dir, level, n, o.force);
+      lines.push(...applyThresholds(dir, level, r.moves, { force: o.force, previous }));
     } catch (err) {
       ok = false;
       lines.push(`${id}: write error — ${(err as Error).message}`);

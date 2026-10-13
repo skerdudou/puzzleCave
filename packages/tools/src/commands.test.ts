@@ -100,6 +100,77 @@ test('solve --apply keeps an existing goldMoves and sets platinumMoves to the pr
   expect(tmxOf(dir)).toBe(before);
 });
 
+const goldTimeOf = (dir: string) =>
+  /name="goldTime" type="\w+" value="([\d.]+)"/.exec(tmxOf(dir))?.[1];
+const withA = (thresholds: LevelData['thresholds']) => fromAscii(['@..E'], { id: 'a', thresholds });
+
+test('solve --apply on a new level: goldMoves and goldTime from the same solution', () => {
+  const dir = fixture();
+  const r = solveCommand(dir, ['a'], { ...opts, apply: true });
+  expect(r.lines).toContain('a: goldTime = 1 s written (from the 3-move gold solution)');
+  expect(tmxOf(dir)).toMatch(/name="goldMoves" type="int" value="3"/);
+  expect(goldTimeOf(dir)).toBe('1');
+  expect(validateCommand(dir).lines.filter((l) => l.startsWith('a:'))).toEqual([]);
+});
+
+test('solve --apply: an existing goldTime is never replaced', () => {
+  const dir = fixture();
+  writeFileSync(join(dir, 'a.tmx'), writeTmx(withA({ goldTime: 42 })));
+  const r = solveCommand(dir, ['a'], { ...opts, apply: true });
+  expect(tmxOf(dir)).toMatch(/name="goldMoves" type="int" value="3"/);
+  expect(goldTimeOf(dir)).toBe('42');
+  expect(r.lines.join('\n')).not.toMatch(/goldTime/);
+});
+
+test('solve --apply: a platinum write leaves goldTime untouched', () => {
+  const dir = fixture();
+  writeFileSync(join(dir, 'a.tmx'), writeTmx(withA({ goldMoves: 7, goldTime: 42 })));
+  mkdirSync(join(dir, 'solutions'));
+  writeFileSync(join(dir, 'solutions', 'a.txt'), 'RLRRR\n');
+  solveCommand(dir, ['a'], { ...opts, apply: true });
+  expect(tmxOf(dir)).toMatch(/name="platinumMoves" type="int" value="3"/);
+  expect(goldTimeOf(dir)).toBe('42');
+});
+
+test('solve --apply: existing goldMoves without goldTime, from a solution of goldMoves moves only', () => {
+  // the found solution has goldMoves moves: it is the gold reference
+  const equal = fixture();
+  writeFileSync(join(equal, 'a.tmx'), writeTmx(withA({ goldMoves: 3 })));
+  const r = solveCommand(equal, ['a'], { ...opts, apply: true });
+  expect(r.lines).toContain('a: goldTime = 1 s written (from the 3-move gold solution)');
+  expect(goldTimeOf(equal)).toBe('1');
+  // the saved solution has goldMoves moves (4 turns): it is preferred to the shorter written one
+  const saved = fixture();
+  writeFileSync(join(saved, 'a.tmx'), writeTmx(withA({ goldMoves: 7 })));
+  mkdirSync(join(saved, 'solutions'));
+  writeFileSync(join(saved, 'solutions', 'a.txt'), 'RLRLRRR\n');
+  const rs = solveCommand(saved, ['a'], { ...opts, apply: true });
+  expect(rs.lines).toContain('a: goldTime = 2 s written (from the 7-move gold solution)');
+  expect(tmxOf(saved)).toMatch(/name="platinumMoves" type="int" value="3"/);
+  expect(goldTimeOf(saved)).toBe('2');
+  // neither the saved nor the written solution has goldMoves moves: not guessed
+  const none = fixture();
+  writeFileSync(join(none, 'a.tmx'), writeTmx(withA({ goldMoves: 9 })));
+  const rn = solveCommand(none, ['a'], { ...opts, apply: true });
+  expect(rn.ok).toBe(true);
+  expect(rn.lines).toContain(
+    'a: warning — goldTime missing: run npm run times -- a --apply [--from <folder of the 9-move gold solution>]',
+  );
+  expect(goldTimeOf(none)).toBeUndefined();
+  expect(tmxOf(none)).toMatch(/name="platinumMoves" type="int" value="3"/);
+});
+
+test('validate: a level without goldTime is a warning, not an error', () => {
+  const dir = fixture();
+  writeFileSync(join(dir, 'a.tmx'), writeTmx(withA({ goldTime: 5 })));
+  const r = validateCommand(dir);
+  expect(r.ok).toBe(true);
+  expect(r.lines).toContain(
+    'z: warning — no goldTime (npm run times -- z --apply [--from <folder>])',
+  );
+  expect(r.lines.filter((l) => l.startsWith('a:'))).toEqual([]);
+});
+
 test('thresholdChanges: goldMoves for a new level, platinumMoves otherwise', () => {
   expect(thresholdChanges({}, 50)).toEqual({ goldMoves: 50 });
   expect(thresholdChanges({ goldMoves: 60 }, 50)).toEqual({ platinumMoves: 50 });
