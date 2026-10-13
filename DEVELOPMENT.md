@@ -57,7 +57,7 @@ errors on `platinumMoves > goldMoves` and on a platinum limit below the proven o
 proven lower bound written in the saved solution's header; it warns when the saved solution is
 longer than the platinum limit, or shorter (the limit should then be lowered).
 
-In author mode (`npm run dev` or `?dev` in the URL), all levels are unlocked and the result screen
+In author mode (`npm run dev` only; the published build never enables it), all levels are unlocked and the result screen
 lets you copy `goldMoves`/`goldTime` and the solution you played.
 
 ### Providing your own solution (levels too large for the exact solver)
@@ -230,7 +230,7 @@ The line per level gives saved → best length, rounds, variants (feasible), the
 
 ## Designer tools in the game (`npm run dev` only)
 
-In author mode (development server; the `?dev` option alone is not enough since there is no server behind it):
+In author mode (development server only):
 
 - **Save solution**: on the result screen, after finishing a level, this button sends your moves to the server, which replays them (refused if they do not win), writes them to `levels/solutions/<id>.txt` (header `# designer solution (not optimized)`) and then runs `improve <id> --apply` in the background. The game shows the progress (current step, elapsed time) then the result: "Optimized: X → Y moves (proven optimal | best known, lower bound ≥ L)", "Already optimal" or "No improvement". If a saved solution that is as short or shorter already exists, saving is refused and the "Replace anyway" button appears.
 - **Replay my solution / Replay optimized solution**: animated replay (8 moves/s at the start). Space: pause/play; ←/→: previous/next move; +/−: speed (1 to 20 moves/s); Home: back to the start; Esc: back. On-screen buttons do the same.

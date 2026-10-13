@@ -8,7 +8,8 @@ export const app = {
   author: false,
   init(): void {
     this.data = this.store.load();
-    this.author = import.meta.env.DEV || new URLSearchParams(location.search).has('dev');
+    // development server only: the published build never opens author mode (no ?dev switch)
+    this.author = import.meta.env.DEV;
     setLang(this.data.settings.lang ?? detectLang(navigator.languages ?? []));
   },
   persist(): void {
