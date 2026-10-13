@@ -8,8 +8,8 @@ import { LEVELS_DIR } from './paths';
 test('all repository levels load and belong to a chapter', () => {
   const pack = loadPack(LEVELS_DIR);
   expect(pack.errors).toEqual([]);
-  expect(pack.levels.length).toBe(22);
-  expect(pack.chapters.map((c) => c.id)).toEqual(['easy', 'medium', 'hard']);
+  expect(pack.levels.length).toBe(37);
+  expect(pack.chapters.map((c) => c.id)).toEqual(['easy', 'medium', 'hard', 'expert']);
 });
 
 test('all reference solutions win', () => {

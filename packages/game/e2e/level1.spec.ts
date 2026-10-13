@@ -20,10 +20,10 @@ async function startPc01(page: Page): Promise<void> {
   await expect.poll(() => scene(page)).toBe('Menu');
   await page.keyboard.press('Enter');
   await expect.poll(() => scene(page)).toBe('Select');
-  // the selected level shows its medal limits (pc-01: gold 17 moves)
+  // the selected level shows its medal limits (pc-01: gold 26 moves)
   const th = (await debug(page)).thresholds as { kind: string; tiers: { text: string }[] }[];
   expect(th[0]?.kind).toBe('moves');
-  expect(th[0]?.tiers.map((x) => x.text)).toEqual(['≤ 17', '≤ 19', '≤ 22']);
+  expect(th[0]?.tiers.map((x) => x.text)).toEqual(['≤ 26', '≤ 29', '≤ 33']);
   await page.keyboard.press('Enter');
   await expect.poll(() => scene(page)).toBe('Game');
   expect((await debug(page)).levelId).toBe('pc-01');

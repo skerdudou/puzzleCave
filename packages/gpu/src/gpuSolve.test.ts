@@ -94,7 +94,7 @@ describe.skipIf(!gpu)('GPU engine', () => {
   }, 600_000);
 
   test.each([
-    ['pc-01', 17],
+    ['pc-01', 26],
     ['pc-19', 88],
     ['pc-03', 401],
     ['pc-06', 176],

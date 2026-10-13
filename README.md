@@ -33,7 +33,7 @@ stops you… it drowns you.
 
 ## Chapters
 
-The levels are grouped into chapters — **Easy**, **Medium** and **Hard**. Finish a level to unlock the
+The levels are grouped into chapters — **Easy**, **Medium**, **Hard** and **Expert**. Finish a level to unlock the
 next one; finish a few levels of a chapter to open the next chapter.
 
 ## Controls
