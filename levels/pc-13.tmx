@@ -3,7 +3,7 @@
  <properties>
   <property name="name" value="Bomberman 2 C"/>
   <property name="author" value="moineau"/>
-  <property name="goldMoves" type="int" value="450"/>
+  <property name="goldMoves" type="int" value="473"/>
   <property name="platinumMoves" type="int" value="430"/>
   <property name="goldTime" type="int" value="65"/>
  </properties>

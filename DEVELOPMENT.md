@@ -51,6 +51,10 @@ tests before building; pushes to `main` do not deploy anything.
   plausible strategy — another block-to-water assignment, door order, a simpler route —, kept
   roughly between optimum + 3 and optimum + 25 %), or, when no such solution exists,
   `max(optimum + 3, ⌈1.1 × optimum⌉)`; `platinumMoves` is the optimum (or best known).
+- Levels without a proven optimum (Hard and Expert chapters): `goldMoves` stays within
+  `[⌈1.1 p⌉, ⌊1.25 p⌋]` of the best known `p = platinumMoves` — a natural solution in that window
+  (often an earlier, plainer solution of the level), else `max(p + 3, ⌈1.1 p⌉)`. When a shorter
+  platinum solution is found, `goldMoves` is re-evaluated only once the gap leaves that window.
 - Gold reference solution: when `goldMoves` comes from a real solution that differs from the saved
   (platinum) one, that solution is kept in `levels/solutions/gold/<id>.txt`; `validate` replays it
   and errors unless it wins in exactly `goldMoves` moves. `goldTime` comes from it

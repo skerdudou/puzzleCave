@@ -29,7 +29,8 @@ Each level awards a medal for the number of **moves** — gold, silver or bronze
 have a medal for the **time** you took). The level selection screen shows the limits for each
 medal. Gold means a good, honest solution; you do not need to find the cleverest route to get it:
 from the Medium chapter on, the gold limit is always above the best solution (a good alternative
-route, or about 10 % more moves than the best one).
+route, or about 10 % more moves than the best one; on the Hard and Expert levels, between 10 % and
+25 % more moves than the best known solution).
 
 ### Master mode and platinum
 
