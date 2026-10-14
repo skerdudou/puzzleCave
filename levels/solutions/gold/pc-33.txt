@@ -1,0 +1,2 @@
+# gold reference — natural solution (50 moves): south bridge at (6,5), then reaches the exit from the right column (10,7)/(10,8)
+DLLURRRLLURRRDDDDRRUUUDRRDDULLDLLUUUURRRURDDDDDDDL

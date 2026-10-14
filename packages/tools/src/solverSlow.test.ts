@@ -20,7 +20,7 @@ describe.skipIf(!process.env.SLOW)('compact engine against v2 (repository levels
       if (fast.status !== 'solved' || v2.status !== 'solved') return;
       expect(fast.moves.length).toBe(v2.moves.length);
       expect(replay(l, fast.moves).status).toBe('won');
-      expect(fast.moves.length).toBe(l.thresholds.goldMoves);
+      expect(fast.moves.length).toBe(l.thresholds.platinumMoves ?? l.thresholds.goldMoves);
     },
     600_000,
   );

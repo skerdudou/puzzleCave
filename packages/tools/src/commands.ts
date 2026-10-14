@@ -208,6 +208,26 @@ export function validateCommand(dir: string): CommandResult {
       lines.push(`${level.id}: unreadable solution — ${(err as Error).message}`);
     }
   }
+  // gold reference solutions (solutions/gold/<id>.txt, for levels whose goldMoves is longer
+  // than the saved platinum solution): must win in exactly goldMoves moves
+  let golds = 0;
+  for (const level of pack.levels) {
+    const file = join(dir, 'solutions', 'gold', `${level.id}.txt`);
+    if (!existsSync(file)) continue;
+    golds++;
+    try {
+      const end = replay(level, parseMoves(readFileSync(file, 'utf8')));
+      const gold = level.thresholds.goldMoves;
+      if (end.status !== 'won')
+        lines.push(`${level.id}: the gold reference solution does not win (status ${end.status})`);
+      else if (end.moves !== gold)
+        lines.push(
+          `${level.id}: the gold reference solution (${end.moves} moves) differs from goldMoves (${gold ?? '—'})`,
+        );
+    } catch (err) {
+      lines.push(`${level.id}: unreadable gold reference solution — ${(err as Error).message}`);
+    }
+  }
   const ok = lines.length === 0;
   lines.push(...warnings);
   // no time medals without goldTime: allowed (e.g. a level in progress), but flagged
@@ -224,7 +244,7 @@ export function validateCommand(dir: string): CommandResult {
     }
   }
   lines.push(
-    `${pack.levels.length} level(s) loaded, ${checked} solution(s) replayed${ok ? ' — OK' : ''}`,
+    `${pack.levels.length} level(s) loaded, ${checked} solution(s) replayed${golds ? ` (+ ${golds} gold reference(s))` : ''}${ok ? ' — OK' : ''}`,
   );
   return { ok, lines };
 }

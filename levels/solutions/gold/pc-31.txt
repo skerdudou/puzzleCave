@@ -1,0 +1,2 @@
+# gold reference — natural solution (47 moves): leaves the upper block (2,1) where it is and walks around it
+RUULRRRUULDRDLULDDDLDRRRURDLDRRRLLUURRRRDDDRDDD

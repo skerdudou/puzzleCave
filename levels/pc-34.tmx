@@ -3,8 +3,9 @@
  <properties>
   <property name="name" value="Bottleneck"/>
   <property name="author" value="moineau"/>
-  <property name="goldMoves" type="int" value="45"/>
+  <property name="goldMoves" type="int" value="50"/>
   <property name="goldTime" type="int" value="10"/>
+  <property name="platinumMoves" type="int" value="45"/>
  </properties>
  <tileset firstgid="1" source="tileset.tsx"/>
  <layer id="1" name="terrain" width="9" height="9">

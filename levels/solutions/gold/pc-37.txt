@@ -1,0 +1,2 @@
+# gold reference — natural solution (48 moves): never uses the far left block (3,3): only the right-hand blocks
+DRRRDRRRRURURDRDULLDRLLLLURRRURDRDDUULLDRURDDDDD

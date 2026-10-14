@@ -1,0 +1,3 @@
+# gold reference — natural solution (90 moves): leaves the start island to the south (4,5) before the east (7,2)
+RRDLULDDDRRDDLLUUUULLUURRRRDDLLUDLLUURRRRRRRURDDDD
+DULLDLLLRDDLLUUUUUDLLUURRRRRRRURDDDDDDDL

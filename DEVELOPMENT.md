@@ -46,6 +46,16 @@ tests before building; pushes to `main` do not deploy anything.
   (`max(⌈1.1 g⌉, g + 2)` and `max(⌈1.25 g⌉, g + 5)`) unless `silverMoves` / `bronzeMoves` are set.
 - `platinumMoves`: the best known solution length (master class, often another route); the
   platinum limit is `goldMoves` when it is absent. It must not exceed `goldMoves`.
+- On levels with master mode, gold never demands the optimum: `goldMoves` is either the length
+  of a **natural solution** (another well-optimised solution following a genuinely different,
+  plausible strategy — another block-to-water assignment, door order, a simpler route —, kept
+  roughly between optimum + 3 and optimum + 25 %), or, when no such solution exists,
+  `max(optimum + 3, ⌈1.1 × optimum⌉)`; `platinumMoves` is the optimum (or best known).
+- Gold reference solution: when `goldMoves` comes from a real solution that differs from the saved
+  (platinum) one, that solution is kept in `levels/solutions/gold/<id>.txt`; `validate` replays it
+  and errors unless it wins in exactly `goldMoves` moves. `goldTime` comes from it
+  (`npm run times -- <id> --from levels/solutions/gold --apply --force`). For a level on the
+  `+10 %` rule there is no such file: `goldTime` stays the time of the optimal route.
 - Master mode (`Mode` `'master'` in `@puzzlecave/core`): water drowns the player and there is no
   undo (`Session.canUndo` is false; a restart cannot be undone either). It unlocks on a level
   once the save holds gold (moves) there — or a platinum from an older save — and author mode does

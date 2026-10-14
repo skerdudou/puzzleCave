@@ -1,0 +1,3 @@
+# gold reference — natural solution (70 moves): keeps (6,3) open and reaches the exit over (7,4) with the lower right block
+URRRRRDDRRUULLLRRRDRRULLDRDDDRDLULLDDRULURDRUUULUU
+RRDLULDRDLLRUULLDDDL

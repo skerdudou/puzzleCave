@@ -58,7 +58,8 @@ test('master mode: locked before gold, no undo, water drowns, platinum', async (
   const rows = (await field(page, 'thresholds')) as Rows;
   expect(rows.map((r) => r.kind)).toEqual(['moves', 'time', 'master']);
   expect(rows[0]!.tiers.map((t) => t.medal)).toEqual(['gold', 'silver', 'bronze']);
-  expect(rows[2]!.tiers).toEqual([{ medal: 'platinum', text: `≤ ${gold} · ≤ 0:15.00` }]);
+  const platinum = level.thresholds.platinumMoves ?? gold;
+  expect(rows[2]!.tiers).toEqual([{ medal: 'platinum', text: `≤ ${platinum} · ≤ 0:16.00` }]);
   expect(await field(page, 'masterLine')).toBe('');
   await page.keyboard.press('KeyP');
   await page.waitForTimeout(300);
@@ -151,8 +152,9 @@ async function setHidden(page: Page, hidden: boolean): Promise<void> {
 test('master mode: a countdown to the bronze time, paused while hidden; past it the run fails', async ({
   page,
 }) => {
-  // pc-31: goldTime 9 s, so the bronze time is max(9 × 1.5, 9 + 6) = 15 s
-  expect(level.thresholds.goldTime).toBe(9);
+  // pc-31: goldTime 10 s, so the bronze time is max(10 × 1.5, 10 + 6) = 16 s
+  expect(level.thresholds.goldTime).toBe(10);
+  const LIMIT = 16_000;
   await page.clock.install();
   await withMasterOpen(page);
   await page.goto('/');
@@ -165,7 +167,7 @@ test('master mode: a countdown to the bronze time, paused while hidden; past it 
   await expect.poll(() => field(page, 'scene')).toBe('Game');
   expect(await field(page, 'mode')).toBe('master');
   // before the first move, the whole limit
-  expect(await field(page, 'timeLeftMs')).toBe(15_000);
+  expect(await field(page, 'timeLeftMs')).toBe(LIMIT);
   expect(await field(page, 'timeWarn')).toBe(false);
 
   // from here the page's time only moves when the test says so (a jump, then a few frames)
@@ -182,12 +184,12 @@ test('master mode: a countdown to the bronze time, paused while hidden; past it 
   };
   await play(page, solution.slice(0, 1));
   expect(await field(page, 'moves')).toBe(1);
-  await after(11_000);
-  await left(15_000 - 11_050);
+  await after(11_500);
+  await left(LIMIT - 11_550);
   expect(await field(page, 'timeWarn')).toBe(false);
-  await after(500);
-  // the last quarter of a 15 s limit: the countdown warns
-  await left(15_000 - 11_600);
+  await after(1000);
+  // the last quarter of a 16 s limit: the countdown warns
+  await left(LIMIT - 12_600);
   expect(await field(page, 'timeWarn')).toBe(true);
 
   // a minute in another app: not counted
@@ -196,7 +198,7 @@ test('master mode: a countdown to the bronze time, paused while hidden; past it 
   await setHidden(page, false);
   await page.clock.runFor(50);
   expect(await field(page, 'status')).toBe('playing');
-  await left(15_000 - 11_650);
+  await left(LIMIT - 12_650);
 
   // past the limit: failed, like drowning; moves do nothing more
   await after(3500);
@@ -212,7 +214,7 @@ test('master mode: a countdown to the bronze time, paused while hidden; past it 
   await page.clock.runFor(50);
   expect(await field(page, 'status')).toBe('playing');
   expect(await field(page, 'moves')).toBe(0);
-  expect(await field(page, 'timeLeftMs')).toBe(15_000);
+  expect(await field(page, 'timeLeftMs')).toBe(LIMIT);
   await page.clock.resume();
 });
 
@@ -230,7 +232,7 @@ test('normal mode: no time limit, the clock does not count while hidden', async 
   expect(await field(page, 'timeLeftMs')).toBeNull();
   await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
   await play(page, solution.slice(0, 1));
-  // past pc-31's bronze time (15 s): nothing happens in normal mode
+  // past pc-31's bronze time (16 s): nothing happens in normal mode
   await page.clock.fastForward(20_000);
   await page.clock.runFor(50);
   await setHidden(page, true);

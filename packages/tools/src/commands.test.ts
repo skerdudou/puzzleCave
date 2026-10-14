@@ -171,6 +171,27 @@ test('validate: a level without goldTime is a warning, not an error', () => {
   expect(r.lines.filter((l) => l.startsWith('a:'))).toEqual([]);
 });
 
+test('validate: the gold reference solution must win in exactly goldMoves moves', () => {
+  const dir = fixture();
+  writeFileSync(join(dir, 'a.tmx'), writeTmx(withA({ goldMoves: 5, platinumMoves: 3 })));
+  mkdirSync(join(dir, 'solutions', 'gold'), { recursive: true });
+  writeFileSync(join(dir, 'solutions', 'a.txt'), '# optimal (proven)\nRRR\n');
+  writeFileSync(join(dir, 'solutions', 'gold', 'a.txt'), 'RLRRR\n');
+  const good = validateCommand(dir);
+  expect(good.ok).toBe(true);
+  expect(good.lines.at(-1)).toMatch(/1 solution\(s\) replayed \(\+ 1 gold reference\(s\)\) — OK$/);
+  writeFileSync(join(dir, 'solutions', 'gold', 'a.txt'), 'RRR\n');
+  const short = validateCommand(dir);
+  expect(short.ok).toBe(false);
+  expect(short.lines).toContain(
+    'a: the gold reference solution (3 moves) differs from goldMoves (5)',
+  );
+  writeFileSync(join(dir, 'solutions', 'gold', 'a.txt'), 'RLRR\n');
+  expect(validateCommand(dir).lines.join('\n')).toMatch(
+    /a: the gold reference solution does not win/,
+  );
+});
+
 test('thresholdChanges: goldMoves for a new level, platinumMoves otherwise', () => {
   expect(thresholdChanges({}, 50)).toEqual({ goldMoves: 50 });
   expect(thresholdChanges({ goldMoves: 60 }, 50)).toEqual({ platinumMoves: 50 });

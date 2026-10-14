@@ -3,8 +3,9 @@
  <properties>
   <property name="name" value="Drop Shaft"/>
   <property name="author" value="moineau"/>
-  <property name="goldMoves" type="int" value="72"/>
+  <property name="goldMoves" type="int" value="80"/>
   <property name="goldTime" type="int" value="14"/>
+  <property name="platinumMoves" type="int" value="72"/>
  </properties>
  <tileset firstgid="1" source="tileset.tsx"/>
  <layer id="1" name="terrain" width="11" height="7">

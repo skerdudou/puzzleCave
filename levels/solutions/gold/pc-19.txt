@@ -1,0 +1,4 @@
+# gold reference — natural solution (110 moves): fills the left water (2,2) first, then the right-hand water and key
+URRDRRURRRRRRDRUUUURULLLLLLLLLDLURRRRRRRRRDDDDDLLL
+LLLLLLURRRRRRRRDRUURULLLRRUULLLLLLLLLUULURRRRDRRUR
+LDLLURRRRR

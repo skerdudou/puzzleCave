@@ -3,8 +3,9 @@
  <properties>
   <property name="name" value="Twin Channels"/>
   <property name="author" value="moineau"/>
-  <property name="goldMoves" type="int" value="61"/>
-  <property name="goldTime" type="int" value="11"/>
+  <property name="goldMoves" type="int" value="67"/>
+  <property name="goldTime" type="int" value="13"/>
+  <property name="platinumMoves" type="int" value="61"/>
  </properties>
  <tileset firstgid="1" source="tileset.tsx"/>
  <layer id="1" name="terrain" width="14" height="7">
