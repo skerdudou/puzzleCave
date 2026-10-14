@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import type { Dir } from '@puzzlecave/core';
-import { DRAG_STEPS, DragSteps, nearestDragStep, shiftDragStep } from './drag';
+import { DRAG_STEPS, DRAG_STEP_DEFAULT, DragSteps, nearestDragStep, shiftDragStep } from './drag';
 
 /** the moves emitted by a finger going down at the first point then through the others */
 function drag(points: [number, number][], step = 10): Dir[] {
@@ -113,9 +113,10 @@ test('a turn just after an overshoot needs a clear perpendicular travel', () => 
 test('the offered distances: nearest and ± one notch, kept within range', () => {
   expect(DRAG_STEPS[0]).toBeLessThan(DRAG_STEPS.at(-1)!);
   expect(nearestDragStep(25)).toBe(24);
-  expect(nearestDragStep(1000)).toBe(64);
+  expect(nearestDragStep(1000)).toBe(80);
+  expect(DRAG_STEPS).toContain(DRAG_STEP_DEFAULT);
   expect(shiftDragStep(24, 1)).toBe(32);
   expect(shiftDragStep(24, -1)).toBe(20);
   expect(shiftDragStep(16, -1)).toBe(16);
-  expect(shiftDragStep(64, 1)).toBe(64);
+  expect(shiftDragStep(80, 1)).toBe(80);
 });

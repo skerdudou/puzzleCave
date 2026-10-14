@@ -77,14 +77,15 @@ test('invalid settings replaced by defaults', () => {
   expect(new SaveStore(kv).load().settings).toEqual({
     sound: true,
     lang: null,
-    dragStep: 24,
+    dragStep: 40,
+    dragStepDefault: 40,
     repeatRate: 10,
     vibration: true,
     tapZones: 'off',
   });
 });
 
-test('a save from before the drag, vibration and tap zone options: defaults (24 px, on, off)', () => {
+test('a save from before the drag, vibration and tap zone options: defaults (40 px, on, off)', () => {
   const kv = mem({
     [SAVE_KEY]: JSON.stringify({
       version: 1,
@@ -95,7 +96,8 @@ test('a save from before the drag, vibration and tap zone options: defaults (24 
   expect(new SaveStore(kv).load().settings).toEqual({
     sound: false,
     lang: 'fr',
-    dragStep: 24,
+    dragStep: 40,
+    dragStepDefault: 40,
     repeatRate: 12,
     vibration: true,
     tapZones: 'off',
@@ -105,13 +107,51 @@ test('a save from before the drag, vibration and tap zone options: defaults (24 
 test.each([
   [16, 16],
   [33, 32],
-  [1000, 64],
+  [1000, 80],
   [-5, 16],
 ])('dragStep %j → %i (snapped to an offered distance)', (raw, expected) => {
   const kv = mem({
     [SAVE_KEY]: JSON.stringify({ version: 1, settings: { dragStep: raw }, levels: {} }),
   });
   expect(new SaveStore(kv).load().settings.dragStep).toBe(expected);
+});
+
+test('a drag distance left at the old default (24 px) follows the new one; a chosen one stays', () => {
+  const load = (settings: object) =>
+    new SaveStore(mem({ [SAVE_KEY]: JSON.stringify({ version: 1, settings, levels: {} }) })).load()
+      .settings.dragStep;
+  // saves from before the field: their default was 24 px
+  expect(load({ dragStep: 24 })).toBe(40);
+  expect(load({ dragStep: 20 })).toBe(20);
+  expect(load({ dragStep: 32 })).toBe(32);
+  // written since: 24 px is a choice now, kept
+  expect(load({ dragStep: 24, dragStepDefault: 40 })).toBe(24);
+  expect(load({ dragStep: 40, dragStepDefault: 40 })).toBe(40);
+  // a later default change moves the players still at 40 px
+  expect(load({ dragStep: 40, dragStepDefault: 48 })).toBe(40);
+  expect(load({ dragStep: 48, dragStepDefault: 48 })).toBe(40);
+  // round trip: the migrated save keeps its value
+  const kv = mem({
+    [SAVE_KEY]: JSON.stringify({ version: 1, settings: { dragStep: 24 }, levels: {} }),
+  });
+  const d = new SaveStore(kv).load();
+  d.settings.dragStep = 24; // chosen again by the player
+  new SaveStore(kv).save(d);
+  expect(new SaveStore(kv).load().settings.dragStep).toBe(24);
+});
+
+test('master records are kept', () => {
+  const rec = { completed: true, medals: {}, masterBestMoves: 31, masterBestTimeMs: 9000 };
+  const kv = mem({
+    [SAVE_KEY]: JSON.stringify({
+      version: 1,
+      settings: {},
+      levels: { a: rec, b: { ...rec, masterBestMoves: 'x' } },
+    }),
+  });
+  const { levels } = new SaveStore(kv).load();
+  expect(levels.a).toEqual(rec);
+  expect(levels.b).toEqual({ completed: true, medals: {}, masterBestTimeMs: 9000 });
 });
 
 test.each(['off', 'screen', 'player'])('tap zones %s are kept', (tapZones) => {

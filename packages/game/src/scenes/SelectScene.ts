@@ -12,9 +12,10 @@ import { formatTime } from '../format';
 import { getLang, t } from '../i18n';
 import { onSceneKeyDown } from '../input/sceneKeys';
 import { chapters, hasMaster, levelById, locate } from '../levels';
-import { thresholdRows, type MedalKind } from '../medalInfo';
+import { masterStatus, thresholdRows, type MedalKind } from '../medalInfo';
 import { syncMusic } from '../music';
 import { COLORS, drawMedal, drawThresholdLine, makeButton, px, textStyle } from '../ui';
+import { isTouchDevice } from '../touch';
 import { authorServerAvailable, fetchSolution } from '../author/client';
 
 export class SelectScene extends Phaser.Scene {
@@ -75,8 +76,19 @@ export class SelectScene extends Phaser.Scene {
   private currentId(): string {
     return chapters[this.ci]!.levels[this.li]!;
   }
+  /**
+   * A low screen (phone in landscape): the grid on the left, the level's details on the right,
+   * instead of one under the other.
+   */
+  private side(): boolean {
+    return this.scale.width > this.scale.height && this.scale.height < px(600);
+  }
+  /** Width of the grid's column (the whole screen, or its left part). */
+  private gridAreaW(): number {
+    return this.side() ? Math.round(this.scale.width * 0.55) : this.scale.width;
+  }
   private cols(): number {
-    return Math.min(6, Math.max(3, Math.floor((this.scale.width - px(32)) / px(64))));
+    return Math.min(6, Math.max(3, Math.floor((this.gridAreaW() - px(32)) / px(64))));
   }
 
   private redraw(): void {
@@ -94,21 +106,23 @@ export class SelectScene extends Phaser.Scene {
     if (this.ci > 0) makeButton(this, px(30), px(30), '‹', () => this.switchChapter(-1), 18);
     if (this.ci < chapters.length - 1)
       makeButton(this, this.scale.width - px(30), px(30), '›', () => this.switchChapter(1), 18);
-    // The help can wrap to two lines on a small screen: it stays anchored at the bottom.
-    const help = this.chapterOpen(this.ci)
-      ? this.add
-          .text(
-            cx,
-            this.scale.height - px(14),
-            t(this.masterChapter() ? 'selectHelp' : 'selectHelpBasic'),
-            {
-              ...textStyle(11, COLORS.dim),
-              align: 'center',
-              wordWrap: { width: this.scale.width - px(32) },
-            },
-          )
-          .setOrigin(0.5, 1)
-      : undefined;
+    // Keyboard help (not on a touch screen). It can wrap to two lines on a small screen: it
+    // stays anchored at the bottom.
+    const help =
+      this.chapterOpen(this.ci) && !isTouchDevice()
+        ? this.add
+            .text(
+              cx,
+              this.scale.height - px(14),
+              t(this.masterChapter() ? 'selectHelp' : 'selectHelpBasic'),
+              {
+                ...textStyle(11, COLORS.dim),
+                align: 'center',
+                wordWrap: { width: this.scale.width - px(32) },
+              },
+            )
+            .setOrigin(0.5, 1)
+        : undefined;
     const menu = makeButton(
       this,
       px(40),
@@ -139,7 +153,8 @@ export class SelectScene extends Phaser.Scene {
     const cell = px(56);
     const gap = px(8);
     const gridW = cols * cell + (cols - 1) * gap;
-    const x0 = (this.scale.width - gridW) / 2;
+    const side = this.side();
+    const x0 = (this.gridAreaW() - gridW) / 2;
     const y0 = px(64);
     const g = this.add.graphics();
     ch.levels.forEach((id, i) => {
@@ -185,12 +200,15 @@ export class SelectScene extends Phaser.Scene {
 
     const level = levelById(this.currentId());
     const rec = app.data.levels[level.id];
-    let y = y0 + Math.ceil(ch.levels.length / cols) * (cell + gap) + px(16);
-    this.add.text(cx, y, level.name, textStyle(16)).setOrigin(0.5);
+    // the details: under the grid, or in the right column on a low screen
+    const infoW = side ? this.scale.width - this.gridAreaW() : this.scale.width;
+    const icx = side ? this.gridAreaW() + infoW / 2 : cx;
+    let y = side ? y0 + px(8) : y0 + Math.ceil(ch.levels.length / cols) * (cell + gap) + px(16);
+    this.add.text(icx, y, level.name, textStyle(16)).setOrigin(0.5);
     y += px(22);
     if (level.author)
       this.add
-        .text(cx, y, t('by', { author: level.author }), textStyle(12, COLORS.dim))
+        .text(icx, y, t('by', { author: level.author }), textStyle(12, COLORS.dim))
         .setOrigin(0.5);
     y += px(22);
     const th = resolveThresholds(level.thresholds);
@@ -198,7 +216,7 @@ export class SelectScene extends Phaser.Scene {
     const rows = thresholdRows(th, master !== 'none');
     const tg = this.add.graphics();
     for (const r of rows) {
-      drawThresholdLine(this, tg, cx, y, t(r.kind), r.tiers);
+      drawThresholdLine(this, tg, icx, y, t(r.kind), r.tiers);
       y += px(18);
     }
     setDebug({ thresholds: rows, master });
@@ -207,25 +225,38 @@ export class SelectScene extends Phaser.Scene {
       const time = rec.bestTimeMs !== undefined ? formatTime(rec.bestTimeMs) : '–';
       this.add
         .text(
-          cx,
+          icx,
           y,
           t('recordLine', { moves: rec.bestMoves ?? '–', time }),
           textStyle(12, COLORS.dim),
         )
         .setOrigin(0.5);
     }
-    y += px(36);
+    // master mode on its own line: best master run, not yet, or locked (said under the buttons)
+    const ms = masterStatus(rec, master !== 'none');
+    const masterText =
+      ms.kind === 'best'
+        ? t('masterBest', { moves: ms.moves, time: formatTime(ms.timeMs) })
+        : ms.kind === 'notYet'
+          ? t('masterNotYet')
+          : '';
+    if (masterText) {
+      y += px(18);
+      this.add.text(icx, y, masterText, textStyle(12, '#9be7ff')).setOrigin(0.5);
+    }
+    setDebug({ masterLine: masterText });
+    y += px(40);
     if (this.levelOpen(this.ci, this.li)) {
       const open = master === 'open';
-      makeButton(this, open ? cx - px(80) : cx, y, t('play'), () => this.play('normal'), 16);
-      if (open) makeButton(this, cx + px(80), y, t('master'), () => this.play('master'), 14);
+      makeButton(this, open ? icx - px(80) : icx, y, t('play'), () => this.play('normal'), 16);
+      if (open) makeButton(this, icx + px(80), y, t('master'), () => this.play('master'), 14);
       else if (master === 'locked') {
-        y += px(30);
+        y += px(36);
         this.add
-          .text(cx, y, `🔒 ${t('masterLocked')}`, {
+          .text(icx, y, `🔒 ${t('masterLocked')}`, {
             ...textStyle(11, COLORS.dim),
             align: 'center',
-            wordWrap: { width: this.scale.width - px(32) },
+            wordWrap: { width: infoW - px(32) },
           })
           .setOrigin(0.5);
       }
@@ -233,10 +264,10 @@ export class SelectScene extends Phaser.Scene {
     if (authorServerAvailable()) {
       // the button only appears if a solution is saved (asynchronous read)
       const id = level.id;
-      const by = y + px(44);
+      const by = y + px(52);
       void fetchSolution(id).then((sol) => {
         if (!sol || !this.sys.isActive() || this.currentId() !== id) return;
-        const b = makeButton(this, cx, by, t('replaySaved'), () => this.replaySaved(), 12);
+        const b = makeButton(this, icx, by, t('replaySaved'), () => this.replaySaved(), 12);
         b.setName('replaySaved');
       });
     }

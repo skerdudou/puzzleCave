@@ -1,6 +1,6 @@
 import type { LevelRecord, Medal } from '@puzzlecave/core';
 import { isLang, type Lang } from './i18n';
-import { DRAG_STEP_DEFAULT, nearestDragStep } from './input/drag';
+import { DRAG_STEP_DEFAULT, OLD_DRAG_STEP_DEFAULT, nearestDragStep } from './input/drag';
 import { isTapZoneMode, type TapZoneMode } from './input/tapZones';
 
 export interface Settings {
@@ -8,6 +8,11 @@ export interface Settings {
   lang: Lang | null;
   /** continuous drag: CSS pixels per move (one of DRAG_STEPS) */
   dragStep: number;
+  /**
+   * The default dragStep when this save was written: a dragStep still equal to it follows the
+   * default when it changes (a value the player chose stays).
+   */
+  dragStepDefault: number;
   vibration: boolean;
   repeatRate: number;
   /** optional tap zones, around the centre of the play area or around the player */
@@ -33,6 +38,7 @@ export function defaultSave(): SaveData {
       sound: true,
       lang: null,
       dragStep: DRAG_STEP_DEFAULT,
+      dragStepDefault: DRAG_STEP_DEFAULT,
       repeatRate: 10,
       vibration: true,
       tapZones: 'off',
@@ -63,14 +69,17 @@ function sanitiseSettings(raw: unknown): Settings {
       ? (raw as Record<string, unknown>)
       : {};
   const lang = isLang(s.lang) || s.lang === null ? s.lang : d.lang;
+  const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+  // the default the save was written with (saves from before the field: the old one)
+  const savedDefault = isNum(s.dragStepDefault) ? s.dragStepDefault : OLD_DRAG_STEP_DEFAULT;
   return {
     sound: typeof s.sound === 'boolean' ? s.sound : d.sound,
     lang,
-    // older saves had a swipe threshold instead: they get the default distance
+    // older saves had a swipe threshold instead: they get the default distance; a distance
+    // left at the default of its time follows the current default
     dragStep:
-      typeof s.dragStep === 'number' && Number.isFinite(s.dragStep)
-        ? nearestDragStep(s.dragStep)
-        : d.dragStep,
+      isNum(s.dragStep) && s.dragStep !== savedDefault ? nearestDragStep(s.dragStep) : d.dragStep,
+    dragStepDefault: d.dragStepDefault,
     repeatRate: clampNumber(s.repeatRate, 4, 20, d.repeatRate),
     vibration: typeof s.vibration === 'boolean' ? s.vibration : d.vibration,
     // older saves have none: off
@@ -93,6 +102,8 @@ function sanitiseRecord(raw: unknown): LevelRecord | null {
   const rec: LevelRecord = { completed: raw.completed === true, medals };
   if (isCount(raw.bestMoves)) rec.bestMoves = raw.bestMoves;
   if (isCount(raw.bestTimeMs)) rec.bestTimeMs = raw.bestTimeMs;
+  if (isCount(raw.masterBestMoves)) rec.masterBestMoves = raw.masterBestMoves;
+  if (isCount(raw.masterBestTimeMs)) rec.masterBestTimeMs = raw.masterBestTimeMs;
   return rec;
 }
 

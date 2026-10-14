@@ -1,6 +1,13 @@
 import { expect, test } from 'vitest';
 import { fromAscii } from './ascii';
-import { award, bestMedal, medalFor, resolveThresholds } from './medals';
+import { award, bestMedal, masterTimeLimitMs, medalFor, resolveThresholds } from './medals';
+
+test('master time limit: the bronze time in ms, none without goldTime', () => {
+  expect(masterTimeLimitMs(resolveThresholds({ goldTime: 20 }))).toBe(30_000);
+  expect(masterTimeLimitMs(resolveThresholds({ goldTime: 9 }))).toBe(15_000); // gold + 6 s
+  expect(masterTimeLimitMs(resolveThresholds({ goldTime: 20, bronzeTime: 42.5 }))).toBe(42_500);
+  expect(masterTimeLimitMs(resolveThresholds({ goldMoves: 30 }))).toBeUndefined();
+});
 
 test.each([
   [40, 44, 50],

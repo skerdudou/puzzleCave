@@ -51,6 +51,14 @@ export function resolveThresholds(o: ThresholdOverrides): Thresholds {
   return t;
 }
 
+/**
+ * Master mode's time limit, in ms: the bronze time (a run still playing past it has failed).
+ * None for a level without goldTime.
+ */
+export function masterTimeLimitMs(th: Thresholds): number | undefined {
+  return th.time ? Math.round(th.time.bronze * 1000) : undefined;
+}
+
 export function medalFor(tier: Tier | undefined, value: number): Medal | undefined {
   if (!tier) return undefined;
   if (value <= tier.gold) return 'gold';

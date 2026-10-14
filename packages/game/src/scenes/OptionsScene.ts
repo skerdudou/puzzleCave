@@ -16,7 +16,8 @@ import {
   scrollThumb,
 } from '../input/scroll';
 import { syncMusic } from '../music';
-import { COLORS, dpr, makeButton, px, textStyle } from '../ui';
+import { COLORS, TOUCH_TARGET, dpr, makeButton, px, textStyle } from '../ui';
+import { isTouchDevice } from '../touch';
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
@@ -75,6 +76,11 @@ export class OptionsScene extends Phaser.Scene {
     this.drag = null;
     this.dragged = false;
     this.velocity = 0;
+    // touch: taller buttons (TOUCH_TARGET), so more room between a label, its control and the
+    // next label
+    const touch = isTouchDevice();
+    const labelGap = px(touch ? TOUCH_TARGET / 2 + 6 : 16);
+    const rowStep = px(touch ? TOUCH_TARGET / 2 + 26 : 44);
     let y = px(50);
     this.add.text(cx, y, t('options'), textStyle(24, COLORS.accent)).setOrigin(0.5);
     y += px(56);
@@ -104,13 +110,13 @@ export class OptionsScene extends Phaser.Scene {
           wordWrap: { width: wrap },
         })
         .setOrigin(0.5, 0);
-      y += l.height + px(16);
+      y += l.height + labelGap;
     };
     const stepper = (id: string, value: string, onMinus: () => void, onPlus: () => void) => {
       button(`${id}-minus`, cx - px(80), y, '−', () => change(onMinus));
       this.add.text(cx, y, value, textStyle(14)).setOrigin(0.5);
       button(`${id}-plus`, cx + px(80), y, '+', () => change(onPlus));
-      y += px(44);
+      y += rowStep;
     };
 
     label(t('sound'));
@@ -120,12 +126,12 @@ export class OptionsScene extends Phaser.Scene {
         syncMusic(this, s.sound, 'music-menu');
       }),
     );
-    y += px(44);
+    y += rowStep;
 
     label(t('language'));
     const langY = y;
     button('lang', cx, y, `${t('langName')} ▾`, () => this.toggleLangMenu(cx, langY));
-    y += px(44);
+    y += rowStep;
 
     label(t('drag'));
     stepper(
@@ -147,20 +153,27 @@ export class OptionsScene extends Phaser.Scene {
     button('tapZones', cx, y, zones[s.tapZones], () =>
       change(() => (s.tapZones = nextTapZoneMode(s.tapZones))),
     );
-    y += px(44);
+    y += rowStep;
     // vibrations: only offered where the browser can vibrate (not iOS Safari)
     if (canVibrate()) {
       label(t('vibration'));
       button('vibration', cx, y, s.vibration ? t('on') : t('off'), () =>
         change(() => {
           s.vibration = !s.vibration;
-          vibrate('push', s.vibration); // a sample when turned on
+          vibrate('bump', s.vibration); // a sample when turned on
         }),
       );
-      y += px(44);
+      y += rowStep;
     }
 
-    const back = button('back', cx, y + px(12), t('back'), () => this.scene.start('Menu'), 16);
+    const back = button(
+      'back',
+      cx,
+      y + labelGap - px(4),
+      t('back'),
+      () => this.scene.start('Menu'),
+      16,
+    );
     this.contentH = back.y + back.height / 2 + px(24);
 
     this.thumb = this.add.graphics().setScrollFactor(0).setDepth(5);
@@ -292,7 +305,7 @@ export class OptionsScene extends Phaser.Scene {
   private toggleLangMenu(cx: number, y: number): void {
     if (this.langMenu.length) return this.closeLangMenu();
     this.velocity = 0;
-    const rowH = px(34);
+    const rowH = px(isTouchDevice() ? TOUCH_TARGET : 34);
     const width = px(180);
     const listH = rowH * LANGS.length + px(8);
     const top = dropDownTop(y - this.scroll, px(22), listH, this.scale.height, px(8));
@@ -320,8 +333,19 @@ export class OptionsScene extends Phaser.Scene {
         .text(cx, by, messages(lang).langName, textStyle(14, current ? COLORS.accent : COLORS.text))
         .setOrigin(0.5)
         .setScrollFactor(0)
-        .setDepth(11)
-        .setInteractive({ useHandCursor: true });
+        .setDepth(11);
+      // the whole row answers, not only the word
+      const hit = new Phaser.Geom.Rectangle(
+        item.width / 2 - width / 2,
+        item.height / 2 - rowH / 2,
+        width,
+        rowH,
+      );
+      item.setInteractive({
+        hitArea: hit,
+        hitAreaCallback: Phaser.Geom.Rectangle.Contains,
+        useHandCursor: true,
+      });
       item.on('pointerover', () => item.setColor(COLORS.accent));
       item.on('pointerout', () => item.setColor(current ? COLORS.accent : COLORS.text));
       item.on('pointerup', () => this.pickLang(lang));

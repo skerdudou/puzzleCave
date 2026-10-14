@@ -94,7 +94,7 @@ export class ReplayScene extends Phaser.Scene {
   }
 
   private bottomReserve(): number {
-    return px(this.narrow() ? 96 : 64);
+    return px(this.narrow() ? 124 : 72);
   }
 
   /** Brings the board to the playback index (forward: moves replayed; backward: rebuilt). */
@@ -161,7 +161,7 @@ export class ReplayScene extends Phaser.Scene {
     }
     const playIndex = 2; // 3rd button of the full row: Start, ◀, Pause/Play…
     let flat = 0;
-    let y = h - help.height - px(26) - (rows.length - 1) * px(34);
+    let y = h - help.height - px(26) - (rows.length - 1) * px(48);
     for (const row of rows) {
       const buttons = row.map(([label, fn]) => makeButton(this, 0, y, label, fn, 13));
       const gap = px(8);
@@ -175,7 +175,7 @@ export class ReplayScene extends Phaser.Scene {
       const pi = playIndex - flat;
       flat += row.length;
       if (pi >= 0 && pi < buttons.length) this.playBtn = buttons[pi];
-      y += px(34);
+      y += px(48);
     }
   }
 

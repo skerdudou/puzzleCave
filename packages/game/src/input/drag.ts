@@ -1,8 +1,15 @@
 import type { Dir } from '@puzzlecave/core';
 
 /** Distances per step offered in Options (CSS pixels), from very sensitive to slow. */
-export const DRAG_STEPS = [16, 20, 24, 32, 40, 48, 64] as const;
-export const DRAG_STEP_DEFAULT = 24;
+export const DRAG_STEPS = [16, 20, 24, 32, 40, 48, 56, 64, 80] as const;
+/**
+ * 40 px (about 6 mm on a phone, a fingertip's width): a finger resting or rolling on the glass
+ * does not walk, and a full-width swipe on a 360 px phone still walks 9 cells. 24 px (the old
+ * default) proved too sensitive in play: short corrections took an extra step.
+ */
+export const DRAG_STEP_DEFAULT = 40;
+/** The default of saves written before `dragStepDefault` existed. */
+export const OLD_DRAG_STEP_DEFAULT = 24;
 
 /** The offered distance closest to `v`. */
 export function nearestDragStep(v: number): number {

@@ -21,6 +21,27 @@ export const ZONE_DIAGONAL_BAND = 10;
 export const TAP_SLOP = 10;
 
 /**
+ * A press this close to a button (CSS px from its edges) is not a zone tap: a finger that just
+ * missed Undo or the d-pad must do nothing rather than walk.
+ */
+export const ZONE_BUTTON_MARGIN = 24;
+
+export interface Box {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** (x, y) is within `margin` of one of the boxes (all in the same units). */
+export function nearAny(x: number, y: number, boxes: readonly Box[], margin: number): boolean {
+  return boxes.some(
+    (b) =>
+      x >= b.x - margin && x <= b.x + b.w + margin && y >= b.y - margin && y <= b.y + b.h + margin,
+  );
+}
+
+/**
  * The direction of a point seen from the centre of the zones, (dx, dy) in CSS px (y down): the
  * play area is cut in an X into four triangles (up, down, left, right). Nothing within
  * `dead` px of the centre, nor within `band` degrees of a diagonal, where a finger could mean

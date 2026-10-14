@@ -53,8 +53,35 @@ test('recordRun keeps the best results', () => {
     completed: true,
     bestMoves: 30,
     bestTimeMs: 5000,
+    masterBestMoves: 40,
+    masterBestTimeMs: 5000,
     medals: { moves: 'silver', time: 'gold', platinum: true },
   });
+});
+
+test('recordRun keeps the best master moves and time apart, from master runs only', () => {
+  const normal = recordRun(
+    undefined,
+    { moves: 30, timeMs: 9000, mode: 'normal' },
+    { moves: 'gold', platinum: false },
+  );
+  expect(normal.masterBestMoves).toBeUndefined();
+  expect(normal.masterBestTimeMs).toBeUndefined();
+  const m1 = recordRun(
+    normal,
+    { moves: 34, timeMs: 12_000, mode: 'master' },
+    { moves: 'silver', platinum: false },
+  );
+  expect(m1).toMatchObject({ bestMoves: 30, masterBestMoves: 34, masterBestTimeMs: 12_000 });
+  const m2 = recordRun(
+    m1,
+    { moves: 31, timeMs: 15_000, mode: 'master' },
+    { moves: 'gold', platinum: true },
+  );
+  expect(m2).toMatchObject({ masterBestMoves: 31, masterBestTimeMs: 12_000 });
+  // a later normal run keeps them
+  const n2 = recordRun(m2, { moves: 50, timeMs: 1000, mode: 'normal' }, { platinum: false });
+  expect(n2).toMatchObject({ masterBestMoves: 31, masterBestTimeMs: 12_000, bestTimeMs: 1000 });
 });
 
 test('validateChapters : correct', () => {

@@ -2,7 +2,9 @@ import Phaser from 'phaser';
 import {
   Session,
   award,
+  masterTimeLimitMs,
   recordRun,
+  resolveThresholds,
   type Dir,
   type LevelData,
   type Mode,
@@ -10,7 +12,7 @@ import {
 } from '@puzzlecave/core';
 import { app } from '../app';
 import { setDebug } from '../debug';
-import { formatTime } from '../format';
+import { ellipsize, formatTime } from '../format';
 import { t } from '../i18n';
 import { InputController, type Action } from '../input/InputController';
 import { directionLabels } from '../input/keyboardLabels';
@@ -19,12 +21,27 @@ import { syncMusic } from '../music';
 import { AnimClock } from '../render/animTiming';
 import { BoardView } from '../render/BoardView';
 import { boardLayout, type BoardLayout } from '../render/layout';
-import { hapticFor, vibrate } from '../haptics';
+import { HapticFeed, vibrate } from '../haptics';
 import { DragSteps } from '../input/drag';
 import { HoldRepeat } from '../input/holdRepeat';
-import { TAP_SLOP, ZoneGesture, zoneDir, type TapZoneMode } from '../input/tapZones';
+import {
+  TAP_SLOP,
+  ZONE_BUTTON_MARGIN,
+  ZoneGesture,
+  nearAny,
+  zoneDir,
+  type Box,
+  type TapZoneMode,
+} from '../input/tapZones';
+import { RunClock, countdown } from '../runClock';
 import { dpadLayout, dpadLayoutSide, isLandscape, isTouchDevice } from '../touch';
 import { COLORS, dpr, makeButton, px, textStyle } from '../ui';
+
+/** D-pad buttons on a touch screen, CSS px per side (above the 44 px minimum: the main control). */
+const DPAD = 56;
+/** Master mode colour, and the countdown's warning colour. */
+const MASTER_COLOR = '#9be7ff';
+const WARN_COLOR = '#ff6b5e';
 
 export interface GameSceneData {
   levelId: string;
@@ -50,9 +67,16 @@ export class GameScene extends Phaser.Scene {
   private zonePress = false;
   private zoneFlash?: Phaser.GameObjects.Graphics;
   private zoneMoves = 0;
+  private attempts = 0;
   private readonly anim = new AnimClock();
-  private startTime: number | null = null;
-  private startBeforeRestart: number | null = null;
+  private clock = new RunClock();
+  /** master mode: the time limit (the level's bronze time), ms; none without goldTime */
+  private timeLimitMs: number | undefined;
+  /** master mode: the time limit is passed, the run has failed (like drowning) */
+  private timedOut = false;
+  private readonly haptics = new HapticFeed();
+  /** CSS px boxes around which a press is never a tap zone (HUD buttons, d-pad) */
+  private noZone: Box[] = [];
   private finished = false;
   private movesText?: Phaser.GameObjects.Text;
   private timeText?: Phaser.GameObjects.Text;
@@ -68,8 +92,14 @@ export class GameScene extends Phaser.Scene {
     this.level = levelById(data.levelId);
     this.mode = data.mode;
     this.session = new Session(this.level, this.mode);
-    this.startTime = null;
-    this.startBeforeRestart = null;
+    this.clock = new RunClock();
+    this.timeLimitMs =
+      this.mode === 'master'
+        ? masterTimeLimitMs(resolveThresholds(this.level.thresholds))
+        : undefined;
+    this.timedOut = false;
+    this.haptics.reset();
+    setDebug({ timeLeftMs: null, timeWarn: false });
     this.finished = false;
     this.anim.reset();
     this.overlay = undefined;
@@ -86,6 +116,8 @@ export class GameScene extends Phaser.Scene {
     this.buildHud();
     this.controls = new InputController((a) => this.handle(a), app.data.settings.repeatRate);
     const down = (e: KeyboardEvent) => {
+      // a new press (not the key's own repeat): a bump vibrates again
+      if (!e.repeat) this.haptics.reset();
       if (this.controls.keydown(e)) e.preventDefault();
     };
     const up = (e: KeyboardEvent) => this.controls.keyup(e);
@@ -97,13 +129,15 @@ export class GameScene extends Phaser.Scene {
     // Phaser handles each DOM pointer event as it comes (no queue replayed, unlike its keyboard).
     this.drags.clear();
     this.zoneMoves = 0;
+    this.attempts = 0;
     this.zoneFlash = undefined;
-    setDebug({ zoneMoves: 0, zoneFlash: null });
+    setDebug({ zoneMoves: 0, zoneFlash: null, attempts: 0 });
     this.input.on(
       'pointerdown',
       (p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
         this.dragMoved = false;
         this.zonePress = false;
+        this.haptics.reset();
         if (over.length) {
           this.drags.delete(p.id);
           return;
@@ -152,10 +186,17 @@ export class GameScene extends Phaser.Scene {
     };
     if (this.mode === 'master') this.showRules();
     this.scale.on('resize', onResize);
+    // the clock does not count while the game is hidden (another app, screen locked…)
+    const hidden = () => this.clock.pause(performance.now());
+    const visible = () => this.clock.resume(performance.now());
+    this.game.events.on(Phaser.Core.Events.HIDDEN, hidden);
+    this.game.events.on(Phaser.Core.Events.VISIBLE, visible);
     this.events.once('shutdown', () => {
       window.removeEventListener('keydown', down);
       window.removeEventListener('keyup', up);
       window.removeEventListener('blur', blur);
+      this.game.events.off(Phaser.Core.Events.HIDDEN, hidden);
+      this.game.events.off(Phaser.Core.Events.VISIBLE, visible);
       this.scale.off('resize', onResize);
       this.controls.reset();
       this.hold.reset();
@@ -172,14 +213,46 @@ export class GameScene extends Phaser.Scene {
   }
 
   override update(): void {
-    if (this.startTime !== null && this.session.state.status === 'playing') {
-      this.timeText?.setText(`${t('time')} ${formatTime(performance.now() - this.startTime)}`);
-    }
+    if (this.session.state.status !== 'playing' || this.finished || this.timedOut) return;
+    if (!this.clock.started) return;
+    const now = performance.now();
+    if (this.checkTimeLimit(now)) return;
+    this.showTime(now);
   }
 
-  /** Area reserved at the bottom of the screen (keyboard help; larger on touch, Task 15). */
+  /** The clock (elapsed time, or master mode's countdown) in the HUD. */
+  private showTime(now: number): void {
+    const elapsed = this.clock.elapsed(now);
+    if (this.timeLimitMs === undefined) {
+      this.timeText?.setText(`${t('time')} ${formatTime(elapsed)}`);
+      return;
+    }
+    const c = countdown(this.timeLimitMs, elapsed);
+    this.timeText
+      ?.setText(`${t('timeLeft')} ${formatTime(c.leftMs)}`)
+      .setColor(c.warn ? WARN_COLOR : COLORS.text);
+    setDebug({ timeLeftMs: c.leftMs, timeWarn: c.warn });
+  }
+
+  /** Master mode: past the time limit, the run fails (true). */
+  private checkTimeLimit(now: number): boolean {
+    if (this.timeLimitMs === undefined || this.timedOut || this.finished) return false;
+    if (this.session.state.status !== 'playing') return false;
+    if (!countdown(this.timeLimitMs, this.clock.elapsed(now)).over) return false;
+    this.timedOut = true;
+    this.hold.reset();
+    this.cancelZones();
+    this.drags.clear();
+    this.timeText?.setText(`${t('timeLeft')} ${formatTime(0)}`).setColor(WARN_COLOR);
+    vibrate('fail', app.data.settings.vibration);
+    this.showFailed(t('timeUp'));
+    setDebug({ status: 'timeout', timeLeftMs: 0, timeWarn: true });
+    return true;
+  }
+
+  /** Area reserved at the bottom of the screen (keyboard help; the d-pad on touch). */
   protected bottomReserve(): number {
-    return this.sidePad() || !isTouchDevice() ? px(24) : px(48) * 3 + px(24) + px(24);
+    return this.sidePad() || !isTouchDevice() ? px(24) : px(DPAD) * 3 + px(24) + px(24);
   }
 
   /** Narrow screen: the counters move to a 2nd line under the buttons. */
@@ -193,13 +266,16 @@ export class GameScene extends Phaser.Scene {
   }
 
   private sideReserve(): number {
-    return this.sidePad() ? px(48) * 3 + px(16) * 2 : 0;
+    return this.sidePad() ? px(DPAD) * 3 + px(16) * 2 : 0;
   }
 
-  /** Narrow screen: the MASTER label moves to a 3rd line, so room must be reserved for it. */
+  /**
+   * The HUD at the top: one row on a wide screen; on a narrow one the counters move to a 2nd
+   * line under the buttons and the MASTER label to a 3rd.
+   */
   private topReserve(): number {
-    if (!this.narrow()) return px(40);
-    return this.mode === 'master' ? px(84) : px(64);
+    if (!this.narrow()) return px(52);
+    return this.mode === 'master' ? px(100) : px(80);
   }
 
   protected computeLayout(): BoardLayout {
@@ -218,32 +294,25 @@ export class GameScene extends Phaser.Scene {
     for (const o of this.hud) o.destroy();
     this.hud = [];
     const w = this.scale.width;
-    const y = px(20);
-    const sy = this.narrow() ? px(48) : y;
-    this.movesText = this.add.text(px(12), sy, '', textStyle(14)).setOrigin(0, 0.5);
-    this.timeText = this.add.text(px(120), sy, '', textStyle(14)).setOrigin(0, 0.5);
-    this.keysText = this.add.text(px(250), sy, '', textStyle(14)).setOrigin(0, 0.5);
-    this.hud.push(this.movesText, this.timeText, this.keysText);
-    if (this.mode === 'master') {
-      this.hud.push(
-        this.add
-          .text(
-            this.narrow() ? px(12) : px(330),
-            this.narrow() ? sy + px(20) : sy,
-            t('masterMode'),
-            textStyle(14, '#9be7ff'),
-          )
-          .setOrigin(0, 0.5),
-      );
-    }
+    const narrow = this.narrow();
+    const y = px(26);
+    const sy = narrow ? px(66) : y;
+    const css = (b: Phaser.Geom.Rectangle): Box => ({
+      x: b.x / dpr(),
+      y: b.y / dpr(),
+      w: b.width / dpr(),
+      h: b.height / dpr(),
+    });
+    // the buttons first, from the right: the counters and the level name take what is left
     const buttons: [string, Action][] = [
       [t('menu'), { type: 'menu' }],
       [t('restart'), { type: 'restart' }],
     ];
     // master mode: no undo, so no button for it
     if (this.session.canUndo) buttons.push([t('undo'), { type: 'undo' }]);
-    let x = w - px(12);
+    let x = w - px(8);
     const hudButtons: Record<string, [number, number]> = {};
+    const buttonBoxes: Box[] = [];
     for (const [label, action] of buttons) {
       // a drag (or a press on a tap zone) that ends on a button is not a click on it
       const click = () => {
@@ -251,15 +320,72 @@ export class GameScene extends Phaser.Scene {
       };
       const b = makeButton(this, x, y, label, click, 13).setOrigin(1, 0.5);
       hudButtons[action.type] = [(x - b.width / 2) / dpr(), y / dpr()];
-      x -= b.width + px(8);
+      buttonBoxes.push(css(b.getBounds()));
+      x -= b.width + px(6);
       this.hud.push(b);
     }
+    const buttonsLeft = x + px(6);
+    // counters, one after the other, each wide enough for its longest value (nothing jumps);
+    // a smaller font where the words are too long for the screen (some languages)
+    const timeLabel = this.timeLimitMs === undefined ? t('time') : t('timeLeft');
+    const counterTexts: [string, string][] = [
+      [`${t('moves')} 999`, COLORS.text],
+      [`${timeLabel} 0:00.00`, COLORS.text],
+      [`${t('keys')} -9`, COLORS.text],
+    ];
+    if (this.mode === 'master' && !narrow) counterTexts.push([t('masterMode'), MASTER_COLOR]);
+    const counterRoom = (narrow ? w : buttonsLeft) - px(12);
+    let counters: Phaser.GameObjects.Text[] = [];
+    for (let size = 14; size >= 9; size--) {
+      for (const c of counters) c.destroy();
+      const gap = px(size);
+      let cx = px(12);
+      counters = counterTexts.map(([text, color]) => {
+        const txt = this.add.text(cx, sy, text, textStyle(size, color)).setOrigin(0, 0.5);
+        cx += txt.width + gap;
+        return txt;
+      });
+      if (cx - gap <= counterRoom) break;
+    }
+    this.hud.push(...counters);
+    [this.movesText, this.timeText, this.keysText] = counters as [
+      Phaser.GameObjects.Text,
+      Phaser.GameObjects.Text,
+      Phaser.GameObjects.Text,
+    ];
+    const last = counters.at(-1)!;
+    const end = last.x + last.width;
+    if (this.mode === 'master' && narrow) {
+      // the MASTER label on a 3rd line
+      this.hud.push(
+        this.add
+          .text(px(12), sy + px(22), t('masterMode'), textStyle(14, MASTER_COLOR))
+          .setOrigin(0, 0.5),
+      );
+    }
+    // the level's name: on the buttons' row, in the room they leave (cut with "…" if needed)
+    const nameX = narrow ? px(12) : end + px(24);
+    const nameText = this.add.text(nameX, y, '', textStyle(13, COLORS.accent)).setOrigin(0, 0.5);
+    const room = buttonsLeft - px(10) - nameX;
+    nameText.setText(ellipsize(this.level.name, (s) => nameText.setText(s).width <= room));
+    this.hud.push(nameText);
+    setDebug({
+      hudName: nameText.text,
+      hudLayout: {
+        name: css(nameText.getBounds()),
+        buttons: buttonBoxes,
+        counters: counters.map((c) => css(c.getBounds())),
+      },
+    });
     this.hold.reset();
     this.cancelZones();
+    this.noZone = [...buttonBoxes];
     if (isTouchDevice()) {
       const pad = this.sidePad()
-        ? dpadLayoutSide(w, this.scale.height, px(48), px(16))
-        : dpadLayout(w, this.scale.height, px(48));
+        ? dpadLayoutSide(w, this.scale.height, px(DPAD), px(16))
+        : dpadLayout(w, this.scale.height, px(DPAD));
+      for (const r of Object.values(pad))
+        this.noZone.push({ x: r.x / dpr(), y: r.y / dpr(), w: r.w / dpr(), h: r.h / dpr() });
       const glyphs: Record<Dir, string> = { up: '▲', down: '▼', left: '◀', right: '▶' };
       for (const dir of ['up', 'down', 'left', 'right'] as const) {
         const r = pad[dir];
@@ -317,7 +443,10 @@ export class GameScene extends Phaser.Scene {
       zoneCentres: { screen: this.zoneCentre('screen'), player: this.zoneCentre('player') },
     });
     this.keysText?.setText(`${t('keys')} ${s.keys}`);
-    if (this.startTime === null) this.timeText?.setText(`${t('time')} ${formatTime(0)}`);
+    // the clock stands still: before the first move, or once the run has failed
+    if (this.timedOut)
+      this.timeText?.setText(`${t('timeLeft')} ${formatTime(0)}`).setColor(WARN_COLOR);
+    else this.showTime(performance.now());
   }
 
   protected handle(a: Action): void {
@@ -329,7 +458,7 @@ export class GameScene extends Phaser.Scene {
       case 'undo': {
         const restoring = this.session.canUndoRestart;
         if (this.session.undo()) {
-          if (restoring) this.startTime = this.startBeforeRestart;
+          if (restoring) this.clock.undoRestart();
           this.board.rebuild(this.session.state);
           this.anim.reset();
           this.updateHud();
@@ -338,10 +467,9 @@ export class GameScene extends Phaser.Scene {
       }
       case 'restart':
         this.session.restart();
-        // The previous game stays recoverable via “Undo”: its timer start is kept too.
-        if (this.session.canUndoRestart && this.startTime !== null)
-          this.startBeforeRestart = this.startTime;
-        this.startTime = null;
+        // The previous game stays recoverable via “Undo”: its clock is kept too.
+        this.clock.restart(this.session.canUndoRestart);
+        this.timedOut = false;
         this.anim.reset();
         this.board.rebuild(this.session.state);
         this.overlay?.destroy();
@@ -357,20 +485,25 @@ export class GameScene extends Phaser.Scene {
 
   private move(dir: Dir): void {
     const before = this.session.state;
-    if (before.status !== 'playing') return;
+    if (before.status !== 'playing' || this.timedOut) return;
+    // a move after the time limit (between two frames) is too late: the run has failed
+    if (this.checkTimeLimit(performance.now())) return;
+    // for the e2e tests: move attempts, bumps included (they no longer all vibrate)
+    this.attempts++;
+    setDebug({ attempts: this.attempts });
     const events = this.session.move(dir);
-    vibrate(hapticFor(events), app.data.settings.vibration);
+    vibrate(this.haptics.next(events), app.data.settings.vibration);
     if (events.length === 0) return;
     const after = this.session.state;
     const now = performance.now();
     const moved = after.moves > before.moves;
-    if (moved && this.startTime === null) this.startTime = now;
+    if (moved) this.clock.begin(now);
     this.board.apply(after, events, moved ? this.anim.next(now) : 0);
     this.rulesNote?.destroy();
     this.rulesNote = undefined;
     this.updateHud();
     if (after.status === 'won') this.finish(now);
-    else if (after.status === 'drowned') this.showDrowned();
+    else if (after.status === 'drowned') this.showFailed(t('drowned'));
   }
 
   /**
@@ -399,6 +532,9 @@ export class GameScene extends Phaser.Scene {
   private startZone(id: number, x: number, y: number): void {
     const mode = app.data.settings.tapZones;
     if (mode === 'off' || this.finished) return;
+    // not in the HUD band, nor just beside a button or the d-pad: a finger that missed one
+    // must do nothing rather than walk
+    if (y * dpr() < this.topReserve() || nearAny(x, y, this.noZone, ZONE_BUTTON_MARGIN)) return;
     const [cx, cy] = this.zoneCentre(mode);
     const dir = zoneDir(x - cx, y - cy);
     if (!dir) return;
@@ -466,9 +602,14 @@ export class GameScene extends Phaser.Scene {
 
   /** Master mode: its rules over the board until the first move. */
   private showRules(): void {
+    const limit = this.timeLimitMs;
+    const rules =
+      limit === undefined
+        ? t('masterRules')
+        : `${t('masterRules')}\n${t('masterTimeRule', { time: formatTime(limit) })}`;
     this.rulesNote = this.add
-      .text(this.scale.width / 2, this.scale.height / 2, t('masterRules'), {
-        ...textStyle(16, '#9be7ff'),
+      .text(this.scale.width / 2, this.scale.height / 2, rules, {
+        ...textStyle(16, MASTER_COLOR),
         align: 'center',
         backgroundColor: '#000000cc',
         padding: { x: px(14), y: px(10) },
@@ -478,10 +619,12 @@ export class GameScene extends Phaser.Scene {
       .setDepth(10);
   }
 
-  private showDrowned(): void {
+  /** Master mode: the run has failed (drowned, or out of time); R or Restart for a new one. */
+  private showFailed(message: string): void {
+    this.overlay?.destroy();
     this.overlay = this.add
-      .text(this.scale.width / 2, this.scale.height / 2, `${t('drowned')}\n${t('drownedHint')}`, {
-        ...textStyle(22, '#9be7ff'),
+      .text(this.scale.width / 2, this.scale.height / 2, `${message}\n${t('drownedHint')}`, {
+        ...textStyle(22, MASTER_COLOR),
         align: 'center',
         backgroundColor: '#000000aa',
         padding: { x: px(16), y: px(12) },
@@ -497,7 +640,7 @@ export class GameScene extends Phaser.Scene {
     this.cancelZones();
     const result: RunResult = {
       moves: this.session.state.moves,
-      timeMs: Math.round(now - (this.startTime ?? now)),
+      timeMs: Math.round(this.clock.elapsed(now)),
       mode: this.mode,
     };
     const medals = award(this.level, result, hasMaster(this.level.id));

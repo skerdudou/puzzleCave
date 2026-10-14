@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import type { Medal } from '@puzzlecave/core';
+import { isTouchDevice } from './touch';
 
 export const dpr = (): number => window.devicePixelRatio || 1;
 export const px = (n: number): number => Math.round(n * dpr());
@@ -27,6 +28,16 @@ export function textStyle(
   return { fontFamily: 'monospace', fontSize: `${px(size)}px`, color };
 }
 
+/**
+ * Smallest button on a touch screen, CSS px on each side (Apple asks for 44 pt, Material for
+ * 48 dp): a finger covers about that much.
+ */
+export const TOUCH_TARGET = 44;
+
+/**
+ * A text button. On a touch screen its box (drawn and hit) grows to at least TOUCH_TARGET on
+ * each side, the label staying centred.
+ */
 export function makeButton(
   scene: Phaser.Scene,
   x: number,
@@ -41,8 +52,14 @@ export function makeButton(
       backgroundColor: COLORS.panel,
       padding: { x: px(8), y: px(4) },
     })
-    .setOrigin(0.5)
-    .setInteractive({ useHandCursor: true });
+    .setOrigin(0.5);
+  if (isTouchDevice()) {
+    const min = px(TOUCH_TARGET);
+    const padX = px(8) + Math.max(0, Math.ceil((min - b.width) / 2));
+    const padY = px(4) + Math.max(0, Math.ceil((min - b.height) / 2));
+    b.setPadding(padX, padY, padX, padY);
+  }
+  b.setInteractive({ useHandCursor: true });
   b.on('pointerover', () => b.setColor(COLORS.accent));
   b.on('pointerout', () => b.setColor(COLORS.text));
   b.on('pointerup', onClick);

@@ -15,7 +15,7 @@ import { formatTime } from '../format';
 import { t } from '../i18n';
 import { onSceneKeyDown } from '../input/sceneKeys';
 import { chapters, hasMaster, levelById, locate } from '../levels';
-import { thresholdRows, type ThresholdRow } from '../medalInfo';
+import { masterStatus, thresholdRows, type ThresholdRow } from '../medalInfo';
 import { planReveal, prefersReducedMotion, type RevealSlot } from '../medalReveal';
 import { MedalReveal, type MedalSpot } from '../render/MedalReveal';
 import { COLORS, drawMedal, drawThresholdLine, makeButton, px, textStyle } from '../ui';
@@ -57,8 +57,10 @@ export class ResultScene extends Phaser.Scene {
   create(): void {
     const { levelId, mode, result, award, previous, moveLog } = this.info;
     const level = levelById(levelId);
-    const cx = this.scale.width / 2;
-    let y = px(60);
+    // a low screen (phone in landscape): the results on the left, the buttons on the right
+    const low = this.scale.width > this.scale.height && this.scale.height < px(600);
+    const cx = low ? Math.max(px(170), this.scale.width * 0.4) : this.scale.width / 2;
+    let y = low ? px(36) : px(60);
     this.add.text(cx, y, t('won'), textStyle(26, COLORS.accent)).setOrigin(0.5);
     y += px(36);
     this.add.text(cx, y, level.name, textStyle(16)).setOrigin(0.5);
@@ -86,7 +88,8 @@ export class ResultScene extends Phaser.Scene {
       isRecord: boolean,
       kind: ThresholdRow['kind'],
     ) => {
-      if (hasTier) medalAt(kind, medal !== undefined);
+      const slot: RevealSlot = kind === 'master' ? 'platinum' : kind;
+      if (hasTier) medalAt(slot, medal !== undefined);
       this.add
         .text(cx - px(110), y, t('labelValue', { label, value }), textStyle(16))
         .setOrigin(0, 0.5);
@@ -123,31 +126,74 @@ export class ResultScene extends Phaser.Scene {
       previous?.bestTimeMs === undefined || result.timeMs < previous.bestTimeMs,
       'time',
     );
-    if (mode === 'master' && master && th.platinumMoves !== undefined) {
-      medalAt('platinum', award.platinum);
+    // master mode, a separate achievement, on its own line: this master run (platinum medal),
+    // or after a normal run where the player stands in master mode
+    if (master && th.platinumMoves !== undefined) {
+      let text: string;
+      if (mode === 'master') {
+        // this run: moves · time, the platinum medal for it (revealed with the others)
+        medalAt('platinum', award.platinum);
+        text = t('labelValue', {
+          label: t('master'),
+          value: `${result.moves} · ${formatTime(result.timeMs)}`,
+        });
+      } else {
+        // a normal run: where the player stands in master mode (platinum owned or not)
+        const ms = masterStatus(app.data.levels[levelId], true);
+        drawMedal(
+          g,
+          cx - px(130),
+          y,
+          px(10),
+          ms.kind === 'best' && ms.platinum ? 'platinum' : undefined,
+        );
+        text =
+          ms.kind === 'best'
+            ? t('masterBest', { moves: ms.moves, time: formatTime(ms.timeMs) })
+            : ms.kind === 'notYet'
+              ? t('masterNotYet')
+              : t('masterLocked');
+      }
       this.add
-        .text(cx - px(110), y, `${t('platinum')} : ≤ ${th.platinumMoves}`, textStyle(14))
+        .text(cx - px(110), y, text, {
+          ...textStyle(mode === 'master' ? 14 : 12, '#9be7ff'),
+          wordWrap: { width: Math.min(px(250), this.scale.width - (cx - px(110)) - px(8)) },
+        })
         .setOrigin(0, 0.5);
+      const row = rows.find((r) => r.kind === 'master');
+      if (row) {
+        drawThresholdLine(this, g, cx, y + px(32), '', row.tiers);
+        y += px(18);
+      }
       y += px(40);
+      setDebug({ resultMasterLine: text });
     }
 
     const next = this.nextLevel(levelId);
-    y += px(16);
-    makeButton(this, cx - px(80), y, t('replay'), () =>
-      this.scene.start('Game', { levelId, mode }),
-    );
-    if (next)
-      makeButton(this, cx + px(80), y, t('next'), () =>
-        this.scene.start('Game', { levelId: next, mode: 'normal' }),
-      );
-    y += px(44);
-    makeButton(this, cx, y, t('menu'), () => this.scene.start('Select', { levelId }), 13);
+    const replay = () => this.scene.start('Game', { levelId, mode });
+    const goNext = () => next && this.scene.start('Game', { levelId: next, mode: 'normal' });
+    const menu = () => this.scene.start('Select', { levelId });
+    if (low) {
+      // the buttons in a column on the right
+      const bx = this.scale.width - px(100);
+      const by = this.scale.height / 2;
+      makeButton(this, bx, by - px(56), t('replay'), replay);
+      if (next) makeButton(this, bx, by, t('next'), goNext);
+      makeButton(this, bx, by + px(56), t('menu'), menu, 13);
+      y = Math.max(y, by + px(56));
+    } else {
+      y += px(16);
+      makeButton(this, cx - px(80), y, t('replay'), replay);
+      if (next) makeButton(this, cx + px(80), y, t('next'), goNext);
+      y += px(52);
+      makeButton(this, cx, y, t('menu'), menu, 13);
+    }
 
     if (app.author) {
       y += px(56);
       const props = `goldMoves = ${result.moves}\ngoldTime = ${(result.timeMs / 1000).toFixed(2)}`;
       const tiled = makeButton(this, cx, y, t('copyTiled'), () => void copy(props, tiled), 12);
-      y += px(36);
+      y += px(48);
       const sol = makeButton(
         this,
         cx,
@@ -157,7 +203,7 @@ export class ResultScene extends Phaser.Scene {
         12,
       );
       if (authorServerAvailable()) {
-        y += px(36);
+        y += px(48);
         const save = makeButton(
           this,
           cx,
@@ -233,7 +279,7 @@ export class ResultScene extends Phaser.Scene {
     for (const [label, fn] of items) {
       const b = makeButton(this, cx, yy + px(14), label, fn, 12);
       this.extra.push(b);
-      yy += px(34);
+      yy += px(48);
     }
   }
 

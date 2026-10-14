@@ -14,6 +14,7 @@ type Pc = {
   zoneCentres?: { screen: Pt; player: Pt };
   dpad?: Record<string, Pt> | null;
   hudButtons?: Record<string, Pt> | null;
+  hudLayout?: { buttons: { x: number; y: number; w: number; h: number }[] };
   buttons?: Record<string, Pt>;
 };
 const debug = (page: Page): Promise<Pc> =>
@@ -162,11 +163,12 @@ test('screen-centred: holding a finger still repeats, until lifted', async ({ pa
   const f = await startPc01(page);
   // up from the start is a wall: each repeated attempt bumps
   await f.down(...(await zonePoint(page, 'up')));
-  await expect.poll(async () => (await vibrations(page)).length).toBeGreaterThanOrEqual(3);
+  await expect.poll(() => zoneMoves(page)).toBeGreaterThanOrEqual(3);
   await f.up();
   const n = (await zoneMoves(page))!;
   expect(n).toBeGreaterThanOrEqual(3);
-  expect(new Set((await vibrations(page)).map((v) => v[0]))).toEqual(new Set([12]));
+  // one press against the wall: one short vibration, not one per repeat
+  expect(await vibrations(page)).toEqual([[10]]);
   // lifted: the repeat has stopped, the next tap makes exactly one move more
   await f.tap(...(await zonePoint(page, 'right')));
   await expect.poll(async () => (await debug(page)).player).toEqual({ x: 2, y: 1 });
@@ -179,8 +181,8 @@ test('screen-centred: a drag that starts in a zone is only a drag', async ({ pag
   const f = await startPc01(page);
   const [x, y] = await zonePoint(page, 'left');
   await f.down(x, y);
-  // 2 steps of 24 px (the first touchmove is already past the tap slop): 2 moves, a push
-  await f.by(2 * 24 + 4, 0, 4);
+  // 2 steps of 40 px (the first touchmove is already past the tap slop): 2 moves, a push
+  await f.by(2 * 40 + 4, 0, 4);
   await f.up();
   await expect.poll(async () => (await debug(page)).moves).toBe(2);
   expect((await debug(page)).player).toEqual({ x: 3, y: 1 });
@@ -202,6 +204,31 @@ test('screen-centred: a tap on the d-pad or on Restart is not a zone tap', async
   await expect.poll(async () => (await debug(page)).moves).toBe(0);
   expect((await debug(page)).player).toEqual({ x: 1, y: 1 });
   expect(await zoneMoves(page)).toBe(0);
+});
+
+test('screen-centred: a press that just misses Undo or the d-pad does nothing', async ({
+  page,
+}) => {
+  await withZones(page, 'screen');
+  const f = await startPc01(page);
+  await f.tap(...(await debug(page)).dpad!.right!);
+  await expect.poll(async () => (await debug(page)).moves).toBe(1);
+  const layout = (await debug(page)).hudLayout!;
+  const undo = layout.buttons.at(-1)!; // the last one drawn from the right: Undo
+  // just under Undo, and just left of the d-pad's left button: no zone tap, no undo
+  await f.tap(undo.x + undo.w / 2, undo.y + undo.h + 12);
+  const [lx, ly] = (await debug(page)).dpad!.left!;
+  const half = 28; // the d-pad's half size, CSS px
+  const beside: Pt = [lx - half - 16, ly];
+  const [cx, cy] = (await debug(page)).zoneCentres!.screen;
+  // (that point is in the "down" triangle: without the margin it would be a step)
+  expect(zoneDir(beside[0] - cx, beside[1] - cy)).toBe('down');
+  await f.tap(...beside);
+  // further from the d-pad, the same triangle is a zone again: its step comes alone
+  await f.tap(lx - half - 40, ly);
+  await expect.poll(() => zoneMoves(page)).toBe(1);
+  expect((await debug(page)).moves).toBe(1); // down is a wall: a bump, no move
+  expect((await debug(page)).player).toEqual({ x: 2, y: 1 });
 });
 
 test('player-centred: a tap just left of the player moves left, though "up" from the screen centre', async ({

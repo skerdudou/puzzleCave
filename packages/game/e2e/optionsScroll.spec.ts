@@ -120,7 +120,10 @@ test.describe('phone in landscape', () => {
   test('after scrolling, Vibration and Back answer a tap', async ({ page }) => {
     await openOptions(page);
     const f = await Finger.on(page);
-    await dragFrom(page, 600, 300, -400);
+    // two drags (one finger's travel is less than the whole height to scroll)
+    await dragFrom(page, 600, 300, -250);
+    await restingScroll(page);
+    await dragFrom(page, 600, 300, -250);
     const y = await restingScroll(page);
     expect(y).toBe((await debug(page)).maxScrollY);
 

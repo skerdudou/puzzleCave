@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { step, fromAscii, initialState, type Dir, type GameEvent } from '@puzzlecave/core';
-import { HAPTICS, canVibrate, hapticFor, vibrate } from './haptics';
+import { HAPTICS, HapticFeed, canVibrate, hapticFor, vibrate } from './haptics';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -10,18 +10,18 @@ function after(rows: string[], dir: Dir, mode: 'normal' | 'master' = 'normal', k
   return hapticFor(step(initialState(level, mode), dir).events);
 }
 
-test('which move gives which vibration', () => {
+test('which move gives which vibration: bumps and outcomes only', () => {
   expect(after(['#####', '#@..#', '#####'], 'right')).toBeNull(); // a plain step
   expect(after(['#####', '#@..#', '#####'], 'left')).toBe('bump'); // wall
   expect(after(['#####', '#@..#', '#####'], 'up')).toBe('bump'); // turning into a wall
-  expect(after(['######', '#@B..#', '######'], 'right')).toBe('push');
+  expect(after(['######', '#@B..#', '######'], 'right')).toBeNull(); // push: seen on the board
   expect(after(['######', '#@B#.#', '######'], 'right')).toBe('bump'); // stuck block
-  expect(after(['######', '#@B~.#', '######'], 'right')).toBe('fill');
-  expect(after(['#####', '#@k.#', '#####'], 'right')).toBe('key');
-  expect(after(['#####', '#@D.#', '#####'], 'right', 'normal', 1)).toBe('door');
+  expect(after(['######', '#@B~.#', '######'], 'right')).toBeNull(); // fill
+  expect(after(['#####', '#@k.#', '#####'], 'right')).toBeNull(); // key
+  expect(after(['#####', '#@D.#', '#####'], 'right', 'normal', 1)).toBeNull(); // door
   expect(after(['#####', '#@D.#', '#####'], 'right')).toBe('bump'); // door, no key
   expect(after(['#####', '#@~.#', '#####'], 'right')).toBe('bump'); // water, normal mode
-  expect(after(['#####', '#@~.#', '#####'], 'right', 'master')).toBe('drowned');
+  expect(after(['#####', '#@~.#', '#####'], 'right', 'master')).toBe('fail');
   expect(after(['#####', '#@E.#', '#####'], 'right')).toBe('won');
 });
 
@@ -34,27 +34,39 @@ test('the outcome wins over the effects of the same move', () => {
   expect(hapticFor(won)).toBe('won');
 });
 
-test('patterns: short ticks, longer outcomes', () => {
-  for (const h of ['bump', 'push', 'fill', 'key', 'door'] as const) {
-    for (const ms of HAPTICS[h]) {
-      expect(ms, h).toBeGreaterThanOrEqual(10);
-      expect(ms, h).toBeLessThanOrEqual(40);
-    }
-  }
+test('patterns: only bump, fail and won; a short tick, outcomes within 0.3 s', () => {
+  expect(Object.keys(HAPTICS).sort()).toEqual(['bump', 'fail', 'won']);
+  expect(HAPTICS.bump).toEqual([10]);
   const total = (h: keyof typeof HAPTICS) => HAPTICS[h].reduce((a, b) => a + b, 0);
-  expect(total('drowned')).toBeGreaterThan(200);
-  expect(total('won')).toBeGreaterThan(200);
-  expect(HAPTICS.drowned).not.toEqual(HAPTICS.won);
+  for (const h of ['fail', 'won'] as const) {
+    expect(total(h), h).toBeGreaterThan(100);
+    expect(total(h), h).toBeLessThanOrEqual(300);
+  }
+  expect(HAPTICS.fail).not.toEqual(HAPTICS.won);
+});
+
+test('HapticFeed: walking into the same obstacle again does not vibrate again', () => {
+  const s0 = initialState(fromAscii(['#####', '#@..#', '#####']));
+  const wall = step(s0, 'left').events;
+  const walk = step(s0, 'right').events;
+  const feed = new HapticFeed();
+  expect(feed.next(wall)).toBe('bump');
+  expect(feed.next(wall)).toBeNull(); // held: the repeated attempts are silent
+  expect(feed.next(wall)).toBeNull();
+  expect(feed.next(walk)).toBeNull();
+  expect(feed.next(wall)).toBe('bump'); // a new bump after a step
+  feed.reset(); // a new press
+  expect(feed.next(wall)).toBe('bump');
 });
 
 test('vibrate: calls navigator.vibrate when on, nothing when off or unsupported', () => {
   const calls: unknown[] = [];
   vi.stubGlobal('navigator', { vibrate: (p: unknown) => (calls.push(p), true) });
   expect(canVibrate()).toBe(true);
-  vibrate('push', true);
-  vibrate('push', false);
+  vibrate('bump', true);
+  vibrate('bump', false);
   vibrate(null, true);
-  expect(calls).toEqual([[25]]);
+  expect(calls).toEqual([[10]]);
 
   vi.stubGlobal('navigator', {}); // iOS Safari
   expect(canVibrate()).toBe(false);

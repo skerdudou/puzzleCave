@@ -1,32 +1,47 @@
 import type { GameEvent } from '@puzzlecave/core';
 
-/** Vibration patterns (ms on, off, on…): short ticks, longer and distinct for the outcomes. */
+/**
+ * Vibration patterns (ms on, off, on…). Only what the player may have missed: a move that did
+ * not happen (bump), and the end of a run (won, or failed: drowned or out of time). Steps,
+ * pushes, keys, doors and filled water are seen on the board and do not vibrate.
+ */
 export const HAPTICS = {
-  bump: [12],
-  push: [25],
-  fill: [40],
-  key: [15, 40, 15],
-  door: [35],
-  drowned: [120, 60, 220],
-  won: [30, 50, 30, 50, 90],
+  bump: [10],
+  fail: [80, 50, 120],
+  won: [20, 40, 20, 40, 60],
 } as const satisfies Record<string, readonly number[]>;
 export type Haptic = keyof typeof HAPTICS;
 
 /**
- * The vibration for the events of one move, or null (a plain step: none). One per move: the
- * outcome first, then the strongest effect (a block sinking is also a push: it says "fill").
- * A move attempt that did not move the player (wall, stuck block, door without a key) is a bump.
+ * The vibration for the events of one move, or null (none). A move attempt that did not move
+ * the player (wall, stuck block, door without a key, water in normal mode) is a bump.
  */
 export function hapticFor(events: readonly GameEvent[]): Haptic | null {
   const has = (type: GameEvent['type']) => events.some((e) => e.type === type);
   if (has('won')) return 'won';
-  if (has('drowned')) return 'drowned';
-  if (has('doorOpened')) return 'door';
-  if (has('keyPicked')) return 'key';
-  if (has('blockSank')) return 'fill';
-  if (has('pushed')) return 'push';
+  if (has('drowned')) return 'fail';
   if (!has('moved')) return 'bump';
   return null;
+}
+
+/**
+ * The haptics of successive move attempts: a bump vibrates only the first time, not again while
+ * the player keeps walking into the same obstacle (a held key, d-pad or tap zone repeats it
+ * ten times a second).
+ */
+export class HapticFeed {
+  private bumping = false;
+
+  next(events: readonly GameEvent[]): Haptic | null {
+    const h = hapticFor(events);
+    const repeat = h === 'bump' && this.bumping;
+    this.bumping = h === 'bump';
+    return repeat ? null : h;
+  }
+
+  reset(): void {
+    this.bumping = false;
+  }
 }
 
 type Vibrate = (pattern: number | number[]) => boolean;

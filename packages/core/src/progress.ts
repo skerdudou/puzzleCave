@@ -26,6 +26,9 @@ export interface LevelRecord {
   completed: boolean;
   bestMoves?: number;
   bestTimeMs?: number;
+  /** best moves and best time of the runs finished in master mode (none yet: absent) */
+  masterBestMoves?: number;
+  masterBestTimeMs?: number;
   medals: { moves?: Medal; time?: Medal; platinum?: boolean };
 }
 
@@ -69,12 +72,20 @@ export function recordRun(prev: LevelRecord | undefined, r: RunResult, a: Award)
   const time = bestMedal(prev?.medals.time, a.time);
   if (time) medals.time = time;
   if (prev?.medals.platinum || a.platinum) medals.platinum = true;
-  return {
+  const rec: LevelRecord = {
     completed: true,
     bestMoves: Math.min(prev?.bestMoves ?? Infinity, r.moves),
     bestTimeMs: Math.min(prev?.bestTimeMs ?? Infinity, r.timeMs),
     medals,
   };
+  if (r.mode === 'master') {
+    rec.masterBestMoves = Math.min(prev?.masterBestMoves ?? Infinity, r.moves);
+    rec.masterBestTimeMs = Math.min(prev?.masterBestTimeMs ?? Infinity, r.timeMs);
+  } else {
+    if (prev?.masterBestMoves !== undefined) rec.masterBestMoves = prev.masterBestMoves;
+    if (prev?.masterBestTimeMs !== undefined) rec.masterBestTimeMs = prev.masterBestTimeMs;
+  }
+  return rec;
 }
 
 export function validateChapters(value: unknown, levelIds: ReadonlySet<string>): string[] {

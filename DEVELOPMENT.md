@@ -50,7 +50,13 @@ tests before building; pushes to `main` do not deploy anything.
   undo (`Session.canUndo` is false; a restart cannot be undone either). It unlocks on a level
   once the save holds gold (moves) there — or a platinum from an older save — and author mode does
   not bypass that. Platinum = a master finish with at most the platinum limit; a master finish
-  also earns the move and time medals it qualifies for. There is no time limit for platinum.
+  also earns the move and time medals it qualifies for. On a level with `goldTime`, master mode
+  also has a time limit, the bronze time (`masterTimeLimitMs`): past it the attempt fails like
+  drowning (the game's `RunClock` and `countdown`; the clock starts at the first move and does
+  not count while the page is hidden — the same clock measures the time medals). A platinum
+  route is often longer to find than to play, but it must be played within that limit: keep
+  `bronzeTime` (or `goldTime`) above the time the platinum solution takes. The save keeps the
+  best master run apart (`masterBestMoves`, `masterBestTimeMs`), shown on its own line.
 - Chapters: `"masterMode": false` in `levels/chapters.json` removes master mode and platinum from
   a chapter's levels (the Easy chapter); absent means true. The loader rejects a non-boolean.
 

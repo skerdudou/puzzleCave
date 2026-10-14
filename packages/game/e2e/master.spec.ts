@@ -54,8 +54,12 @@ test('master mode: locked before gold, no undo, water drowns, platinum', async (
   await page.keyboard.press('ArrowRight');
   await expect.poll(() => field(page, 'levelId')).toBe(ID);
   expect(await field(page, 'master')).toBe('locked');
+  // master mode has its own third row: platinum moves and the time limit (the bronze time)
   const rows = (await field(page, 'thresholds')) as Rows;
-  expect(rows[0]!.tiers[0]).toEqual({ medal: 'platinum', text: `≤ ${gold}` });
+  expect(rows.map((r) => r.kind)).toEqual(['moves', 'time', 'master']);
+  expect(rows[0]!.tiers.map((t) => t.medal)).toEqual(['gold', 'silver', 'bronze']);
+  expect(rows[2]!.tiers).toEqual([{ medal: 'platinum', text: `≤ ${gold} · ≤ 0:15.00` }]);
+  expect(await field(page, 'masterLine')).toBe('');
   await page.keyboard.press('KeyP');
   await page.waitForTimeout(300);
   expect(await field(page, 'scene')).toBe('Select');
@@ -67,9 +71,12 @@ test('master mode: locked before gold, no undo, water drowns, platinum', async (
   await play(page, solution);
   await expect.poll(() => field(page, 'scene')).toBe('Result');
   expect(((await field(page, 'lastAward')) as { moves?: string }).moves).toBe('gold');
+  // the result's master line: where the player stands, not this run
+  expect(await field(page, 'resultMasterLine')).toBe('Master: not finished yet');
   await page.keyboard.press('Escape');
   await expect.poll(() => field(page, 'scene')).toBe('Select');
   expect(await field(page, 'master')).toBe('open');
+  expect(await field(page, 'masterLine')).toBe('Master: not finished yet');
 
   // master mode: undo does nothing, not even after a restart
   await page.keyboard.press('KeyP');
@@ -101,5 +108,140 @@ test('master mode: locked before gold, no undo, water drowns, platinum', async (
   await expect.poll(() => field(page, 'scene')).toBe('Result');
   // the scripted run is fast enough for a time medal too
   expect(await field(page, 'lastAward')).toMatchObject({ moves: 'gold', platinum: true });
-  expect(((await field(page, 'lastResult')) as { mode: string }).mode).toBe('master');
+  const last = (await field(page, 'lastResult')) as { mode: string; timeMs: number };
+  expect(last.mode).toBe('master');
+  // the master line of the result is this run, on its own line
+  expect(await field(page, 'resultMasterLine')).toMatch(
+    new RegExp(`^Master: ${solution.length} · 0:\\d\\d\\.\\d\\d$`),
+  );
+  await page.keyboard.press('Escape');
+  await expect.poll(() => field(page, 'scene')).toBe('Select');
+  expect(await field(page, 'masterLine')).toMatch(
+    new RegExp(`^Master: ${solution.length} moves · 0:\\d\\d\\.\\d\\d$`),
+  );
+});
+
+/** a save where pc-31 has gold (master mode open) and the Medium chapter is open */
+async function withMasterOpen(page: Page): Promise<void> {
+  const chapters = JSON.parse(read('chapters.json')) as { levels: string[] }[];
+  const levels: Record<string, unknown> = {};
+  for (const id of [...chapters[0]!.levels, 'pc-19', ID])
+    levels[id] = { completed: true, medals: { moves: 'gold' } };
+  await page.addInitScript(
+    (save) => {
+      if (!localStorage.getItem('puzzlecave.save.v1'))
+        localStorage.setItem('puzzlecave.save.v1', save);
+    },
+    JSON.stringify({ version: 1, settings: {}, levels }),
+  );
+}
+
+/** the page's visibility, as the browser reports it when the app is left (Phaser listens) */
+async function setHidden(page: Page, hidden: boolean): Promise<void> {
+  await page.evaluate((h) => {
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => h });
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => (h ? 'hidden' : 'visible'),
+    });
+    document.dispatchEvent(new Event('visibilitychange'));
+  }, hidden);
+}
+
+test('master mode: a countdown to the bronze time, paused while hidden; past it the run fails', async ({
+  page,
+}) => {
+  // pc-31: goldTime 9 s, so the bronze time is max(9 × 1.5, 9 + 6) = 15 s
+  expect(level.thresholds.goldTime).toBe(9);
+  await page.clock.install();
+  await withMasterOpen(page);
+  await page.goto('/');
+  await expect.poll(() => field(page, 'scene')).toBe('Menu');
+  await page.keyboard.press('Enter');
+  await expect.poll(() => field(page, 'scene')).toBe('Select');
+  await page.keyboard.press('ArrowLeft'); // the selection starts on the first unfinished level
+  await expect.poll(() => field(page, 'levelId')).toBe(ID);
+  await page.keyboard.press('KeyP');
+  await expect.poll(() => field(page, 'scene')).toBe('Game');
+  expect(await field(page, 'mode')).toBe('master');
+  // before the first move, the whole limit
+  expect(await field(page, 'timeLeftMs')).toBe(15_000);
+  expect(await field(page, 'timeWarn')).toBe(false);
+
+  // from here the page's time only moves when the test says so (a jump, then a few frames)
+  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
+  const after = async (ms: number) => {
+    await page.clock.fastForward(ms);
+    await page.clock.runFor(50);
+  };
+  /** the countdown shown: at most `target`, and at most a few frames (70 ms) above the truth */
+  const left = async (target: number) => {
+    const v = (await field(page, 'timeLeftMs')) as number;
+    expect(v).toBeLessThanOrEqual(target + 70);
+    expect(v).toBeGreaterThanOrEqual(target);
+  };
+  await play(page, solution.slice(0, 1));
+  expect(await field(page, 'moves')).toBe(1);
+  await after(11_000);
+  await left(15_000 - 11_050);
+  expect(await field(page, 'timeWarn')).toBe(false);
+  await after(500);
+  // the last quarter of a 15 s limit: the countdown warns
+  await left(15_000 - 11_600);
+  expect(await field(page, 'timeWarn')).toBe(true);
+
+  // a minute in another app: not counted
+  await setHidden(page, true);
+  await page.clock.fastForward(60_000);
+  await setHidden(page, false);
+  await page.clock.runFor(50);
+  expect(await field(page, 'status')).toBe('playing');
+  await left(15_000 - 11_650);
+
+  // past the limit: failed, like drowning; moves do nothing more
+  await after(3500);
+  expect(await field(page, 'status')).toBe('timeout');
+  expect(await field(page, 'timeLeftMs')).toBe(0);
+  await play(page, solution.slice(1, 2));
+  await page.clock.runFor(200);
+  expect(await field(page, 'moves')).toBe(1);
+  expect(await field(page, 'scene')).toBe('Game');
+
+  // R: a new attempt, a new clock
+  await page.keyboard.press('KeyR');
+  await page.clock.runFor(50);
+  expect(await field(page, 'status')).toBe('playing');
+  expect(await field(page, 'moves')).toBe(0);
+  expect(await field(page, 'timeLeftMs')).toBe(15_000);
+  await page.clock.resume();
+});
+
+test('normal mode: no time limit, the clock does not count while hidden', async ({ page }) => {
+  await page.clock.install();
+  await withMasterOpen(page);
+  await page.goto('/');
+  await expect.poll(() => field(page, 'scene')).toBe('Menu');
+  await page.keyboard.press('Enter');
+  await expect.poll(() => field(page, 'scene')).toBe('Select');
+  await page.keyboard.press('ArrowLeft');
+  await expect.poll(() => field(page, 'levelId')).toBe(ID);
+  await page.keyboard.press('Enter');
+  await expect.poll(() => field(page, 'scene')).toBe('Game');
+  expect(await field(page, 'timeLeftMs')).toBeNull();
+  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
+  await play(page, solution.slice(0, 1));
+  // past pc-31's bronze time (15 s): nothing happens in normal mode
+  await page.clock.fastForward(20_000);
+  await page.clock.runFor(50);
+  await setHidden(page, true);
+  await page.clock.fastForward(60_000);
+  await setHidden(page, false);
+  await page.clock.runFor(50);
+  expect(await field(page, 'status')).toBe('playing');
+  await play(page, solution.slice(1));
+  await page.clock.runFor(500);
+  await expect.poll(() => field(page, 'scene')).toBe('Result');
+  // 20.1 s of play: the hidden minute is not in the time
+  expect(((await field(page, 'lastResult')) as { timeMs: number }).timeMs).toBe(20_100);
+  await page.clock.resume();
 });

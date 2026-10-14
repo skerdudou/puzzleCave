@@ -1,6 +1,20 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { Dir } from '@puzzlecave/core';
-import { ZoneGesture, isTapZoneMode, nextTapZoneMode, zoneDir } from './tapZones';
+import { ZoneGesture, isTapZoneMode, nearAny, nextTapZoneMode, zoneDir } from './tapZones';
+
+test('nearAny: inside a box or within the margin around it', () => {
+  const boxes = [
+    { x: 100, y: 10, w: 60, h: 44 },
+    { x: 0, y: 500, w: 56, h: 56 },
+  ];
+  expect(nearAny(130, 30, boxes, 24)).toBe(true); // on the button
+  expect(nearAny(130, 54 + 24, boxes, 24)).toBe(true); // just under it, within the margin
+  expect(nearAny(130, 54 + 25, boxes, 24)).toBe(false);
+  expect(nearAny(100 - 24, 10 - 24, boxes, 24)).toBe(true); // the corner of the margin
+  expect(nearAny(56 + 10, 520, boxes, 24)).toBe(true); // second box
+  expect(nearAny(200, 300, boxes, 24)).toBe(false);
+  expect(nearAny(200, 300, [], 24)).toBe(false);
+});
 
 describe('zoneDir', () => {
   test('the four triangles of the X', () => {
