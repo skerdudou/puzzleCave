@@ -4,7 +4,7 @@
   <property name="name" value="Brain Teaser"/>
   <property name="author" value="moineau"/>
   <property name="goldMoves" type="int" value="402"/>
-  <property name="platinumMoves" type="int" value="388"/>
+  <property name="platinumMoves" type="int" value="382"/>
   <property name="goldTime" type="int" value="95"/>
  </properties>
  <tileset firstgid="1" source="tileset.tsx"/>
