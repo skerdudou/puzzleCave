@@ -4,7 +4,7 @@
   <property name="name" value="Triathlon"/>
   <property name="author" value="moineau"/>
   <property name="goldMoves" type="int" value="574"/>
-  <property name="platinumMoves" type="int" value="490"/>
+  <property name="platinumMoves" type="int" value="478"/>
   <property name="goldTime" type="int" value="100"/>
  </properties>
  <tileset firstgid="1" source="tileset.tsx"/>
