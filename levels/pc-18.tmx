@@ -5,7 +5,7 @@
   <property name="author" value="moineau"/>
   <property name="initialKeys" type="int" value="-12"/>
   <property name="goldMoves" type="int" value="1568"/>
-  <property name="platinumMoves" type="int" value="1338"/>
+  <property name="platinumMoves" type="int" value="1296"/>
   <property name="goldTime" type="int" value="305"/>
  </properties>
  <tileset firstgid="1" source="tileset.tsx"/>
