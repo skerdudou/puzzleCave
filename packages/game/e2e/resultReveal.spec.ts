@@ -68,13 +68,44 @@ test.describe('reduced motion', () => {
   });
 });
 
-// Screenshots for a visual check (PC_SHOTS=1): mid-animation and final, desktop and phone, plus a
-// platinum finish in master mode. Written under .oneshot/shots/ (git-ignored).
+// Screenshots for a visual check (PC_SHOTS=1): mid-animation and final, desktop and phones, plus
+// master mode (the selection screen's third line, a master then a grand master finish). Written
+// under .oneshot/shots/ (git-ignored).
 const shots = fileURLToPath(new URL('../../../.oneshot/shots/', import.meta.url));
+const phone = (width: number, height: number) =>
+  ({ viewport: { width, height }, deviceScaleFactor: 2, hasTouch: true }) as const;
 const SIZES = {
   desktop: { viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 },
-  phone: { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true },
+  phone: phone(390, 844),
+  'phone-360': phone(360, 740),
+  'phone-320': phone(320, 740),
+  'phone-landscape': phone(740, 360),
 } as const;
+
+/**
+ * A save where every level is finished with gold (every chapter and master mode open), pc-14
+ * with a master medal and a best master run.
+ */
+async function withAllGold(page: Page): Promise<void> {
+  const chapters = JSON.parse(
+    readFileSync(fileURLToPath(new URL('chapters.json', levelsDir)), 'utf8'),
+  ) as { levels: string[] }[];
+  const levels: Record<string, unknown> = {};
+  for (const id of chapters.flatMap((c) => c.levels))
+    levels[id] = { completed: true, medals: { moves: 'gold' } };
+  levels['pc-14'] = {
+    completed: true,
+    bestMoves: 600,
+    bestTimeMs: 80_000,
+    masterBestMoves: 590,
+    masterBestTimeMs: 118_000,
+    medals: { moves: 'gold', master: 'master' },
+  };
+  await page.addInitScript(
+    (save) => localStorage.setItem('puzzlecave.save.v1', save),
+    JSON.stringify({ version: 2, settings: {}, levels }),
+  );
+}
 
 for (const [name, size] of Object.entries(SIZES)) {
   test.describe(`shots ${name}`, () => {
@@ -87,30 +118,55 @@ for (const [name, size] of Object.entries(SIZES)) {
       await expect.poll(() => field(page, 'resultAnimDone')).toBe(true);
       await page.screenshot({ path: `${shots}reveal-${name}-final.png` });
     });
-    test('platinum in master mode (pc-31)', async ({ page }) => {
-      const solution = solutionOf('pc-31');
+    test('master mode: selection screen, master then grand master (pc-14, pc-31)', async ({
+      page,
+    }) => {
+      await withAllGold(page);
       await page.goto('/');
       await expect.poll(() => field(page, 'scene')).toBe('Menu');
       await page.keyboard.press('Enter');
-      await expect.poll(() => field(page, 'scene')).toBe('Select');
-      await page.keyboard.press('PageDown');
+      // everything finished: the selection starts on the last chapter's first level
+      await expect.poll(() => field(page, 'levelId')).toBe('pc-07');
+      for (let k = 0; k < 4; k++) await page.keyboard.press('ArrowRight');
+      await expect.poll(() => field(page, 'levelId')).toBe('pc-14');
+      await page.screenshot({ path: `${shots}master-${name}-select-pc14.png` });
+      await page.keyboard.press('PageUp');
+      await page.keyboard.press('PageUp');
       await page.keyboard.press('ArrowRight');
       await expect.poll(() => field(page, 'levelId')).toBe('pc-31');
-      await page.keyboard.press('Enter');
+      await page.screenshot({ path: `${shots}master-${name}-select-pc31.png` });
+
+      // master: the gold reference route (above platinumMoves)
+      const goldRoute = parseMoves(
+        readFileSync(fileURLToPath(new URL('solutions/gold/pc-31.txt', levelsDir)), 'utf8'),
+      );
+      await page.keyboard.press('KeyP');
       await expect.poll(() => field(page, 'scene')).toBe('Game');
-      await play(page, solution);
+      expect(await field(page, 'mode')).toBe('master');
+      await play(page, goldRoute);
       await expect.poll(() => field(page, 'scene')).toBe('Result');
+      expect(await field(page, 'resultReveal')).toContain('master:master:new');
+      await page.waitForTimeout(700);
+      await page.screenshot({ path: `${shots}master-${name}-result-master-mid.png` });
+      await expect.poll(() => field(page, 'resultAnimDone')).toBe(true);
+      await page.screenshot({ path: `${shots}master-${name}-result-master-final.png` });
+
+      // grand master: the best known solution
       await page.keyboard.press('Escape');
       await expect.poll(() => field(page, 'scene')).toBe('Select');
       await page.keyboard.press('KeyP');
-      await expect.poll(() => field(page, 'mode')).toBe('master');
-      await play(page, solution);
+      await expect.poll(() => field(page, 'scene')).toBe('Game');
+      expect(await field(page, 'mode')).toBe('master');
+      await play(page, solutionOf('pc-31'));
       await expect.poll(() => field(page, 'scene')).toBe('Result');
-      expect(await field(page, 'resultReveal')).toContain('platinum:platinum:new');
+      expect(await field(page, 'resultReveal')).toContain('master:grandMaster:new');
       await page.waitForTimeout(700);
-      await page.screenshot({ path: `${shots}reveal-${name}-platinum-mid.png` });
+      await page.screenshot({ path: `${shots}master-${name}-result-grandmaster-mid.png` });
       await expect.poll(() => field(page, 'resultAnimDone')).toBe(true);
-      await page.screenshot({ path: `${shots}reveal-${name}-platinum-final.png` });
+      await page.screenshot({ path: `${shots}master-${name}-result-grandmaster-final.png` });
+      await page.keyboard.press('Escape');
+      await expect.poll(() => field(page, 'scene')).toBe('Select');
+      await page.screenshot({ path: `${shots}master-${name}-select-pc31-after.png` });
     });
   });
 }

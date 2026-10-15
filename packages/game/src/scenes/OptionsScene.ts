@@ -5,6 +5,7 @@ import { LANGS, detectLang, getLang, messages, setLang, t, type Lang } from '../
 import { canVibrate, vibrate } from '../haptics';
 import { shiftDragStep } from '../input/drag';
 import { FocusList, focusKey } from '../input/focusList';
+import { saveContext } from '../levels';
 import { showNotice } from '../notice';
 import { exportSave, parseSave } from '../save';
 import { playSfx } from '../sfx';
@@ -92,9 +93,19 @@ export class OptionsScene extends Phaser.Scene {
     }
   }
 
-  /** Restarts the scene where it was (scroll and keyboard focus). */
+  /**
+   * Restarts the scene where it was (scroll and keyboard focus). The restart happens on the next
+   * frame and keys can still reach this scene until then: the focus is taken when it stops, and
+   * the tests see none in between, so they wait for the new scene's.
+   */
   private rebuild(): void {
-    this.scene.restart({ scroll: this.scroll, focus: this.focus?.focused?.id ?? null });
+    const data: { scroll: number; focus: string | null } = { scroll: this.scroll, focus: null };
+    this.events.once('shutdown', () => {
+      data.scroll = this.scroll;
+      data.focus = this.focus?.focused?.id ?? null;
+    });
+    setDebug({ focus: undefined });
+    this.scene.restart(data);
   }
 
   create(): void {
@@ -426,7 +437,7 @@ export class OptionsScene extends Phaser.Scene {
   private applyImport(text: string): void {
     let data;
     try {
-      data = parseSave(text);
+      data = parseSave(text, saveContext);
     } catch {
       showNotice(t('importFailed'), '#ff8080');
       return;

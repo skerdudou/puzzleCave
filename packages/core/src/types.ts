@@ -22,7 +22,7 @@ export interface ThresholdOverrides {
   goldTime?: number;
   silverTime?: number;
   bronzeTime?: number;
-  /** best known solution length: the platinum move limit (goldMoves when absent) */
+  /** best known solution length: the grand master move limit (goldMoves when absent) */
   platinumMoves?: number;
 }
 

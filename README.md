@@ -32,7 +32,7 @@ from the Medium chapter on, the gold limit is always above the best solution (a 
 route, or about 10 % more moves than the best one; on the Hard and Expert levels, between 10 % and
 25 % more moves than the best known solution).
 
-### Master mode and platinum
+### Master mode: master and grand master
 
 From the **Medium** chapter on, earning gold on a level unlocks its **master mode** (the
 **Master** button, or **P** on the selection screen). In master mode:
@@ -45,11 +45,17 @@ From the **Medium** chapter on, earning gold on a level unlocks its **master mod
   like drowning: restart for a new one. The clock stops while the game is hidden (another app,
   screen locked); leaving for the menu ends the attempt.
 
-Finish in master mode within the **platinum** limit to earn the **platinum medal**. The
-platinum limit is the best solution known, often a different, cleverer route than the gold one.
+Master mode has two medals of its own:
+
+- **Master** (a violet medal with a crown): finish in master mode within the **gold** move limit;
+- **Grand master** (a light-blue medal with a white sparkle): finish in master mode within the
+  **grand master** limit, the best solution known — often a different, cleverer route than the
+  gold one. Grand master includes master.
+
 Master mode is a separate achievement, with its own line on the selection and result screens
-(the light-blue medal, the platinum move limit and the time limit, and your best master run). A
-master finish also counts for the gold, silver and bronze medals it qualifies for.
+(both move limits and the time limit, for example "Master ≤ 610 · Grand master ≤ 538 · ≤ 2:07.50",
+and your best master run). A master finish also counts for the gold, silver and bronze medals it
+qualifies for. (Older versions had a single platinum medal: it is now grand master.)
 
 The Easy chapter has no master mode.
 

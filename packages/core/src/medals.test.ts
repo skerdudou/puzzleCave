@@ -1,6 +1,14 @@
 import { expect, test } from 'vitest';
 import { fromAscii } from './ascii';
-import { award, bestMedal, masterTimeLimitMs, medalFor, resolveThresholds } from './medals';
+import {
+  award,
+  bestMasterMedal,
+  bestMedal,
+  masterMedalFor,
+  masterTimeLimitMs,
+  medalFor,
+  resolveThresholds,
+} from './medals';
 
 test('master time limit: the bronze time in ms, none without goldTime', () => {
   expect(masterTimeLimitMs(resolveThresholds({ goldTime: 20 }))).toBe(30_000);
@@ -30,15 +38,40 @@ test('overrides take precedence', () => {
   expect(t.time).toEqual({ gold: 20, silver: 25, bronze: 99 });
 });
 
-test('without gold: no tier, no platinum limit', () => {
+test('without gold: no tier, no master limits', () => {
   expect(resolveThresholds({})).toEqual({});
+  // platinumMoves alone (refused by validate) gives no master limit either
+  expect(resolveThresholds({ platinumMoves: 10 })).toEqual({});
 });
 
-test('platinum moves: platinumMoves, else goldMoves; silver and bronze still from gold', () => {
-  expect(resolveThresholds({ goldMoves: 430 }).platinumMoves).toBe(430);
+test('master limits: master = goldMoves, grand master = platinumMoves, else goldMoves', () => {
+  const plain = resolveThresholds({ goldMoves: 430 });
+  expect(plain.masterMoves).toBe(430);
+  expect(plain.grandMasterMoves).toBe(430);
   const t = resolveThresholds({ goldMoves: 430, platinumMoves: 278 });
-  expect(t.platinumMoves).toBe(278);
+  expect(t.masterMoves).toBe(430);
+  expect(t.grandMasterMoves).toBe(278);
   expect(t.moves).toEqual({ gold: 430, silver: 473, bronze: 538 });
+});
+
+test('masterMedalFor: grand master within platinumMoves, master within goldMoves', () => {
+  const th = resolveThresholds({ goldMoves: 610, platinumMoves: 538 });
+  expect(masterMedalFor(th, 500)).toBe('grandMaster');
+  expect(masterMedalFor(th, 538)).toBe('grandMaster');
+  expect(masterMedalFor(th, 539)).toBe('master');
+  expect(masterMedalFor(th, 610)).toBe('master');
+  expect(masterMedalFor(th, 611)).toBeUndefined();
+  expect(masterMedalFor(resolveThresholds({}), 1)).toBeUndefined();
+});
+
+test('without platinumMoves (or platinumMoves = goldMoves) the two limits coincide: grand master', () => {
+  for (const th of [
+    resolveThresholds({ goldMoves: 20 }),
+    resolveThresholds({ goldMoves: 20, platinumMoves: 20 }),
+  ]) {
+    expect(masterMedalFor(th, 20)).toBe('grandMaster');
+    expect(masterMedalFor(th, 21)).toBeUndefined();
+  }
 });
 
 test('medalFor : value ≤ threshold', () => {
@@ -50,42 +83,57 @@ test('medalFor : value ≤ threshold', () => {
   expect(medalFor(undefined, 1)).toBeUndefined();
 });
 
-test('award combines moves and time; platinum only in master mode', () => {
+test('award combines moves and time; master medals only in master mode', () => {
   const level = fromAscii(['@E'], { thresholds: { goldMoves: 10, goldTime: 20 } });
   expect(award(level, { moves: 11, timeMs: 20_000, mode: 'normal' })).toEqual({
     moves: 'silver',
     time: 'gold',
-    platinum: false,
   });
-  expect(award(level, { moves: 10, timeMs: 1_000, mode: 'normal' }).platinum).toBe(false);
-  // master mode: the move medals it qualifies for, and platinum within the limit
+  expect(award(level, { moves: 10, timeMs: 1_000, mode: 'normal' }).master).toBeUndefined();
+  // master mode: the move medals it qualifies for, and its own medal within the limits
   expect(award(level, { moves: 10, timeMs: 99_000, mode: 'master' })).toEqual({
     moves: 'gold',
-    platinum: true,
+    master: 'grandMaster',
   });
   expect(award(level, { moves: 11, timeMs: 1_000, mode: 'master' })).toEqual({
     moves: 'silver',
     time: 'gold',
-    platinum: false,
   });
 });
 
-test('platinum uses platinumMoves when the level has one', () => {
+test('master within goldMoves, grand master within platinumMoves', () => {
   const level = fromAscii(['@E'], { thresholds: { goldMoves: 20, platinumMoves: 15 } });
-  expect(award(level, { moves: 15, timeMs: 0, mode: 'master' }).platinum).toBe(true);
-  const gold = award(level, { moves: 16, timeMs: 0, mode: 'master' });
-  expect(gold).toEqual({ moves: 'gold', platinum: false });
+  expect(award(level, { moves: 15, timeMs: 0, mode: 'master' })).toEqual({
+    moves: 'gold',
+    master: 'grandMaster',
+  });
+  expect(award(level, { moves: 16, timeMs: 0, mode: 'master' })).toEqual({
+    moves: 'gold',
+    master: 'master',
+  });
+  expect(award(level, { moves: 20, timeMs: 0, mode: 'master' }).master).toBe('master');
+  // above gold: silver, but no master medal
+  expect(award(level, { moves: 21, timeMs: 0, mode: 'master' })).toEqual({ moves: 'silver' });
+  // the same moves in normal mode: gold only
+  expect(award(level, { moves: 15, timeMs: 0, mode: 'normal' })).toEqual({ moves: 'gold' });
 });
 
-test('no platinum without a move limit, nor where the chapter has no master mode', () => {
+test('no master medal without a move limit, nor where the chapter has no master mode', () => {
   const plain = fromAscii(['@E']);
-  expect(award(plain, { moves: 1, timeMs: 0, mode: 'master' }).platinum).toBe(false);
+  expect(award(plain, { moves: 1, timeMs: 0, mode: 'master' }).master).toBeUndefined();
   const level = fromAscii(['@E'], { thresholds: { goldMoves: 10 } });
-  expect(award(level, { moves: 1, timeMs: 0, mode: 'master' }, false).platinum).toBe(false);
+  expect(award(level, { moves: 1, timeMs: 0, mode: 'master' }, false).master).toBeUndefined();
 });
 
 test('bestMedal keeps the best', () => {
   expect(bestMedal('bronze', 'gold')).toBe('gold');
   expect(bestMedal(undefined, 'silver')).toBe('silver');
   expect(bestMedal(undefined, undefined)).toBeUndefined();
+});
+
+test('bestMasterMedal keeps the best: grand master over master', () => {
+  expect(bestMasterMedal('master', 'grandMaster')).toBe('grandMaster');
+  expect(bestMasterMedal('grandMaster', 'master')).toBe('grandMaster');
+  expect(bestMasterMedal(undefined, 'master')).toBe('master');
+  expect(bestMasterMedal(undefined, undefined)).toBeUndefined();
 });

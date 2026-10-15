@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import type { Medal } from '@puzzlecave/core';
+import type { MedalKind } from './medalInfo';
 import { FocusList, focusKey } from './input/focusList';
 import { isTouchDevice } from './touch';
 
@@ -19,7 +19,8 @@ export const MEDAL_COLORS = {
   gold: 0xf5c518,
   silver: 0xc0c0c8,
   bronze: 0xcd7f32,
-  platinum: 0x9be7ff,
+  master: 0xb48cff,
+  grandMaster: 0x9be7ff,
   none: 0x3a3646,
 } as const;
 
@@ -131,6 +132,17 @@ export class KeyFocus {
   }
 }
 
+export interface ThresholdLineOptions {
+  size?: number;
+  /** the width the line must fit in (default: the screen less 8 px on each side) */
+  maxWidth?: number;
+  /**
+   * The medals' names: each limit is then written "● name ≤ x", without the label, when that
+   * fits in `maxWidth`; otherwise the line falls back to "label ● ≤ x ● ≤ y".
+   */
+  named?: (medal: MedalKind) => string;
+}
+
 /** A centered line "label ● ≤ a ● ≤ b ● ≤ c" (medal dot then its limit, for each medal). */
 export function drawThresholdLine(
   scene: Phaser.Scene,
@@ -138,23 +150,45 @@ export function drawThresholdLine(
   cx: number,
   y: number,
   label: string,
-  tiers: readonly { medal: Medal | 'platinum'; text: string }[],
-  size = 11,
+  tiers: readonly { medal: MedalKind; text: string }[],
+  opts: ThresholdLineOptions = {},
 ): void {
-  const items = tiers.map((tier) => ({
-    tier,
-    text: scene.add.text(0, y, tier.text, textStyle(size, COLORS.dim)).setOrigin(0, 0.5),
-  }));
-  const head = scene.add.text(0, y, label, textStyle(size, COLORS.dim)).setOrigin(0, 0.5);
+  const size = opts.size ?? 11;
+  const maxWidth = opts.maxWidth ?? scene.scale.width - px(16);
   const r = px(size / 2.5);
   const dot = 2 * r + px(4);
-  // four medals (with platinum) on a narrow phone: the gaps shrink to keep the line on screen
-  const content = head.width + items.reduce((w, i) => w + dot + i.text.width, 0);
-  const room = scene.scale.width - px(16) - content;
+  const layout = (head: string, texts: string[]) => {
+    const items = tiers.map((tier, k) => ({
+      tier,
+      text: scene.add.text(0, y, texts[k]!, textStyle(size, COLORS.dim)).setOrigin(0, 0.5),
+    }));
+    const headText = scene.add.text(0, y, head, textStyle(size, COLORS.dim)).setOrigin(0, 0.5);
+    const content = headText.width + items.reduce((w, i) => w + dot + i.text.width, 0);
+    return { items, head: headText, content };
+  };
+  const named = opts.named;
+  let line = named
+    ? layout(
+        '',
+        tiers.map((tier) => `${named(tier.medal)} ${tier.text}`),
+      )
+    : undefined;
+  if (!line || line.content + px(4) * tiers.length > maxWidth) {
+    if (line) for (const o of [line.head, ...line.items.map((i) => i.text)]) o.destroy();
+    line = layout(
+      label,
+      tiers.map((tier) => tier.text),
+    );
+  }
+  const { items, head, content } = line;
+  // four medals on a narrow phone: the gaps shrink to keep the line on screen
+  const room = maxWidth - content;
   const gap = items.length ? Math.max(px(4), Math.min(px(12), room / items.length)) : px(12);
-  const width = content + gap * items.length;
-  let x = cx - width / 2;
-  head.setX(x);
+  // no label: no gap before the first medal
+  const lead = head.width ? 0 : gap;
+  const width = content + gap * items.length - lead;
+  let x = cx - width / 2 - lead;
+  head.setX(x + lead);
   x += head.width;
   for (const i of items) {
     x += gap;
@@ -170,7 +204,7 @@ export function drawMedal(
   x: number,
   y: number,
   r: number,
-  medal: Medal | 'platinum' | undefined,
+  medal: MedalKind | undefined,
 ): void {
   if (medal) paintMedal(g, x, y, r, medal);
   else g.lineStyle(Math.max(1, px(1)), MEDAL_COLORS.none, 1).strokeCircle(x, y, r);
@@ -199,17 +233,32 @@ export function starPoints(
   return points;
 }
 
+/** Points of a three-pointed crown centred on (x, y), `r` the medal's radius. */
+function crownPoints(x: number, y: number, r: number): Phaser.Math.Vector2[] {
+  const p = (dx: number, dy: number) => new Phaser.Math.Vector2(x + dx * r, y + dy * r);
+  return [
+    p(-0.58, 0.36),
+    p(-0.58, -0.3),
+    p(-0.29, 0.02),
+    p(0, -0.46),
+    p(0.29, 0.02),
+    p(0.58, -0.3),
+    p(0.58, 0.36),
+  ];
+}
+
 /**
  * A medal, a coin with a darker rim, told apart by its mark as well as by its colour (for the
- * colour-blind, and silver next to platinum): bronze plain, silver an inner ring, gold a star,
- * platinum a white four-pointed sparkle.
+ * colour-blind, and silver next to grand master): bronze plain, silver an inner ring, gold a
+ * star; master mode's medals: master a crown on violet, grand master (the former platinum) a
+ * white four-pointed sparkle on ice blue.
  */
 export function paintMedal(
   g: Phaser.GameObjects.Graphics,
   x: number,
   y: number,
   r: number,
-  medal: Medal | 'platinum',
+  medal: MedalKind,
 ): void {
   const color = MEDAL_COLORS[medal];
   const rim = Math.max(1, r / 6);
@@ -223,7 +272,10 @@ export function paintMedal(
     case 'gold':
       g.fillStyle(mark, 1).fillPoints(starPoints(x, y, 5, r * 0.62, r * 0.26), true);
       break;
-    case 'platinum':
+    case 'master':
+      g.fillStyle(mark, 1).fillPoints(crownPoints(x, y, r), true);
+      break;
+    case 'grandMaster':
       g.fillStyle(0xffffff, 1).fillPoints(starPoints(x, y, 4, r * 0.72, r * 0.3), true);
       break;
   }

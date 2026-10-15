@@ -12,7 +12,7 @@ import { formatTime } from '../format';
 import { getLang, t } from '../i18n';
 import { onSceneKeyDown } from '../input/sceneKeys';
 import { chapters, hasMaster, levelById, locate } from '../levels';
-import { masterStatus, thresholdRows, type MedalKind } from '../medalInfo';
+import { masterMedalName, masterStatus, thresholdRows, type MedalKind } from '../medalInfo';
 import { syncMusic } from '../music';
 import { COLORS, drawMedal, drawThresholdLine, makeButton, px, textStyle } from '../ui';
 import { isTouchDevice } from '../touch';
@@ -179,8 +179,8 @@ export class SelectScene extends Phaser.Scene {
       const slots: (MedalKind | undefined)[] = [];
       if (th.moves) slots.push(rec?.medals.moves);
       if (th.time) slots.push(rec?.medals.time);
-      if (hasMaster(id) && th.platinumMoves !== undefined)
-        slots.push(rec?.medals.platinum ? 'platinum' : undefined);
+      // master mode: one slot, its best medal (master or grand master)
+      if (hasMaster(id) && th.grandMasterMoves !== undefined) slots.push(rec?.medals.master);
       slots.forEach((m, k) =>
         drawMedal(g, x + (cell * (k + 1)) / (slots.length + 1), my, px(5), m),
       );
@@ -216,7 +216,12 @@ export class SelectScene extends Phaser.Scene {
     const rows = thresholdRows(th, master !== 'none');
     const tg = this.add.graphics();
     for (const r of rows) {
-      drawThresholdLine(this, tg, icx, y, t(r.kind), r.tiers);
+      // master mode's row names its medals when the line has room ("Master ≤ 610 · Grand
+      // master ≤ 538 · ≤ 2:07.50"), else "Master ♛ ≤ 610 ✦ ≤ 538 · ≤ 2:07.50"
+      drawThresholdLine(this, tg, icx, y, t(r.kind), r.tiers, {
+        maxWidth: infoW - px(16),
+        ...(r.kind === 'master' ? { named: masterMedalName } : {}),
+      });
       y += px(18);
     }
     setDebug({ thresholds: rows, master });
@@ -244,7 +249,7 @@ export class SelectScene extends Phaser.Scene {
       y += px(18);
       this.add.text(icx, y, masterText, textStyle(12, '#9be7ff')).setOrigin(0.5);
     }
-    setDebug({ masterLine: masterText });
+    setDebug({ masterLine: masterText, masterMedal: rec?.medals.master ?? null });
     y += px(40);
     if (this.levelOpen(this.ci, this.li)) {
       const open = master === 'open';

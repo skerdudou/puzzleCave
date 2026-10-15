@@ -72,8 +72,9 @@ the start-up (one reload on the menu). On the dev server the service worker is d
 
 - `goldMoves`: a "good honest" solution, chosen by the designer. Silver and bronze derive from it
   (`max(⌈1.1 g⌉, g + 2)` and `max(⌈1.25 g⌉, g + 5)`) unless `silverMoves` / `bronzeMoves` are set.
-- `platinumMoves`: the best known solution length (master class, often another route); the
-  platinum limit is `goldMoves` when it is absent. It must not exceed `goldMoves`.
+- `platinumMoves`: the best known solution length (master class, often another route), the
+  **grand master** move limit (the "platinum limit" of the tools below); `goldMoves` when it is
+  absent. It must not exceed `goldMoves`.
 - On levels with master mode, gold never demands the optimum: `goldMoves` is either the length
   of a **natural solution** (another well-optimised solution following a genuinely different,
   plausible strategy — another block-to-water assignment, door order, a simpler route —, kept
@@ -90,8 +91,13 @@ the start-up (one reload on the menu). On the dev server the service worker is d
   `+10 %` rule there is no such file: `goldTime` stays the time of the optimal route.
 - Master mode (`Mode` `'master'` in `@puzzlecave/core`): water drowns the player and there is no
   undo (`Session.canUndo` is false; a restart cannot be undone either). It unlocks on a level
-  once the save holds gold (moves) there — or a platinum from an older save — and author mode does
-  not bypass that. Platinum = a master finish with at most the platinum limit; a master finish
+  once the save holds gold (moves) there — or a master medal earned without gold (a platinum of an
+  older save) — and author mode does not bypass that. Master mode has two medals
+  (`MasterMedal`, `masterMedalFor`): **master** = a master finish within `goldMoves`
+  (`Thresholds.masterMoves`), **grand master** = within `platinumMoves`
+  (`Thresholds.grandMasterMoves`), which implies master; the save keeps the better one
+  (`medals.master`). Where the two limits are equal (no `platinumMoves`, or equal to `goldMoves`)
+  such a finish is grand master and the third line shows grand master alone. A master finish
   also earns the move and time medals it qualifies for. On a level with `goldTime`, master mode
   also has a time limit, the bronze time (`masterTimeLimitMs`): past it the attempt fails like
   drowning (the game's `RunClock` and `countdown`; the clock starts at the first move and does
@@ -99,7 +105,14 @@ the start-up (one reload on the menu). On the dev server the service worker is d
   route is often longer to find than to play, but it must be played within that limit: keep
   `bronzeTime` (or `goldTime`) above the time the platinum solution takes. The save keeps the
   best master run apart (`masterBestMoves`, `masterBestTimeMs`), shown on its own line.
-- Chapters: `"masterMode": false` in `levels/chapters.json` removes master mode and platinum from
+- Medal marks (`paintMedal`), for the colour-blind as well: bronze plain, silver an inner ring,
+  gold a star, master a crown on violet, grand master a white sparkle on light blue. The result
+  screen reveals master with one ring and sparkles, grand master with two rings and more.
+- Saves: version 2 replaced `medals.platinum: true` with `medals.master` (`'master'` or
+  `'grandMaster'`). The migration from version 1 (`MIGRATIONS[1]` in `save.ts`) turns a platinum
+  into grand master and also awards, from the level's current thresholds (`SaveContext`, from
+  `levels.ts`), the medal that `masterBestMoves` qualifies for.
+- Chapters: `"masterMode": false` in `levels/chapters.json` removes master mode and its medals from
   a chapter's levels (the Easy chapter); absent means true. The loader rejects a non-boolean.
 
 The solver tools never touch a designer's `goldMoves`: when they find a shorter solution, they

@@ -1,4 +1,11 @@
-import { bestMedal, type Award, type Medal, type RunResult } from './medals';
+import {
+  bestMasterMedal,
+  bestMedal,
+  type Award,
+  type MasterMedal,
+  type Medal,
+  type RunResult,
+} from './medals';
 
 export interface Chapter {
   id: string;
@@ -6,7 +13,7 @@ export interface Chapter {
   name: { en: string; fr: string } & Partial<Record<string, string>>;
   unlockAfter: number;
   levels: string[];
-  /** false: no master mode (nor platinum) on this chapter's levels; true when absent */
+  /** false: no master mode (nor its medals) on this chapter's levels; true when absent */
   masterMode?: boolean;
 }
 
@@ -15,11 +22,11 @@ export function hasMasterMode(chapter: Chapter | undefined): boolean {
 }
 
 /**
- * Master mode opens on a level once gold (moves) is earned there. A platinum already earned
- * (older saves) also keeps it open.
+ * Master mode opens on a level once gold (moves) is earned there. A master medal already earned
+ * without gold (a platinum of an older save) also keeps it open.
  */
 export function isMasterUnlocked(record: LevelRecord | undefined): boolean {
-  return record?.medals.moves === 'gold' || record?.medals.platinum === true;
+  return record?.medals.moves === 'gold' || record?.medals.master !== undefined;
 }
 
 export interface LevelRecord {
@@ -29,7 +36,8 @@ export interface LevelRecord {
   /** best moves and best time of the runs finished in master mode (none yet: absent) */
   masterBestMoves?: number;
   masterBestTimeMs?: number;
-  medals: { moves?: Medal; time?: Medal; platinum?: boolean };
+  /** `master`: the best master mode medal (saves of version 1 had `platinum: true` instead) */
+  medals: { moves?: Medal; time?: Medal; master?: MasterMedal };
 }
 
 export type Records = Readonly<Record<string, LevelRecord>>;
@@ -71,7 +79,8 @@ export function recordRun(prev: LevelRecord | undefined, r: RunResult, a: Award)
   if (moves) medals.moves = moves;
   const time = bestMedal(prev?.medals.time, a.time);
   if (time) medals.time = time;
-  if (prev?.medals.platinum || a.platinum) medals.platinum = true;
+  const master = bestMasterMedal(prev?.medals.master, a.master);
+  if (master) medals.master = master;
   const rec: LevelRecord = {
     completed: true,
     bestMoves: Math.min(prev?.bestMoves ?? Infinity, r.moves),

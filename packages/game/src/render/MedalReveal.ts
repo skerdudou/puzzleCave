@@ -1,7 +1,9 @@
 // Result screen: earned medals pop in one after another, with a glint and sparkles (stronger for
-// a new medal or a record, a ring for platinum). Any key or click jumps to the final state.
+// a new medal or a record, rings for master mode's medals). Any key or click jumps to the final
+// state.
 import Phaser from 'phaser';
 import { t } from '../i18n';
+import type { MedalKind } from '../medalInfo';
 import { REVEAL, type RevealPlan, type RevealSlot, type RevealStep } from '../medalReveal';
 import { MEDAL_COLORS, paintMedal, px, textStyle } from '../ui';
 
@@ -12,6 +14,11 @@ export interface MedalSpot {
 }
 
 const WHITE = 0xffffff;
+/** "New!" in master mode's medals' colours (gold for the others) */
+const TAG_COLORS: Partial<Record<MedalKind, string>> = {
+  master: '#c9b3ff',
+  grandMaster: '#9be7ff',
+};
 
 export class MedalReveal {
   private readonly tweens: Phaser.Tweens.Tween[] = [];
@@ -77,10 +84,14 @@ export class MedalReveal {
     });
     const fx = step.delayMs + REVEAL.popMs * 0.5;
     this.glint(spot, fx, strong);
-    if (step.medal === 'platinum') {
+    if (step.medal === 'grandMaster') {
       this.ring(spot, fx, color, 0);
       this.ring(spot, fx, WHITE, 120);
       this.sparkles(spot, fx, [color, WHITE], 10, 3.2);
+    } else if (step.medal === 'master' && strong) {
+      // lighter than grand master: one ring, fewer sparkles
+      this.ring(spot, fx, color, 0);
+      this.sparkles(spot, fx, [color, WHITE], 8, 2.8);
     } else if (step.emphasis === 'new') this.sparkles(spot, fx, [color, WHITE], 8, 2.8);
     else if (step.emphasis === 'record') this.sparkles(spot, fx, [color], 5, 2.2);
     if (tag) {
@@ -97,7 +108,7 @@ export class MedalReveal {
 
   /** "New!" left of the medal, or above it when the screen is too narrow. */
   private newTag(step: RevealStep, spot: MedalSpot): Phaser.GameObjects.Text {
-    const color = step.medal === 'platinum' ? '#9be7ff' : '#ffd25e';
+    const color = TAG_COLORS[step.medal] ?? '#ffd25e';
     const tag = this.scene.add.text(0, 0, t('newMedal'), textStyle(10, color));
     const gap = px(6);
     if (spot.x - spot.r - gap - tag.width >= px(4))
@@ -156,7 +167,7 @@ export class MedalReveal {
     }
   }
 
-  /** A light ring growing around the medal (platinum). */
+  /** A light ring growing around the medal (master mode's medals). */
   private ring(spot: MedalSpot, delay: number, color: number, lag: number): void {
     const g = this.scene.add.graphics({ x: spot.x, y: spot.y });
     g.lineStyle(Math.max(1, px(2)), color, 1).strokeCircle(0, 0, spot.r);

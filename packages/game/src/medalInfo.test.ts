@@ -26,18 +26,21 @@ test('no gold threshold: no row', () => {
   expect(thresholdRows(resolveThresholds({}), true)).toEqual([]);
 });
 
-test('master mode: its own third row (platinum moves, time limit), only where it exists', () => {
+test('master mode: its own third row (master, grand master, time limit), only where it exists', () => {
   const th = resolveThresholds({ goldMoves: 430, platinumMoves: 278, goldTime: 60 });
   const rows = thresholdRows(th, true);
   expect(rows.map((r) => r.kind)).toEqual(['moves', 'time', 'master']);
   expect(rows[0]!.tiers.map((t) => t.medal)).toEqual(['gold', 'silver', 'bronze']);
-  // the time limit is the bronze time
-  expect(rows[2]!.tiers).toEqual([{ medal: 'platinum', text: '≤ 278 · ≤ 1:30.00' }]);
+  // master within gold, grand master within platinumMoves; the time limit (bronze time) once
+  expect(rows[2]!.tiers).toEqual([
+    { medal: 'master', text: '≤ 430' },
+    { medal: 'grandMaster', text: '≤ 278 · ≤ 1:30.00' },
+  ]);
   expect(thresholdRows(th, false).map((r) => r.kind)).toEqual(['moves', 'time']);
-  // without platinumMoves, the platinum limit is the gold one; without goldTime, no time limit
+  // without platinumMoves both limits are gold: grand master alone; without goldTime, no time
   const plain = thresholdRows(resolveThresholds({ goldMoves: 20 }), true);
   expect(plain.map((r) => r.kind)).toEqual(['moves', 'master']);
-  expect(plain[1]!.tiers).toEqual([{ medal: 'platinum', text: '≤ 20' }]);
+  expect(plain[1]!.tiers).toEqual([{ medal: 'grandMaster', text: '≤ 20' }]);
 });
 
 test('masterStatus: none, locked, not yet, best master run', () => {
@@ -48,10 +51,19 @@ test('masterStatus: none, locked, not yet, best master run', () => {
     kind: 'locked',
   });
   expect(masterStatus(gold, true)).toEqual({ kind: 'notYet' });
-  expect(
-    masterStatus(
-      { ...gold, masterBestMoves: 41, masterBestTimeMs: 12_340, medals: { platinum: true } },
-      true,
-    ),
-  ).toEqual({ kind: 'best', moves: 41, timeMs: 12_340, platinum: true });
+  const run = { ...gold, masterBestMoves: 41, masterBestTimeMs: 12_340 };
+  expect(masterStatus({ ...run, medals: { master: 'grandMaster' } }, true)).toEqual({
+    kind: 'best',
+    moves: 41,
+    timeMs: 12_340,
+    medal: 'grandMaster',
+  });
+  expect(masterStatus({ ...run, medals: { moves: 'gold', master: 'master' } }, true)).toEqual({
+    kind: 'best',
+    moves: 41,
+    timeMs: 12_340,
+    medal: 'master',
+  });
+  // a master run above gold: best run, no medal
+  expect(masterStatus(run, true)).toEqual({ kind: 'best', moves: 41, timeMs: 12_340 });
 });

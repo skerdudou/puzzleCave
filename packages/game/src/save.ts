@@ -1,4 +1,11 @@
-import type { LevelRecord, Medal } from '@puzzlecave/core';
+import {
+  bestMasterMedal,
+  masterMedalFor,
+  type LevelRecord,
+  type MasterMedal,
+  type Medal,
+  type Thresholds,
+} from '@puzzlecave/core';
 import { isLang, type Lang } from './i18n';
 import { DRAG_STEP_DEFAULT, OLD_DRAG_STEP_DEFAULT, nearestDragStep } from './input/drag';
 import { isTouchControl, type TouchControl } from './input/tapZones';
@@ -22,7 +29,7 @@ export interface Settings {
   touchControl: TouchControl;
 }
 export interface SaveData {
-  version: 1;
+  version: 2;
   settings: Settings;
   levels: Record<string, LevelRecord>;
 }
@@ -34,21 +41,60 @@ export interface KV {
 export const SAVE_KEY = 'puzzlecave.save.v1';
 export const CORRUPT_KEY = 'puzzlecave.save.corrupt';
 /** The save format written by this version of the game. */
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
+
+/** What the migrations may need to know about the game's levels. */
+export interface SaveContext {
+  /** a level's thresholds when it has master mode; undefined otherwise (or an unknown level) */
+  masterThresholds(levelId: string): Thresholds | undefined;
+}
+/** No level known: a migration derives nothing from the thresholds. */
+export const NO_LEVELS: SaveContext = { masterThresholds: () => undefined };
 
 /**
  * Turns a save of version `n` (the key) into one of version `n + 1`. A new format adds its step
  * here and raises SAVE_VERSION (and SaveData's `version`): older saves are carried over, never
  * reset. A field added with a default needs no step: the sanitising fills it in.
  */
-export type Migration = (save: Record<string, unknown>) => Record<string, unknown>;
-export const MIGRATIONS: Readonly<Record<number, Migration>> = {};
+export type Migration = (
+  save: Record<string, unknown>,
+  ctx: SaveContext,
+) => Record<string, unknown>;
+export const MIGRATIONS: Readonly<Record<number, Migration>> = {
+  1: masterMedals,
+};
+
+/**
+ * Version 1 → 2: master mode's single platinum medal (`medals.platinum: true`) became two,
+ * master and grand master (`medals.master`). A platinum is a grand master; a level's best master
+ * run (`masterBestMoves`) also earns the medal it qualifies for under the level's current limits
+ * (a master run within gold, short of platinum, earns master).
+ */
+function masterMedals(save: Record<string, unknown>, ctx: SaveContext): Record<string, unknown> {
+  if (!isRecord(save.levels)) return save;
+  const levels: Record<string, unknown> = {};
+  for (const [id, raw] of Object.entries(save.levels)) {
+    if (!isRecord(raw) || !isRecord(raw.medals)) {
+      levels[id] = raw;
+      continue;
+    }
+    const { platinum, ...medals } = raw.medals;
+    const th = ctx.masterThresholds(id);
+    const derived =
+      th && isCount(raw.masterBestMoves) ? masterMedalFor(th, raw.masterBestMoves) : undefined;
+    const master = bestMasterMedal(platinum === true ? 'grandMaster' : undefined, derived);
+    if (master) medals.master = master;
+    levels[id] = { ...raw, medals };
+  }
+  return { ...save, levels };
+}
 
 /** A parsed save brought to version `target`; throws on an unknown (or newer) version. */
 export function migrate(
   save: Record<string, unknown>,
   migrations: Readonly<Record<number, Migration>> = MIGRATIONS,
   target: number = SAVE_VERSION,
+  ctx: SaveContext = NO_LEVELS,
 ): Record<string, unknown> {
   let s = save;
   for (;;) {
@@ -58,18 +104,18 @@ export function migrate(
     if (v === target) return s;
     const step = migrations[v];
     if (!step) throw new Error(`no migration from version ${v}`);
-    s = { ...step(s), version: v + 1 };
+    s = { ...step(s, ctx), version: v + 1 };
   }
 }
 
 /** A save read from its JSON text (stored, or a file the player imports); throws if unusable. */
-export function parseSave(raw: string): SaveData {
+export function parseSave(raw: string, ctx: SaveContext = NO_LEVELS): SaveData {
   const parsed: unknown = JSON.parse(raw);
   if (!isRecord(parsed)) throw new Error('format');
-  const obj = migrate(parsed);
+  const obj = migrate(parsed, MIGRATIONS, SAVE_VERSION, ctx);
   if (!isRecord(obj.levels)) throw new Error('format');
   return {
-    version: 1,
+    version: 2,
     settings: sanitiseSettings(obj.settings),
     levels: sanitiseLevels(obj.levels),
   };
@@ -82,7 +128,7 @@ export function exportSave(d: SaveData): string {
 
 export function defaultSave(): SaveData {
   return {
-    version: 1,
+    version: 2,
     settings: {
       sound: true,
       sfx: true,
@@ -149,6 +195,7 @@ function touchControlOf(s: Record<string, unknown>): TouchControl {
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
 const isMedal = (v: unknown): v is Medal => v === 'gold' || v === 'silver' || v === 'bronze';
+const isMasterMedal = (v: unknown): v is MasterMedal => v === 'master' || v === 'grandMaster';
 const isCount = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0;
 
 function sanitiseRecord(raw: unknown): LevelRecord | null {
@@ -157,7 +204,7 @@ function sanitiseRecord(raw: unknown): LevelRecord | null {
   const medals: LevelRecord['medals'] = {};
   if (isMedal(m.moves)) medals.moves = m.moves;
   if (isMedal(m.time)) medals.time = m.time;
-  if (typeof m.platinum === 'boolean') medals.platinum = m.platinum;
+  if (isMasterMedal(m.master)) medals.master = m.master;
   const rec: LevelRecord = { completed: raw.completed === true, medals };
   if (isCount(raw.bestMoves)) rec.bestMoves = raw.bestMoves;
   if (isCount(raw.bestTimeMs)) rec.bestTimeMs = raw.bestTimeMs;
@@ -177,8 +224,10 @@ function sanitiseLevels(raw: Record<string, unknown>): Record<string, LevelRecor
 
 export class SaveStore {
   private readonly storage: KV | null;
-  constructor(storage: KV | null) {
+  private readonly ctx: SaveContext;
+  constructor(storage: KV | null, ctx: SaveContext = NO_LEVELS) {
     this.storage = storage;
+    this.ctx = ctx;
   }
 
   load(): SaveData {
@@ -187,7 +236,7 @@ export class SaveStore {
     try {
       raw = this.storage.getItem(SAVE_KEY);
       if (raw === null) return defaultSave();
-      return parseSave(raw);
+      return parseSave(raw, this.ctx);
     } catch {
       try {
         if (raw !== null) this.storage.setItem(CORRUPT_KEY, raw);

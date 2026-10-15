@@ -33,11 +33,7 @@ test('a chapter opens after unlockAfter levels of the previous one', () => {
 });
 
 test('recordRun keeps the best results', () => {
-  const r1 = recordRun(
-    undefined,
-    { moves: 30, timeMs: 9000, mode: 'normal' },
-    { moves: 'silver', platinum: false },
-  );
+  const r1 = recordRun(undefined, { moves: 30, timeMs: 9000, mode: 'normal' }, { moves: 'silver' });
   expect(r1).toEqual({
     completed: true,
     bestMoves: 30,
@@ -47,7 +43,7 @@ test('recordRun keeps the best results', () => {
   const r2 = recordRun(
     r1,
     { moves: 40, timeMs: 5000, mode: 'master' },
-    { moves: 'bronze', time: 'gold', platinum: true },
+    { moves: 'bronze', time: 'gold', master: 'grandMaster' },
   );
   expect(r2).toEqual({
     completed: true,
@@ -55,7 +51,7 @@ test('recordRun keeps the best results', () => {
     bestTimeMs: 5000,
     masterBestMoves: 40,
     masterBestTimeMs: 5000,
-    medals: { moves: 'silver', time: 'gold', platinum: true },
+    medals: { moves: 'silver', time: 'gold', master: 'grandMaster' },
   });
 });
 
@@ -63,25 +59,31 @@ test('recordRun keeps the best master moves and time apart, from master runs onl
   const normal = recordRun(
     undefined,
     { moves: 30, timeMs: 9000, mode: 'normal' },
-    { moves: 'gold', platinum: false },
+    { moves: 'gold' },
   );
   expect(normal.masterBestMoves).toBeUndefined();
   expect(normal.masterBestTimeMs).toBeUndefined();
-  const m1 = recordRun(
-    normal,
-    { moves: 34, timeMs: 12_000, mode: 'master' },
-    { moves: 'silver', platinum: false },
-  );
+  const m1 = recordRun(normal, { moves: 34, timeMs: 12_000, mode: 'master' }, { moves: 'silver' });
   expect(m1).toMatchObject({ bestMoves: 30, masterBestMoves: 34, masterBestTimeMs: 12_000 });
   const m2 = recordRun(
     m1,
     { moves: 31, timeMs: 15_000, mode: 'master' },
-    { moves: 'gold', platinum: true },
+    { moves: 'gold', master: 'grandMaster' },
   );
   expect(m2).toMatchObject({ masterBestMoves: 31, masterBestTimeMs: 12_000 });
   // a later normal run keeps them
-  const n2 = recordRun(m2, { moves: 50, timeMs: 1000, mode: 'normal' }, { platinum: false });
+  const n2 = recordRun(m2, { moves: 50, timeMs: 1000, mode: 'normal' }, {});
   expect(n2).toMatchObject({ masterBestMoves: 31, masterBestTimeMs: 12_000, bestTimeMs: 1000 });
+});
+
+test('recordRun keeps the best master medal: grand master is never lost to a master finish', () => {
+  const run = { moves: 40, timeMs: 5000, mode: 'master' as const };
+  const m = recordRun(undefined, run, { moves: 'gold', master: 'master' });
+  expect(m.medals).toEqual({ moves: 'gold', master: 'master' });
+  const gm = recordRun(m, run, { moves: 'gold', master: 'grandMaster' });
+  expect(gm.medals.master).toBe('grandMaster');
+  expect(recordRun(gm, run, { moves: 'gold', master: 'master' }).medals.master).toBe('grandMaster');
+  expect(recordRun(gm, { ...run, mode: 'normal' }, {}).medals.master).toBe('grandMaster');
 });
 
 test('validateChapters : correct', () => {
@@ -118,18 +120,14 @@ test('masterMode: allowed as a boolean, on by default', () => {
   expect(hasMasterMode({ ...chapters[1]!, masterMode: true })).toBe(true);
 });
 
-test('master mode opens with gold on the level (or a platinum from an older save)', () => {
+test('master mode opens with gold on the level (or a master medal earned without it)', () => {
   expect(isMasterUnlocked(undefined)).toBe(false);
   expect(isMasterUnlocked({ completed: true, medals: { moves: 'silver', time: 'gold' } })).toBe(
     false,
   );
   expect(isMasterUnlocked({ completed: true, medals: { moves: 'gold' } })).toBe(true);
-  expect(isMasterUnlocked({ completed: true, medals: { platinum: true } })).toBe(true);
+  expect(isMasterUnlocked({ completed: true, medals: { master: 'master' } })).toBe(true);
   // a gold earned in master mode counts too: recordRun keeps it
-  const r = recordRun(
-    undefined,
-    { moves: 9, timeMs: 1, mode: 'master' },
-    { moves: 'gold', platinum: false },
-  );
+  const r = recordRun(undefined, { moves: 9, timeMs: 1, mode: 'master' }, { moves: 'gold' });
   expect(isMasterUnlocked(r)).toBe(true);
 });

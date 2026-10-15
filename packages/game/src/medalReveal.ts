@@ -1,14 +1,21 @@
 // Medal reveal on the result screen: which medals appear, in which order, and how strongly
 // (pure, no Phaser).
-import { MEDAL_RANK, type Award, type LevelRecord, type Medal } from '@puzzlecave/core';
+import {
+  MASTER_RANK,
+  MEDAL_RANK,
+  type Award,
+  type LevelRecord,
+  type Medal,
+} from '@puzzlecave/core';
+import type { MedalKind } from './medalInfo';
 
-export type RevealSlot = 'moves' | 'time' | 'platinum';
+export type RevealSlot = 'moves' | 'time' | 'master';
 /** new: medal not owned before (or an upgrade); record: owned, but a better score; owned: neither */
 export type Emphasis = 'new' | 'record' | 'owned';
 
 export interface RevealStep {
   slot: RevealSlot;
-  medal: Medal | 'platinum';
+  medal: MedalKind;
   emphasis: Emphasis;
   /** start of the pop-in, in ms after the screen appears */
   delayMs: number;
@@ -25,8 +32,8 @@ export const REVEAL = {
   leadMs: 200,
   /** between two medals */
   staggerMs: 200,
-  /** extra pause before platinum, which comes last */
-  platinumGapMs: 150,
+  /** extra pause before master mode's medal, which comes last */
+  masterGapMs: 150,
   popMs: 320,
   /** sparkles/burst after the pop starts */
   effectMs: 520,
@@ -48,8 +55,9 @@ const isUpgrade = (now: Medal, before: Medal | undefined) =>
 
 /**
  * Earned move and time medals from the lowest to the highest (bronze, silver, gold; moves first
- * when equal), then platinum. A medal that was not owned, or better than the owned one, is 'new';
- * an owned medal with a better score than the saved record is 'record'.
+ * when equal), then master mode's medal (master or grand master). A medal that was not owned, or
+ * better than the owned one, is 'new'; an owned medal with a better score than the saved record
+ * (the master record for master mode's medal) is 'record'.
  */
 export function planReveal(i: RevealInput): RevealPlan {
   const p = i.previous;
@@ -70,12 +78,20 @@ export function planReveal(i: RevealInput): RevealPlan {
     ...s,
     delayMs: REVEAL.leadMs + k * REVEAL.staggerMs,
   }));
-  if (i.award.platinum) {
+  const master = i.award.master;
+  if (master) {
+    const before = p?.medals.master;
+    const better = p?.masterBestMoves !== undefined && i.moves < p.masterBestMoves;
     steps.push({
-      slot: 'platinum',
-      medal: 'platinum',
-      emphasis: p?.medals.platinum ? 'owned' : 'new',
-      delayMs: REVEAL.leadMs + earned.length * REVEAL.staggerMs + REVEAL.platinumGapMs,
+      slot: 'master',
+      medal: master,
+      emphasis:
+        before === undefined || MASTER_RANK[master] > MASTER_RANK[before]
+          ? 'new'
+          : better
+            ? 'record'
+            : 'owned',
+      delayMs: REVEAL.leadMs + earned.length * REVEAL.staggerMs + REVEAL.masterGapMs,
     });
   }
   const last = steps.at(-1);

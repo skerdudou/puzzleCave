@@ -2,14 +2,16 @@ import { expect, test } from 'vitest';
 import {
   CORRUPT_KEY,
   SAVE_KEY,
+  SAVE_VERSION,
   SaveStore,
   defaultSave,
   exportSave,
   migrate,
   parseSave,
   type KV,
+  type SaveContext,
 } from './save';
-import { isMasterUnlocked } from '@puzzlecave/core';
+import { isMasterUnlocked, resolveThresholds } from '@puzzlecave/core';
 
 const mem = (init: Record<string, string> = {}): KV & { data: Record<string, string> } => {
   const data = { ...init };
@@ -254,21 +256,21 @@ test('invalid fields of a record: removed', () => {
     completed: true,
     bestMoves: 12,
     bestTimeMs: 3400,
-    medals: { moves: 'gold', platinum: true },
+    medals: { moves: 'gold', master: 'grandMaster' },
   });
   expect(levels.c).toEqual({ completed: true, medals: {} });
 });
 
-test('save from before master mode: medals kept, master mode open where gold or platinum', () => {
+test('save from before master mode: medals kept, master mode open where gold or a master medal', () => {
   const levels = loadLevels({
     // gold earned under an older, higher threshold stays gold
     'pc-04': { completed: true, bestMoves: 300, medals: { moves: 'gold' } },
-    // platinum of the former drowning challenge (no gold): kept, and it opens master mode
+    // platinum of the former drowning challenge (no gold): a grand master, it opens master mode
     'pc-06': { completed: true, bestMoves: 250, medals: { moves: 'bronze', platinum: true } },
     'pc-09': { completed: true, bestMoves: 600, medals: { moves: 'silver' } },
   });
   expect(levels['pc-04']!.medals).toEqual({ moves: 'gold' });
-  expect(levels['pc-06']!.medals).toEqual({ moves: 'bronze', platinum: true });
+  expect(levels['pc-06']!.medals).toEqual({ moves: 'bronze', master: 'grandMaster' });
   expect(isMasterUnlocked(levels['pc-04'])).toBe(true);
   expect(isMasterUnlocked(levels['pc-06'])).toBe(true);
   expect(isMasterUnlocked(levels['pc-09'])).toBe(false);
@@ -301,9 +303,82 @@ test('export then import gives the same save', () => {
   expect(parseSave(exportSave(d))).toEqual(d);
 });
 
-test.each(['', 'null', '[]', '{"version":1}', '{"version":2,"levels":{}}'])(
+test.each(['', 'null', '[]', '{"version":1}', '{"version":3,"levels":{}}'])(
   'an unusable file is refused: %s',
   (raw) => {
     expect(() => parseSave(raw)).toThrow();
   },
 );
+
+// version 1 → 2: platinum became master / grand master
+const ctx: SaveContext = {
+  masterThresholds: (id) =>
+    id === 'pc-14' ? resolveThresholds({ goldMoves: 610, platinumMoves: 538 }) : undefined,
+};
+const v1 = (levels: unknown) => JSON.stringify({ version: 1, settings: {}, levels });
+
+test('version 1: a platinum becomes a grand master, the platinum field goes', () => {
+  const d = parseSave(
+    v1({ x: { completed: true, masterBestMoves: 9, medals: { moves: 'gold', platinum: true } } }),
+  );
+  expect(d.version).toBe(SAVE_VERSION);
+  expect(d.levels.x!.medals).toEqual({ moves: 'gold', master: 'grandMaster' });
+  expect(isMasterUnlocked(d.levels.x)).toBe(true);
+});
+
+test.each([
+  [500, 'grandMaster'],
+  [538, 'grandMaster'],
+  [539, 'master'],
+  [610, 'master'],
+  [611, undefined],
+])('version 1: best master run of %i moves (gold 610, platinum 538) → %s', (moves, medal) => {
+  const d = parseSave(
+    v1({ 'pc-14': { completed: true, masterBestMoves: moves, medals: { moves: 'gold' } } }),
+    ctx,
+  );
+  expect(d.levels['pc-14']!.medals.master).toBe(medal);
+});
+
+test('version 1: a platinum is kept whatever the best master run says', () => {
+  const d = parseSave(
+    v1({ 'pc-14': { completed: true, masterBestMoves: 700, medals: { platinum: true } } }),
+    ctx,
+  );
+  expect(d.levels['pc-14']!.medals.master).toBe('grandMaster');
+});
+
+test('version 1: nothing derived for a level without master mode, unknown, or without a master run', () => {
+  const d = parseSave(
+    v1({
+      'pc-01': { completed: true, masterBestMoves: 5, medals: { moves: 'gold' } },
+      'pc-14': { completed: true, bestMoves: 500, medals: { moves: 'gold' } },
+    }),
+    ctx,
+  );
+  expect(d.levels['pc-01']!.medals).toEqual({ moves: 'gold' });
+  expect(d.levels['pc-14']!.medals).toEqual({ moves: 'gold' });
+});
+
+test('version 1 through the store: migrated on load, written back as version 2', () => {
+  const kv = mem({
+    [SAVE_KEY]: v1({ 'pc-14': { completed: true, masterBestMoves: 600, medals: {} } }),
+  });
+  const store = new SaveStore(kv, ctx);
+  const d = store.load();
+  expect(d.levels['pc-14']!.medals).toEqual({ master: 'master' });
+  store.save(d);
+  expect(JSON.parse(kv.data[SAVE_KEY]!)).toMatchObject({
+    version: 2,
+    levels: { 'pc-14': { medals: { master: 'master' } } },
+  });
+});
+
+test('version 2: an invalid master medal is dropped', () => {
+  const raw = JSON.stringify({
+    version: 2,
+    settings: {},
+    levels: { a: { completed: true, medals: { master: 'platinum', platinum: true } } },
+  });
+  expect(parseSave(raw).levels.a!.medals).toEqual({});
+});

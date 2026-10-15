@@ -15,7 +15,7 @@ import { formatTime } from '../format';
 import { t } from '../i18n';
 import { onSceneKeyDown } from '../input/sceneKeys';
 import { chapters, hasMaster, levelById, locate } from '../levels';
-import { masterStatus, thresholdRows, type ThresholdRow } from '../medalInfo';
+import { masterMedalName, masterStatus, thresholdRows, type ThresholdRow } from '../medalInfo';
 import { planReveal, prefersReducedMotion, type RevealSlot } from '../medalReveal';
 import { MedalReveal, type MedalSpot } from '../render/MedalReveal';
 import { COLORS, drawMedal, drawThresholdLine, makeButton, px, textStyle } from '../ui';
@@ -72,6 +72,9 @@ export class ResultScene extends Phaser.Scene {
     const th = resolveThresholds(level.thresholds);
     const master = hasMaster(levelId);
     const rows = thresholdRows(th, master);
+    // the threshold lines, centred on cx: clear of the screen's edges and of the buttons' column
+    const lineWidth =
+      (low ? 2 * Math.min(cx, this.scale.width - px(170) - cx) : this.scale.width) - px(16);
     // earned medals are drawn by the reveal animation, unearned ones (outlines) here
     const spots: Partial<Record<RevealSlot, MedalSpot>> = {};
     const medalAt = (slot: RevealSlot, earned: boolean) => {
@@ -88,7 +91,7 @@ export class ResultScene extends Phaser.Scene {
       isRecord: boolean,
       kind: ThresholdRow['kind'],
     ) => {
-      const slot: RevealSlot = kind === 'master' ? 'platinum' : kind;
+      const slot: RevealSlot = kind;
       if (hasTier) medalAt(slot, medal !== undefined);
       this.add
         .text(cx - px(110), y, t('labelValue', { label, value }), textStyle(16))
@@ -103,7 +106,7 @@ export class ResultScene extends Phaser.Scene {
           .setOrigin(0, 0.5);
       const row = rows.find((r) => r.kind === kind);
       if (row) {
-        drawThresholdLine(this, g, cx, y + px(32), '', row.tiers);
+        drawThresholdLine(this, g, cx, y + px(32), '', row.tiers, { maxWidth: lineWidth });
         y += px(18);
       }
       y += px(40);
@@ -126,27 +129,21 @@ export class ResultScene extends Phaser.Scene {
       previous?.bestTimeMs === undefined || result.timeMs < previous.bestTimeMs,
       'time',
     );
-    // master mode, a separate achievement, on its own line: this master run (platinum medal),
-    // or after a normal run where the player stands in master mode
-    if (master && th.platinumMoves !== undefined) {
+    // master mode, a separate achievement, on its own line: this master run (master or grand
+    // master medal), or after a normal run where the player stands in master mode
+    if (master && th.grandMasterMoves !== undefined) {
       let text: string;
       if (mode === 'master') {
-        // this run: moves · time, the platinum medal for it (revealed with the others)
-        medalAt('platinum', award.platinum);
+        // this run: moves · time, under the name of its medal (revealed with the others)
+        medalAt('master', award.master !== undefined);
         text = t('labelValue', {
-          label: t('master'),
+          label: award.master ? masterMedalName(award.master) : t('master'),
           value: `${result.moves} · ${formatTime(result.timeMs)}`,
         });
       } else {
-        // a normal run: where the player stands in master mode (platinum owned or not)
+        // a normal run: where the player stands in master mode (its best medal, if any)
         const ms = masterStatus(app.data.levels[levelId], true);
-        drawMedal(
-          g,
-          cx - px(130),
-          y,
-          px(10),
-          ms.kind === 'best' && ms.platinum ? 'platinum' : undefined,
-        );
+        drawMedal(g, cx - px(130), y, px(10), ms.kind === 'best' ? ms.medal : undefined);
         text =
           ms.kind === 'best'
             ? t('masterBest', { moves: ms.moves, time: formatTime(ms.timeMs) })
@@ -162,7 +159,10 @@ export class ResultScene extends Phaser.Scene {
         .setOrigin(0, 0.5);
       const row = rows.find((r) => r.kind === 'master');
       if (row) {
-        drawThresholdLine(this, g, cx, y + px(32), '', row.tiers);
+        drawThresholdLine(this, g, cx, y + px(32), '', row.tiers, {
+          maxWidth: lineWidth,
+          named: masterMedalName,
+        });
         y += px(18);
       }
       y += px(40);
