@@ -3,7 +3,7 @@
 import Phaser from 'phaser';
 import { t } from '../i18n';
 import { REVEAL, type RevealPlan, type RevealSlot, type RevealStep } from '../medalReveal';
-import { MEDAL_COLORS, px, textStyle } from '../ui';
+import { MEDAL_COLORS, paintMedal, px, textStyle } from '../ui';
 
 export interface MedalSpot {
   x: number;
@@ -59,7 +59,7 @@ export class MedalReveal {
     const s = this.scene;
     const color = MEDAL_COLORS[step.medal];
     const m = s.add.graphics({ x: spot.x, y: spot.y });
-    m.fillStyle(color, 1).fillCircle(0, 0, spot.r);
+    paintMedal(m, 0, 0, spot.r, step.medal);
     this.finals.push(m);
     const tag = step.emphasis === 'new' ? this.newTag(step, spot) : undefined;
     if (tag) this.finals.push(tag);

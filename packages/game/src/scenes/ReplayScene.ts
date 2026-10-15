@@ -7,6 +7,7 @@ import { Playback } from '../author/playback';
 import { onSceneKeyDown } from '../input/sceneKeys';
 import { BoardView } from '../render/BoardView';
 import { boardLayout, fractionalZoom } from '../render/layout';
+import { isTouchDevice } from '../touch';
 import { COLORS, makeButton, px, textStyle } from '../ui';
 
 export interface ReplaySceneData {
@@ -135,8 +136,9 @@ export class ReplayScene extends Phaser.Scene {
     this.moveText = this.add.text(px(12), px(38), '', textStyle(14)).setOrigin(0, 0);
     this.speedText = this.add.text(w - px(12), px(38), '', textStyle(14)).setOrigin(1, 0);
     this.hud.push(this.moveText, this.speedText);
+    // the keys only: a touch screen has the buttons
     const help = this.add
-      .text(w / 2, h - px(10), t('replayHelp'), {
+      .text(w / 2, h - px(10), isTouchDevice() ? '' : t('replayHelp'), {
         ...textStyle(10, COLORS.dim),
         align: 'center',
         wordWrap: { width: w - px(16) },

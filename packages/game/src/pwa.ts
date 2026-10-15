@@ -4,7 +4,7 @@ import { registerSW } from 'virtual:pwa-register';
 import { app } from './app';
 import { setDebug } from './debug';
 import { t } from './i18n';
-import { COLORS } from './ui';
+import { showNotice } from './notice';
 import { CHECK_INTERVAL_MS, UpdateGate, checkDue } from './updateGate';
 
 /**
@@ -19,7 +19,10 @@ export function startUpdates(game: Phaser.Game): void {
       app.persist(); // already saved as it changes: one more time costs nothing
       void update();
     },
-    () => showNotice(t('updateReady')),
+    () => {
+      showNotice(t('updateReady'));
+      setDebug({ updateNotice: t('updateReady') });
+    },
   );
   // the new service worker waits until `update()` lets it take over, then the page reloads
   const update = registerSW({
@@ -53,32 +56,4 @@ function watchForUpdates(registration: ServiceWorkerRegistration): void {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') check();
   });
-}
-
-/** A short line over the top of the play area for a few seconds; it never takes a touch. */
-function showNotice(text: string): void {
-  const el = document.createElement('div');
-  el.textContent = text;
-  el.setAttribute('role', 'status');
-  Object.assign(el.style, {
-    position: 'fixed',
-    top: 'calc(env(safe-area-inset-top, 0px) + 104px)',
-    left: '50%',
-    transform: 'translateX(-50%)',
-    maxWidth: 'calc(100vw - 32px)',
-    boxSizing: 'border-box',
-    padding: '6px 12px',
-    borderRadius: '6px',
-    background: 'rgba(0, 0, 0, 0.75)',
-    color: COLORS.text,
-    font: '13px monospace',
-    textAlign: 'center',
-    pointerEvents: 'none',
-    transition: 'opacity 0.5s',
-    zIndex: '10',
-  } satisfies Partial<CSSStyleDeclaration>);
-  document.body.append(el);
-  setDebug({ updateNotice: text });
-  setTimeout(() => (el.style.opacity = '0'), 6000);
-  setTimeout(() => el.remove(), 6600);
 }

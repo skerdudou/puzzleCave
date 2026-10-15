@@ -1,9 +1,13 @@
 import Phaser from 'phaser';
 import { app } from '../app';
 import { setDebug } from '../debug';
-import { LANGS, getLang, messages, setLang, t, type Lang } from '../i18n';
+import { LANGS, detectLang, getLang, messages, setLang, t, type Lang } from '../i18n';
 import { canVibrate, vibrate } from '../haptics';
 import { shiftDragStep } from '../input/drag';
+import { FocusList, focusKey } from '../input/focusList';
+import { showNotice } from '../notice';
+import { exportSave, parseSave } from '../save';
+import { playSfx } from '../sfx';
 import { onSceneKeyDown } from '../input/sceneKeys';
 import { nextTouchControl } from '../input/tapZones';
 import {
@@ -16,7 +20,16 @@ import {
   scrollThumb,
 } from '../input/scroll';
 import { syncMusic } from '../music';
-import { COLORS, TOUCH_TARGET, dpr, makeButton, px, textStyle } from '../ui';
+import {
+  COLORS,
+  KeyFocus,
+  TOUCH_TARGET,
+  dpr,
+  makeButton,
+  px,
+  textStyle,
+  type Focusable,
+} from '../ui';
 import { isTouchDevice } from '../touch';
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -50,19 +63,38 @@ export class OptionsScene extends Phaser.Scene {
   /** inertia after a flick, px/ms (positive: the content goes up) */
   private velocity = 0;
   private thumb!: Phaser.GameObjects.Graphics;
+  /** the buttons in reading order, for the keyboard */
+  private focusables: Focusable[] = [];
+  private focus!: KeyFocus;
+  /** the button focused before the scene restarted */
+  private focusId: string | null = null;
+  /** the drop-down list's languages, and the one the keyboard is on */
+  private langItems: Phaser.GameObjects.Text[] = [];
+  private langFocus = new FocusList(0);
+  /** Erase was pressed once: the next press erases the progress */
+  private eraseArmed = false;
 
   constructor() {
     super('Options');
   }
 
   /**
-   * `scroll` (device px) is kept when the scene restarts (option changed, rotation). Phaser
-   * keeps the last data for a later start without any: it is used once, so that coming back
-   * from the menu shows the top again.
+   * `scroll` (device px) and the keyboard focus are kept when the scene restarts (option
+   * changed, rotation). Phaser keeps the last data for a later start without any: they are used
+   * once, so that coming back from the menu shows the top again.
    */
-  init(data: { scroll?: number }): void {
+  init(data: { scroll?: number; focus?: string | null }): void {
     this.scroll = data?.scroll ?? 0;
-    if (data) delete data.scroll;
+    this.focusId = data?.focus ?? null;
+    if (data) {
+      delete data.scroll;
+      delete data.focus;
+    }
+  }
+
+  /** Restarts the scene where it was (scroll and keyboard focus). */
+  private rebuild(): void {
+    this.scene.restart({ scroll: this.scroll, focus: this.focus?.focused?.id ?? null });
   }
 
   create(): void {
@@ -73,6 +105,9 @@ export class OptionsScene extends Phaser.Scene {
     this.buttons = {};
     this.menuButtons = {};
     this.langMenu = [];
+    this.langItems = [];
+    this.focusables = [];
+    this.eraseArmed = false;
     this.drag = null;
     this.dragged = false;
     this.velocity = 0;
@@ -87,7 +122,7 @@ export class OptionsScene extends Phaser.Scene {
     const change = (fn: () => void) => {
       fn();
       app.persist();
-      this.scene.restart({ scroll: this.scroll });
+      this.rebuild();
     };
     // a control answers a tap only: a finger that slid to scroll does not press it
     const button = (
@@ -100,7 +135,21 @@ export class OptionsScene extends Phaser.Scene {
     ) => {
       const b = makeButton(this, x, by, label, () => this.dragged || fn(), size);
       this.buttons[id] = [x, by];
+      this.focusables.push({ id, button: b, press: fn });
       return b;
+    };
+    // buttons side by side, centred on the row
+    const row = (items: [id: string, label: string, fn: () => void][]) => {
+      const bs = items.map(([id, text, fn]) => button(id, 0, y, text, fn));
+      const gap = px(12);
+      let x = cx - (bs.reduce((w, b) => w + b.width, 0) + gap * (bs.length - 1)) / 2;
+      bs.forEach((b, i) => {
+        b.setX(x + b.width / 2);
+        this.buttons[items[i]![0]] = [b.x, y];
+        x += b.width + gap;
+      });
+      y += rowStep;
+      return bs;
     };
     const label = (text: string) => {
       const l = this.add
@@ -119,11 +168,21 @@ export class OptionsScene extends Phaser.Scene {
       y += rowStep;
     };
 
+    // the music and the sound effects, one under the other
     label(t('sound'));
-    button('sound', cx, y, s.sound ? t('on') : t('off'), () =>
+    const onOff = (key: 'music' | 'effects', on: boolean) =>
+      t('labelValue', { label: t(key), value: on ? t('on') : t('off') });
+    button('sound', cx, y, onOff('music', s.sound), () =>
       change(() => {
         s.sound = !s.sound;
         syncMusic(this, s.sound, 'music-menu');
+      }),
+    );
+    y += px(touch ? TOUCH_TARGET + 6 : 34);
+    button('sfx', cx, y, onOff('effects', s.sfx), () =>
+      change(() => {
+        s.sfx = !s.sfx;
+        playSfx('key', s.sfx); // a sample when turned on
       }),
     );
     y += rowStep;
@@ -168,6 +227,14 @@ export class OptionsScene extends Phaser.Scene {
       y += rowStep;
     }
 
+    // the progress: kept in a file, brought back from one, or erased (pressed twice)
+    label(t('progress'));
+    const [, , erase] = row([
+      ['export', t('exportSave'), () => this.exportProgress()],
+      ['import', t('importSave'), () => this.importProgress()],
+      ['erase', t('resetProgress'), () => this.eraseProgress(erase!)],
+    ]);
+
     const back = button(
       'back',
       cx,
@@ -180,9 +247,13 @@ export class OptionsScene extends Phaser.Scene {
 
     this.thumb = this.add.graphics().setScrollFactor(0).setDepth(5);
     this.setScroll(this.scroll, true);
+    this.focus = new KeyFocus(this.focusables, this.focusId, (item) => {
+      this.reveal(item.button);
+      setDebug({ focus: item.id });
+    });
     this.listenScroll();
     onSceneKeyDown(this, (e) => this.onKey(e));
-    const onResize = () => this.scene.restart({ scroll: this.scroll });
+    const onResize = () => this.rebuild();
     this.scale.on('resize', onResize);
     this.events.once('shutdown', () => this.scale.off('resize', onResize));
     setDebug({ scene: 'Options', lang: getLang(), langMenuOpen: false, settings: { ...s } });
@@ -270,11 +341,11 @@ export class OptionsScene extends Phaser.Scene {
       else this.scene.start('Menu');
       return;
     }
-    if (this.langMenu.length) return;
+    if (this.langMenu.length) return this.langKey(e);
+    // arrows and Tab go from button to button (the screen follows), Enter or Space press it
+    if (this.focus.key(e)) return;
     const page = this.scale.height - px(44);
     const by: Record<string, number> = {
-      ArrowDown: px(44),
-      ArrowUp: -px(44),
       PageDown: page,
       PageUp: -page,
       ' ': page,
@@ -285,6 +356,101 @@ export class OptionsScene extends Phaser.Scene {
     if (d === undefined) return;
     this.velocity = 0;
     this.setScroll(this.scroll + d);
+  }
+
+  /** Scrolls just enough for a focused button to be on the screen (Back: to the very bottom). */
+  private reveal(b: Phaser.GameObjects.Text): void {
+    const margin = px(24);
+    const top = b.y - b.height / 2 - margin;
+    const bottom = b.y + b.height / 2 + margin;
+    this.velocity = 0;
+    if (top < this.scroll) this.setScroll(top);
+    else if (bottom > this.scroll + this.scale.height) this.setScroll(bottom - this.scale.height);
+  }
+
+  /** The language list open: arrows move along it, Enter or Space picks. */
+  private langKey(e: KeyboardEvent): void {
+    const action = focusKey(e);
+    if (!action) return;
+    e.preventDefault();
+    if (action === 'activate') {
+      const lang = LANGS[this.langFocus.index];
+      if (lang) this.pickLang(lang);
+      return;
+    }
+    this.langFocus.move(action === 'next' ? 1 : -1);
+    this.showLangFocus();
+  }
+
+  private showLangFocus(): void {
+    this.langItems.forEach((item, i) =>
+      item.setBackgroundColor(i === this.langFocus.index ? COLORS.focus : 'transparent'),
+    );
+  }
+
+  /** Options › Export: the save as a file the player keeps (to move it, or for safety). */
+  private exportProgress(): void {
+    const blob = new Blob([exportSave(app.data)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `puzzlecave-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    setDebug({ exported: a.download });
+  }
+
+  /** Options › Import: a file from Export replaces the progress and the settings. */
+  private importProgress(): void {
+    // in the page (hidden) while the file dialog is open: a detached input can be collected
+    // before the browser hands it the file, and then nothing happens
+    document.getElementById('import-save')?.remove();
+    const input = document.createElement('input');
+    input.id = 'import-save';
+    input.type = 'file';
+    input.accept = '.json,application/json';
+    input.hidden = true;
+    input.addEventListener('change', () => {
+      input.remove();
+      const file = input.files?.[0];
+      if (file) void file.text().then((text) => this.applyImport(text));
+    });
+    document.body.append(input);
+    input.click();
+    this.imports++;
+    setDebug({ importPicker: this.imports });
+  }
+  private imports = 0;
+
+  /** Imports a save from its text. */
+  private applyImport(text: string): void {
+    let data;
+    try {
+      data = parseSave(text);
+    } catch {
+      showNotice(t('importFailed'), '#ff8080');
+      return;
+    }
+    app.data = data;
+    setLang(data.settings.lang ?? detectLang(navigator.languages ?? []));
+    app.persist();
+    syncMusic(this, data.settings.sound, 'music-menu');
+    showNotice(t('importDone'));
+    this.rebuild();
+  }
+
+  /** Options › Erase: a first press asks (the button turns to "Sure?"), a second one erases. */
+  private eraseProgress(button: Phaser.GameObjects.Text): void {
+    if (!this.eraseArmed) {
+      this.eraseArmed = true;
+      button.setText(t('confirmReset')).setColor('#ff8080');
+      setDebug({ eraseArmed: true });
+      return;
+    }
+    app.data.levels = {};
+    app.persist();
+    showNotice(t('progressReset'));
+    this.rebuild();
   }
 
   /** Button centres on the screen, in CSS pixels (the content ones moved by the scroll). */
@@ -333,6 +499,7 @@ export class OptionsScene extends Phaser.Scene {
       const current = lang === getLang();
       const item = this.add
         .text(cx, by, messages(lang).langName, textStyle(14, current ? COLORS.accent : COLORS.text))
+        .setPadding(px(10), px(2), px(10), px(2))
         .setOrigin(0.5)
         .setScrollFactor(0)
         .setDepth(11);
@@ -353,7 +520,14 @@ export class OptionsScene extends Phaser.Scene {
       item.on('pointerup', () => this.pickLang(lang));
       items[`lang-${lang}`] = [cx, by];
       this.langMenu.push(item);
+      this.langItems.push(item);
     });
+    // opened from the keyboard: the current language is focused
+    this.langFocus = new FocusList(
+      LANGS.length,
+      this.focus.focused ? LANGS.indexOf(getLang()) : -1,
+    );
+    this.showLangFocus();
     // Phaser hit-tests these objects only once its next pre-update has taken them in, and
     // orders the hits by the last frame drawn: until then a click still lands on the screen
     // without the list. So the tests learn that the list is open once it has been drawn.
@@ -371,6 +545,7 @@ export class OptionsScene extends Phaser.Scene {
   private closeLangMenu(): void {
     for (const o of this.langMenu) o.destroy();
     this.langMenu = [];
+    this.langItems = [];
     this.menuButtons = {};
     this.publishButtons();
     setDebug({ langMenuOpen: false });
@@ -380,6 +555,6 @@ export class OptionsScene extends Phaser.Scene {
     app.data.settings.lang = lang;
     setLang(lang);
     app.persist();
-    this.scene.restart({ scroll: this.scroll });
+    this.rebuild();
   }
 }

@@ -413,6 +413,8 @@ async function copy(text: string, button: Phaser.GameObjects.Text): Promise<void
     await navigator.clipboard.writeText(text);
     button.setText(t('copied'));
   } catch {
+    // clipboard refused (no focus, permission): said on the button, the text left in the console
+    button.setText(t('copyFailed'));
     console.log(text);
   }
 }
