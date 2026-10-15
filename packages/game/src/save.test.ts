@@ -70,7 +70,7 @@ test('invalid settings replaced by defaults', () => {
   const kv = mem({
     [SAVE_KEY]: JSON.stringify({
       version: 1,
-      settings: { sound: 'yes', lang: 'xx', dragStep: 'far', vibration: 0, tapZones: 'centre' },
+      settings: { sound: 'yes', lang: 'xx', dragStep: 'far', vibration: 0, touchControl: 'x' },
       levels: {},
     }),
   });
@@ -81,11 +81,11 @@ test('invalid settings replaced by defaults', () => {
     dragStepDefault: 40,
     repeatRate: 10,
     vibration: true,
-    tapZones: 'off',
+    touchControl: 'drag',
   });
 });
 
-test('a save from before the drag, vibration and tap zone options: defaults (40 px, on, off)', () => {
+test('a save from before the drag, vibration and touch control options: defaults (40 px, on, drag)', () => {
   const kv = mem({
     [SAVE_KEY]: JSON.stringify({
       version: 1,
@@ -100,7 +100,7 @@ test('a save from before the drag, vibration and tap zone options: defaults (40 
     dragStepDefault: 40,
     repeatRate: 12,
     vibration: true,
-    tapZones: 'off',
+    touchControl: 'drag',
   });
 });
 
@@ -154,11 +154,38 @@ test('master records are kept', () => {
   expect(levels.b).toEqual({ completed: true, medals: {}, masterBestTimeMs: 9000 });
 });
 
-test.each(['off', 'screen', 'player'])('tap zones %s are kept', (tapZones) => {
+test.each(['drag', 'tap'])('touch control %s is kept', (touchControl) => {
+  const kv = mem({
+    [SAVE_KEY]: JSON.stringify({ version: 1, settings: { touchControl }, levels: {} }),
+  });
+  expect(new SaveStore(kv).load().settings.touchControl).toBe(touchControl);
+});
+
+test.each([
+  ['screen', 'tap'],
+  ['player', 'tap'],
+  ['off', 'drag'],
+  ['centre', 'drag'],
+  [undefined, 'drag'],
+  [3, 'drag'],
+])('old tap zones %j → touch control %s', (tapZones, expected) => {
   const kv = mem({
     [SAVE_KEY]: JSON.stringify({ version: 1, settings: { tapZones }, levels: {} }),
   });
-  expect(new SaveStore(kv).load().settings.tapZones).toBe(tapZones);
+  const { settings } = new SaveStore(kv).load();
+  expect(settings.touchControl).toBe(expected);
+  expect(settings).not.toHaveProperty('tapZones');
+});
+
+test('a touch control already saved wins over old tap zones', () => {
+  const kv = mem({
+    [SAVE_KEY]: JSON.stringify({
+      version: 1,
+      settings: { tapZones: 'screen', touchControl: 'drag' },
+      levels: {},
+    }),
+  });
+  expect(new SaveStore(kv).load().settings.touchControl).toBe('drag');
 });
 
 test('vibration off is kept', () => {

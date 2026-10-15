@@ -109,9 +109,12 @@ test.describe('phone in landscape', () => {
     // the reported positions follow the scroll
     expect((await button(page, 'sound'))[1]).toBeCloseTo(sy - y, 0);
 
-    // a drag starting on a stepper button does not change it either (and comes back up)
-    const [px_, py] = await button(page, 'drag-plus');
-    await dragFrom(page, px_, py, 300);
+    // a drag starting on the touch control button does not change it either (and comes back
+    // up: down past the top, the finger staying on the screen, 360 px high)
+    const [px_, py] = await button(page, 'touchControl');
+    const down = 350 - py;
+    expect(down).toBeGreaterThan(y);
+    await dragFrom(page, px_, py, down);
     expect(await restingScroll(page)).toBe(0);
     expect((await debug(page)).settings).toEqual(settings);
     expect(await saved(page)).toBe(before);

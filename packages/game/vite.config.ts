@@ -13,7 +13,10 @@ export default defineConfig({
     levelsPlugin(levelsDir, () => author.api?.busy() ?? false),
     authorPlugin(levelsDir, author),
     VitePWA({
-      registerType: 'autoUpdate',
+      // a new version waits until the game lets it in (src/pwa.ts): never in the middle of a
+      // level; the registration comes from src/pwa.ts, nothing is injected
+      registerType: 'prompt',
+      injectRegister: false,
       manifest: {
         name: 'puzzleCave',
         short_name: 'puzzleCave',
@@ -32,6 +35,8 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,png,mp3}'],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+        // the previous version's files are deleted once the new one takes over
+        cleanupOutdatedCaches: true,
       },
     }),
   ],

@@ -1,30 +1,29 @@
 import type { Dir } from '@puzzlecave/core';
-import { repeatDelays } from './InputController';
 
-/** Optional tap zones: off, around the centre of the play area, or around the player. */
-export const TAP_ZONE_MODES = ['off', 'screen', 'player'] as const;
-export type TapZoneMode = (typeof TAP_ZONE_MODES)[number];
+/**
+ * Touch control: a continuous drag anywhere on the play area, or tap zones (the play area cut
+ * in an X into four triangles). The d-pad works with both.
+ */
+export const TOUCH_CONTROLS = ['drag', 'tap'] as const;
+export type TouchControl = (typeof TOUCH_CONTROLS)[number];
 
-export const isTapZoneMode = (v: unknown): v is TapZoneMode =>
-  (TAP_ZONE_MODES as readonly unknown[]).includes(v);
+export const isTouchControl = (v: unknown): v is TouchControl =>
+  (TOUCH_CONTROLS as readonly unknown[]).includes(v);
 
-/** The next mode, for a button that cycles through them. */
-export function nextTapZoneMode(m: TapZoneMode): TapZoneMode {
-  return TAP_ZONE_MODES[(TAP_ZONE_MODES.indexOf(m) + 1) % TAP_ZONE_MODES.length]!;
+/** The other mode, for the button that switches between them. */
+export function nextTouchControl(m: TouchControl): TouchControl {
+  return m === 'drag' ? 'tap' : 'drag';
 }
 
 /** No direction this close to the centre (CSS px): too ambiguous. */
 export const ZONE_DEAD_RADIUS = 16;
 /** No direction this close to a diagonal (degrees, on each side of it). */
 export const ZONE_DIAGONAL_BAND = 10;
-/** A finger that travels more than this (CSS px) from where it went down is dragging. */
-export const TAP_SLOP = 10;
-
 /**
- * A press this close to a button (CSS px from its edges) is not a zone tap: a finger that just
- * missed Undo or the d-pad must do nothing rather than walk.
+ * Room kept between the tap zones and the header or the d-pad (CSS px): a finger that just
+ * missed Undo or a d-pad button must do nothing rather than walk.
  */
-export const ZONE_BUTTON_MARGIN = 24;
+export const ZONE_MARGIN = 24;
 
 export interface Box {
   x: number;
@@ -33,13 +32,42 @@ export interface Box {
   h: number;
 }
 
-/** (x, y) is within `margin` of one of the boxes (all in the same units). */
-export function nearAny(x: number, y: number, boxes: readonly Box[], margin: number): boolean {
-  return boxes.some(
-    (b) =>
-      x >= b.x - margin && x <= b.x + b.w + margin && y >= b.y - margin && y <= b.y + b.h + margin,
-  );
+/**
+ * The area of the tap zones, CSS px: the screen below the header and away from the d-pad (under
+ * it in portrait, a column on the right in landscape), `margin` px from both. `bottom` is the
+ * lowest y it may reach without a d-pad (above the keyboard help). Null when nothing is left.
+ */
+export function zoneArea(
+  viewW: number,
+  viewH: number,
+  headerBottom: number,
+  dpad: { box: Box; side: boolean } | null,
+  margin = ZONE_MARGIN,
+  bottom = viewH,
+): Box | null {
+  const top = headerBottom + margin;
+  let right = viewW;
+  let low = bottom;
+  if (dpad?.side) right = dpad.box.x - margin;
+  else if (dpad) low = dpad.box.y - margin;
+  if (right <= 0 || low <= top) return null;
+  return { x: 0, y: top, w: right, h: low - top };
 }
+
+/** The centre of a box. */
+export const centreOf = (b: Box): [number, number] => [b.x + b.w / 2, b.y + b.h / 2];
+
+/** The smallest box around all of them. */
+export function boundsOf(boxes: readonly Box[]): Box {
+  const x = Math.min(...boxes.map((b) => b.x));
+  const y = Math.min(...boxes.map((b) => b.y));
+  const r = Math.max(...boxes.map((b) => b.x + b.w));
+  const b = Math.max(...boxes.map((o) => o.y + o.h));
+  return { x, y, w: r - x, h: b - y };
+}
+
+const inside = (x: number, y: number, b: Box) =>
+  x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
 
 /**
  * The direction of a point seen from the centre of the zones, (dx, dy) in CSS px (y down): the
@@ -63,86 +91,67 @@ export function zoneDir(
   return dy > 0 ? 'down' : 'up';
 }
 
-export interface Timers {
-  set(fn: () => void, ms: number): unknown;
-  clear(handle: unknown): void;
+/** The zone under (x, y), CSS px: none outside the area (header, d-pad, their margins). */
+export function zoneAt(x: number, y: number, area: Box | null): Dir | null {
+  if (!area || !inside(x, y, area)) return null;
+  const [cx, cy] = centreOf(area);
+  return zoneDir(x - cx, y - cy);
 }
-const realTimers: Timers = {
-  set: (fn, ms) => setTimeout(fn, ms),
-  clear: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
+
+type Pt = [number, number];
+const FAR: Record<Dir, [Pt, Pt]> = {
+  up: [
+    [-1, -1],
+    [1, -1],
+  ],
+  down: [
+    [-1, 1],
+    [1, 1],
+  ],
+  left: [
+    [-1, -1],
+    [-1, 1],
+  ],
+  right: [
+    [1, -1],
+    [1, 1],
+  ],
 };
 
 /**
- * One finger on a tap zone, from touch-down to release: a tap, a hold or a drag.
- *
- * The move of a tap is emitted on RELEASE, not on touch-down: a finger that goes down could
- * still start a drag, and a move emitted at once could not be taken back (the drag would then
- * add its own moves). So:
- * - released without having travelled more than `slop` px: a tap, one move (latency: the time
- *   the finger stays on the glass, ~100 ms for a quick tap);
- * - still down and still after the hold delay (the d-pad's first repeat delay, `repeatDelays`):
- *   one move then, then one per repeat interval, until lifted, cancelled or moved away (more
- *   than `slop` px: the repeat stops, and the gesture makes nothing more, not even a drag);
- * - travelled more than `slop` px before that: a drag, the zone emits nothing (`move` returns
- *   true: the caller's DragSteps takes over; `slop` is below the drag step, so the drag has
- *   not moved yet).
+ * The triangle of `dir` (from the centre of the area, along the diagonals), clipped to the
+ * area: the polygon to light up under a finger, never over the header or the d-pad.
  */
-export class ZoneGesture {
-  private state: 'pending' | 'holding' | 'drag' | 'over' = 'pending';
-  private timer: unknown = null;
-
-  constructor(
-    readonly dir: Dir,
-    private readonly x: number,
-    private readonly y: number,
-    private readonly emit: (d: Dir) => void,
-    private readonly rate: () => number,
-    private readonly slop = TAP_SLOP,
-    private readonly timers: Timers = realTimers,
-  ) {
-    this.schedule(repeatDelays(rate()).initial);
+export function zonePolygon(dir: Dir, area: Box): Pt[] {
+  const [cx, cy] = centreOf(area);
+  const L = 2 * (area.w + area.h);
+  const [a, b] = FAR[dir];
+  let poly: Pt[] = [
+    [cx, cy],
+    [cx + L * a[0], cy + L * a[1]],
+    [cx + L * b[0], cy + L * b[1]],
+  ];
+  // Sutherland–Hodgman against the four sides of the area
+  const edges: [(p: Pt) => number, number][] = [
+    [(p) => p[0], area.x],
+    [(p) => -p[0], -(area.x + area.w)],
+    [(p) => p[1], area.y],
+    [(p) => -p[1], -(area.y + area.h)],
+  ];
+  for (const [f, lim] of edges) {
+    const out: Pt[] = [];
+    for (let i = 0; i < poly.length; i++) {
+      const p = poly[i]!;
+      const q = poly[(i + 1) % poly.length]!;
+      const pin = f(p) >= lim;
+      const qin = f(q) >= lim;
+      if (pin) out.push(p);
+      if (pin !== qin) {
+        const t = (lim - f(p)) / (f(q) - f(p));
+        out.push([p[0] + t * (q[0] - p[0]), p[1] + t * (q[1] - p[1])]);
+      }
+    }
+    poly = out;
   }
-
-  /** The finger is at (x, y): true when the gesture is a drag (the caller drags). */
-  move(x: number, y: number): boolean {
-    if (this.state === 'drag') return true;
-    if (this.state === 'over' || Math.hypot(x - this.x, y - this.y) <= this.slop) return false;
-    const wasPending = this.state === 'pending';
-    this.stop();
-    this.state = wasPending ? 'drag' : 'over';
-    return wasPending;
-  }
-
-  /** Lifted: a tap if nothing else happened. */
-  release(): void {
-    const tap = this.state === 'pending';
-    this.stop();
-    this.state = 'over';
-    if (tap) this.emit(this.dir);
-  }
-
-  /** Cancelled (touchcancel, scene left, another finger): nothing more. */
-  cancel(): void {
-    this.stop();
-    this.state = 'over';
-  }
-
-  get dragging(): boolean {
-    return this.state === 'drag';
-  }
-
-  private stop(): void {
-    if (this.timer !== null) this.timers.clear(this.timer);
-    this.timer = null;
-  }
-
-  private schedule(ms: number): void {
-    this.timer = this.timers.set(() => {
-      this.timer = null;
-      if (this.state !== 'pending' && this.state !== 'holding') return;
-      this.state = 'holding';
-      this.emit(this.dir);
-      this.schedule(repeatDelays(this.rate()).interval);
-    }, ms);
-  }
+  return poly;
 }

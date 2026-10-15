@@ -24,15 +24,7 @@ import { boardLayout, type BoardLayout } from '../render/layout';
 import { HapticFeed, vibrate } from '../haptics';
 import { DragSteps } from '../input/drag';
 import { HoldRepeat } from '../input/holdRepeat';
-import {
-  TAP_SLOP,
-  ZONE_BUTTON_MARGIN,
-  ZoneGesture,
-  nearAny,
-  zoneDir,
-  type Box,
-  type TapZoneMode,
-} from '../input/tapZones';
+import { boundsOf, centreOf, zoneArea, zoneAt, zonePolygon, type Box } from '../input/tapZones';
 import { RunClock, countdown } from '../runClock';
 import { dpadLayout, dpadLayoutSide, isLandscape, isTouchDevice } from '../touch';
 import { COLORS, dpr, makeButton, px, textStyle } from '../ui';
@@ -61,8 +53,10 @@ export class GameScene extends Phaser.Scene {
   private readonly drags = new Map<number, DragSteps>();
   /** a drag has moved the player since the last press: its release is not a button click */
   private dragMoved = false;
-  /** tap zones (option): the gesture of each finger that went down on one */
-  private readonly zones = new Map<number, ZoneGesture>();
+  /** tap zones (touch control option): their area, CSS px (null: none, or no room left) */
+  private zoneArea: Box | null = null;
+  /** the finger holding a tap zone, and that zone */
+  private zoneHeld: { id: number; dir: Dir } | null = null;
   /** the last press started on a tap zone: its release is not a button click either */
   private zonePress = false;
   private zoneFlash?: Phaser.GameObjects.Graphics;
@@ -75,8 +69,6 @@ export class GameScene extends Phaser.Scene {
   /** master mode: the time limit is passed, the run has failed (like drowning) */
   private timedOut = false;
   private readonly haptics = new HapticFeed();
-  /** CSS px boxes around which a press is never a tap zone (HUD buttons, d-pad) */
-  private noZone: Box[] = [];
   private finished = false;
   private movesText?: Phaser.GameObjects.Text;
   private timeText?: Phaser.GameObjects.Text;
@@ -125,9 +117,12 @@ export class GameScene extends Phaser.Scene {
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
     window.addEventListener('blur', blur);
-    // Continuous drag anywhere but on a button: one move per `dragStep` CSS pixels travelled.
-    // Phaser handles each DOM pointer event as it comes (no queue replayed, unlike its keyboard).
+    // Touch control (Options): a continuous drag anywhere but on a button, one move per
+    // `dragStep` CSS pixels travelled; or tap zones, pressed like the d-pad. Phaser handles each
+    // DOM pointer event as it comes (no queue replayed, unlike its keyboard).
+    const tapMode = app.data.settings.touchControl === 'tap';
     this.drags.clear();
+    this.zoneHeld = null;
     this.zoneMoves = 0;
     this.attempts = 0;
     this.zoneFlash = undefined;
@@ -143,22 +138,20 @@ export class GameScene extends Phaser.Scene {
           return;
         }
         const [x, y] = [p.x / dpr(), p.y / dpr()];
-        this.drags.set(p.id, new DragSteps(x, y, app.data.settings.dragStep));
-        this.startZone(p.id, x, y);
+        if (tapMode) this.pressZone(p, x, y);
+        else this.drags.set(p.id, new DragSteps(x, y, app.data.settings.dragStep));
       },
     );
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
+      // a finger that slides off its tap zone stops, like one sliding off a d-pad button
+      if (this.zoneHeld?.id === p.id && (!p.isDown || this.zoneUnder(p) !== this.zoneHeld.dir))
+        this.releaseZone(p.id);
       const drag = this.drags.get(p.id);
       if (!drag) return;
       if (!p.isDown) {
         this.drags.delete(p.id);
-        this.zones.get(p.id)?.cancel();
-        this.zones.delete(p.id);
         return;
       }
-      // on a tap zone, the gesture is a drag only once the finger has travelled far enough
-      const zone = this.zones.get(p.id);
-      if (zone && !zone.move(p.x / dpr(), p.y / dpr())) return;
       for (const dir of drag.move(p.x / dpr(), p.y / dpr())) {
         this.dragMoved = true;
         this.handle({ type: 'move', dir });
@@ -168,11 +161,7 @@ export class GameScene extends Phaser.Scene {
     const release = (p: Phaser.Input.Pointer) => {
       this.drags.delete(p.id);
       this.hold.release(p.id);
-      const zone = this.zones.get(p.id);
-      this.zones.delete(p.id);
-      // a lifted finger that neither dragged nor held: a tap (a cancelled touch is none)
-      if (p.wasCanceled) zone?.cancel();
-      else zone?.release();
+      this.releaseZone(p.id);
     };
     this.input.on('pointerup', release);
     this.input.on('pointerupoutside', release);
@@ -201,7 +190,7 @@ export class GameScene extends Phaser.Scene {
       this.controls.reset();
       this.hold.reset();
       this.drags.clear();
-      this.cancelZones();
+      this.zoneHeld = null;
     });
     syncMusic(this, app.data.settings.sound, 'music-game');
     setDebug({
@@ -241,7 +230,7 @@ export class GameScene extends Phaser.Scene {
     if (!countdown(this.timeLimitMs, this.clock.elapsed(now)).over) return false;
     this.timedOut = true;
     this.hold.reset();
-    this.cancelZones();
+    this.releaseZone();
     this.drags.clear();
     this.timeText?.setText(`${t('timeLeft')} ${formatTime(0)}`).setColor(WARN_COLOR);
     vibrate('fail', app.data.settings.vibration);
@@ -378,14 +367,29 @@ export class GameScene extends Phaser.Scene {
       },
     });
     this.hold.reset();
-    this.cancelZones();
-    this.noZone = [...buttonBoxes];
+    this.releaseZone();
+    // the bottom of the header: everything drawn so far (buttons, counters, name, MASTER)
+    const header = boundsOf(
+      this.hud.map((o) => css((o as unknown as Phaser.GameObjects.Text).getBounds())),
+    );
+    const headerBottom = header.y + header.h;
+    const viewW = w / dpr();
+    const viewH = this.scale.height / dpr();
+    this.zoneArea = zoneArea(viewW, viewH, headerBottom, null, undefined, viewH - px(24) / dpr());
     if (isTouchDevice()) {
-      const pad = this.sidePad()
+      const side = this.sidePad();
+      const pad = side
         ? dpadLayoutSide(w, this.scale.height, px(DPAD), px(16))
         : dpadLayout(w, this.scale.height, px(DPAD));
-      for (const r of Object.values(pad))
-        this.noZone.push({ x: r.x / dpr(), y: r.y / dpr(), w: r.w / dpr(), h: r.h / dpr() });
+      const padBox = boundsOf(
+        Object.values(pad).map((r) => ({
+          x: r.x / dpr(),
+          y: r.y / dpr(),
+          w: r.w / dpr(),
+          h: r.h / dpr(),
+        })),
+      );
+      this.zoneArea = zoneArea(viewW, viewH, headerBottom, { box: padBox, side });
       const glyphs: Record<Dir, string> = { up: '▲', down: '▼', left: '◀', right: '▶' };
       for (const dir of ['up', 'down', 'left', 'right'] as const) {
         const r = pad[dir];
@@ -430,6 +434,11 @@ export class GameScene extends Phaser.Scene {
         if (help.active) help.setText(t(this.session.canUndo ? 'help' : 'helpMaster', { dirs }));
       });
     }
+    setDebug({
+      touchControl: app.data.settings.touchControl,
+      zoneArea: this.zoneArea,
+      zoneCentre: this.zoneArea && centreOf(this.zoneArea),
+    });
     this.updateHud();
   }
 
@@ -437,11 +446,6 @@ export class GameScene extends Phaser.Scene {
     const s = this.session.state;
     this.movesText?.setText(`${t('moves')} ${s.moves}`);
     setDebug({ moves: s.moves, status: s.status, player: s.player });
-    const mode = app.data.settings.tapZones;
-    setDebug({
-      tapZones: mode,
-      zoneCentres: { screen: this.zoneCentre('screen'), player: this.zoneCentre('player') },
-    });
     this.keysText?.setText(`${t('keys')} ${s.keys}`);
     // the clock stands still: before the first move, or once the run has failed
     if (this.timedOut)
@@ -506,85 +510,62 @@ export class GameScene extends Phaser.Scene {
     else if (after.status === 'drowned') this.showFailed(t('drowned'));
   }
 
-  /**
-   * Centre of the tap zones, in CSS px: the middle of the play area (the screen without the HUD
-   * and the d-pad), or the centre of the player's cell (where the sprite is, or is sliding to:
-   * a quick tap right after a move is measured from the player's new cell).
-   */
-  private zoneCentre(mode: Exclude<TapZoneMode, 'off'>): [number, number] {
-    let x: number;
-    let y: number;
-    if (mode === 'player') {
-      [x, y] = this.board.cellCentre(this.session.state.player);
-      const cam = this.cameras.main;
-      // world → screen (the game camera does not scroll or zoom today, but it could)
-      x = (x - cam.worldView.x) * cam.zoom + cam.x;
-      y = (y - cam.worldView.y) * cam.zoom + cam.y;
-    } else {
-      const top = this.topReserve();
-      x = (this.scale.width - this.sideReserve()) / 2;
-      y = top + (this.scale.height - top - this.bottomReserve()) / 2;
-    }
-    return [x / dpr(), y / dpr()];
+  /** The tap zone under a pointer (none outside their area). */
+  private zoneUnder(p: Phaser.Input.Pointer): Dir | null {
+    return zoneAt(p.x / dpr(), p.y / dpr(), this.zoneArea);
   }
 
-  /** A finger went down off the buttons at (x, y) CSS px: on a tap zone, if they are on. */
-  private startZone(id: number, x: number, y: number): void {
-    const mode = app.data.settings.tapZones;
-    if (mode === 'off' || this.finished) return;
-    // not in the HUD band, nor just beside a button or the d-pad: a finger that missed one
-    // must do nothing rather than walk
-    if (y * dpr() < this.topReserve() || nearAny(x, y, this.noZone, ZONE_BUTTON_MARGIN)) return;
-    const [cx, cy] = this.zoneCentre(mode);
-    const dir = zoneDir(x - cx, y - cy);
+  /**
+   * Tap mode: a finger went down off the buttons at (x, y) CSS px. On a zone it acts like a
+   * d-pad button (the same hold to repeat): a move at once, then the repeat while it stays on
+   * that zone. Off the zones (header, d-pad, their margins, diagonals, centre): nothing.
+   */
+  private pressZone(p: Phaser.Input.Pointer, x: number, y: number): void {
+    if (this.finished) return;
+    const dir = zoneAt(x, y, this.zoneArea);
     if (!dir) return;
-    // the latest finger wins, like the d-pad
-    this.cancelZones();
+    this.releaseZone();
     this.zonePress = true;
+    this.zoneHeld = { id: p.id, dir };
+    this.lightZone(dir);
     const emit = (d: Dir) => {
       this.zoneMoves++;
       setDebug({ zoneMoves: this.zoneMoves });
-      this.flashZone(d, cx, cy);
       this.handle({ type: 'move', dir: d });
     };
-    // below the drag step: a drag stops being a tap before it makes its first move
-    const slop = Math.min(TAP_SLOP, app.data.settings.dragStep - 1);
-    this.zones.set(id, new ZoneGesture(dir, x, y, emit, () => app.data.settings.repeatRate, slop));
+    const stillHeld = () =>
+      p.isDown && this.zoneHeld?.id === p.id && this.zoneUnder(p) === this.zoneHeld.dir;
+    this.hold.press(p.id, dir, stillHeld, emit);
   }
 
-  private cancelZones(): void {
-    for (const g of this.zones.values()) g.cancel();
-    this.zones.clear();
+  /** The finger on a tap zone (`id`, or any) is lifted, cancelled or slid off: it stops. */
+  private releaseZone(id?: number): void {
+    const held = this.zoneHeld;
+    if (!held || (id !== undefined && held.id !== id)) return;
+    this.zoneHeld = null;
+    this.hold.release(held.id);
+    this.dimZone();
   }
 
-  /** The triangle of `dir` around (cx, cy) CSS px lightens faintly for ~120 ms. */
-  private flashZone(dir: Dir, cx: number, cy: number): void {
+  /** The pressed zone lightens faintly while it is held, inside the zones' area only. */
+  private lightZone(dir: Dir): void {
     this.zoneFlash?.destroy();
-    const c = { x: cx * dpr(), y: cy * dpr() };
-    const L = 2 * Math.max(this.scale.width, this.scale.height);
-    const corners: Record<Dir, [number, number][]> = {
-      up: [
-        [-L, -L],
-        [L, -L],
-      ],
-      down: [
-        [-L, L],
-        [L, L],
-      ],
-      left: [
-        [-L, -L],
-        [-L, L],
-      ],
-      right: [
-        [L, -L],
-        [L, L],
-      ],
-    };
-    const [[ax, ay], [bx, by]] = corners[dir] as [[number, number], [number, number]];
+    this.zoneFlash = undefined;
+    if (!this.zoneArea) return;
+    const points = zonePolygon(dir, this.zoneArea);
     const g = this.add.graphics().setDepth(5);
-    g.fillStyle(0xffffff, 0.09).fillTriangle(c.x, c.y, c.x + ax, c.y + ay, c.x + bx, c.y + by);
+    g.fillStyle(0xffffff, 0.09).fillPoints(
+      points.map(([x, y]) => new Phaser.Math.Vector2(x * dpr(), y * dpr())),
+      true,
+    );
     this.zoneFlash = g;
-    setDebug({ zoneFlash: dir });
+    setDebug({ zoneFlash: dir, zoneFlashPoints: points });
+  }
+
+  /** The lit zone fades out once released (a quick tap still shows it briefly). */
+  private dimZone(): void {
+    const g = this.zoneFlash;
+    if (!g) return;
     this.tweens.add({
       targets: g,
       alpha: 0,
@@ -594,7 +575,7 @@ export class GameScene extends Phaser.Scene {
         g.destroy();
         if (this.zoneFlash === g) {
           this.zoneFlash = undefined;
-          setDebug({ zoneFlash: null });
+          setDebug({ zoneFlash: null, zoneFlashPoints: null });
         }
       },
     });
@@ -637,7 +618,7 @@ export class GameScene extends Phaser.Scene {
     this.finished = true;
     this.controls.reset();
     this.hold.reset();
-    this.cancelZones();
+    this.releaseZone();
     const result: RunResult = {
       moves: this.session.state.moves,
       timeMs: Math.round(this.clock.elapsed(now)),

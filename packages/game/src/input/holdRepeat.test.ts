@@ -75,3 +75,17 @@ test("another finger's release does not stop the repeat; the latest press wins",
   vi.advanceTimersByTime(1000);
   expect(moves).toHaveLength(5);
 });
+
+test('a press can bring its own emit (a tap zone): used for its move and its repeats', () => {
+  const zone: Dir[] = [];
+  h.press(1, 'down', undefined, (d) => zone.push(d));
+  vi.advanceTimersByTime(300);
+  expect(zone).toEqual(['down', 'down', 'down']);
+  expect(moves).toEqual([]);
+  // a d-pad press afterwards: the default emit again, and the zone's repeat stops
+  h.press(2, 'left');
+  vi.advanceTimersByTime(200);
+  expect(zone).toHaveLength(3);
+  expect(moves).toEqual(['left', 'left']);
+  h.reset();
+});

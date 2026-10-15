@@ -62,22 +62,22 @@ next one; finish a few levels of a chapter to open the next chapter.
 
 - **Keyboard**: arrows or ZQSD (WASD on a QWERTY keyboard, detected automatically) to move, **U** to
   undo, **R** to restart, **Esc** for the menu.
-- **Touch**:
-  - **drag** anywhere on the play area and keep your finger down: you take one step each time
-    your finger travels a short distance, so a long drag walks several cells; steer by dragging
-    the other way (right, then up…) without lifting your finger. A simple tap does nothing
-    (unless tap zones are on, below). Set the distance per step in Options (**Drag: distance
-    per move**, 40 px by default, about a fingertip; lower is more sensitive);
-  - or use the on-screen **d-pad**: tap for one step, hold a button to keep walking (at the
-    **Repeat** rate set in Options);
-  - optional **tap zones** (Options, **Tap zones**: off by default, around the centre of the
-    play area, or around the player): the play area is cut in an X into four triangles, up,
-    down, left and right. Tap a triangle for one step that way (the step is taken when you lift
-    your finger), or keep your finger still on it to keep walking (after the same delay and at
-    the same rate as the d-pad). A finger that moves turns into a normal drag. Taps on a
-    diagonal or right at the centre do nothing, so that no step goes the wrong way, and so do
-    taps on the top bar or just beside a button or the d-pad (a finger that just missed Undo
-    does not walk);
+- **Touch**: choose how the play area answers your finger in Options (**Touch control**):
+  - **Drag** (the default): drag anywhere on the play area and keep your finger down: you take
+    one step each time your finger travels a short distance, so a long drag walks several cells;
+    steer by dragging the other way (right, then up…) without lifting your finger. A simple tap
+    does nothing. Set the distance per step in Options (**Drag: distance per move**, shown in
+    this mode only; 40 px by default, about a fingertip; lower is more sensitive);
+  - **Tap zones**: the play area is cut in an X into four triangles, up, down, left and right,
+    which work like the buttons of the d-pad: touch a triangle for one step that way (at once,
+    as your finger lands), keep your finger on it to keep walking (after the same delay and at
+    the same rate as the d-pad); sliding off the triangle or lifting your finger stops. There
+    is no drag in this mode. Touches on a diagonal or right at the centre do nothing, so that no
+    step goes the wrong way. The zones stop short of the top bar and of the d-pad (24 px around
+    them, a finger that just missed Undo or a d-pad button does not walk): the X is centred on
+    what remains of the play area, and the lit triangle never covers them;
+  - in both modes, the on-screen **d-pad**: tap for one step, hold a button to keep walking (at
+    the **Repeat** rate set in Options);
   - the undo and restart buttons are on screen;
   - on phones that support it (not iPhone), a short **vibration** tells you a move did not
     happen (a wall, a stuck block, a door without a key; once per press, not at every repeat);

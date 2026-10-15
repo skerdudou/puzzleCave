@@ -7,6 +7,7 @@ import { SelectScene } from './scenes/SelectScene';
 import { ResultScene } from './scenes/ResultScene';
 import { ReplayScene } from './scenes/ReplayScene';
 import { app } from './app';
+import { startUpdates } from './pwa';
 import { COLORS } from './ui';
 
 const ratio = () => window.devicePixelRatio || 1;
@@ -27,6 +28,7 @@ const game = new Phaser.Game({
   },
   scene: [BootScene, MenuScene, OptionsScene, SelectScene, GameScene, ResultScene, ReplayScene],
 });
+startUpdates(game);
 
 window.addEventListener('resize', () => {
   game.scale.resize(

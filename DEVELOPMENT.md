@@ -22,6 +22,34 @@ The game is published on GitHub Pages at https://skerdudou.github.io/puzzleCave/
 (`git tag v1.0.0 && git push origin v1.0.0`). The workflow runs the typecheck, `validate` and the
 tests before building; pushes to `main` do not deploy anything.
 
+### How a release reaches players
+
+The game is a PWA: a service worker (Workbox `generateSW`, `vite-plugin-pwa` in `prompt` mode,
+registered by `packages/game/src/pwa.ts` through `virtual:pwa-register`) precaches the whole build,
+so the game starts from the cache, offline included. A new release therefore cannot show on the
+very first launch after a deploy; it arrives this way:
+
+1. **Detection**: the browser fetches `sw.js` again at start-up (the registration), every 30
+   minutes while the game stays open, and when it comes back to the screen (at most once a minute;
+   an installed app left open in the background is covered). The service worker script is fetched
+   past the HTTP cache, and Workbox fetches the files it lists past it too (hashed names, or a
+   `__WB_REVISION__` parameter for `index.html` and the manifest): GitHub Pages' `max-age=600`
+   does not delay an update.
+2. **Download**: the new service worker precaches the new files in the background, then waits
+   (it does not take over a page by itself).
+3. **Switch** (`UpdateGate`, `packages/game/src/updateGate.ts`): if the player is on the main
+   menu, the level list, the options or a result screen, the game lets the new worker take over
+   and reloads at once (nothing is lost: progress and settings are saved in `localStorage` as soon
+   as they change). During a level (or a replay), nothing is interrupted: a short notice ("Update
+   available — it will be applied on the next menu") shows for a few seconds, and the reload
+   happens when the player next opens the main menu, the level list or the options (not the
+   result screen of that level, nor a level chained with Next).
+4. The previous version's precache is deleted (`cleanupOutdatedCaches`).
+
+In practice, a player who opens the game after a deploy sees the new version a few seconds after
+the start-up (one reload on the menu). On the dev server the service worker is disabled
+(`registerSW` does nothing).
+
 ## Creating levels with Tiled
 
 1. Create an orthogonal map, 16×16 tiles, tile layer data format **CSV**.

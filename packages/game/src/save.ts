@@ -1,7 +1,7 @@
 import type { LevelRecord, Medal } from '@puzzlecave/core';
 import { isLang, type Lang } from './i18n';
 import { DRAG_STEP_DEFAULT, OLD_DRAG_STEP_DEFAULT, nearestDragStep } from './input/drag';
-import { isTapZoneMode, type TapZoneMode } from './input/tapZones';
+import { isTouchControl, type TouchControl } from './input/tapZones';
 
 export interface Settings {
   sound: boolean;
@@ -15,8 +15,8 @@ export interface Settings {
   dragStepDefault: number;
   vibration: boolean;
   repeatRate: number;
-  /** optional tap zones, around the centre of the play area or around the player */
-  tapZones: TapZoneMode;
+  /** touch control: continuous drag (default) or tap zones; the d-pad works with both */
+  touchControl: TouchControl;
 }
 export interface SaveData {
   version: 1;
@@ -41,7 +41,7 @@ export function defaultSave(): SaveData {
       dragStepDefault: DRAG_STEP_DEFAULT,
       repeatRate: 10,
       vibration: true,
-      tapZones: 'off',
+      touchControl: 'drag',
     },
     levels: {},
   };
@@ -82,9 +82,17 @@ function sanitiseSettings(raw: unknown): Settings {
     dragStepDefault: d.dragStepDefault,
     repeatRate: clampNumber(s.repeatRate, 4, 20, d.repeatRate),
     vibration: typeof s.vibration === 'boolean' ? s.vibration : d.vibration,
-    // older saves have none: off
-    tapZones: isTapZoneMode(s.tapZones) ? s.tapZones : d.tapZones,
+    touchControl: touchControlOf(s),
   };
+}
+
+/**
+ * The touch control of a save. Older saves had optional tap zones next to the drag (`tapZones`:
+ * 'off', or centred on the screen or on the player): any zones on → tap zones; else the drag.
+ */
+function touchControlOf(s: Record<string, unknown>): TouchControl {
+  if (isTouchControl(s.touchControl)) return s.touchControl;
+  return s.tapZones === 'screen' || s.tapZones === 'player' ? 'tap' : 'drag';
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>

@@ -1,20 +1,14 @@
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import type { Dir } from '@puzzlecave/core';
-import { ZoneGesture, isTapZoneMode, nearAny, nextTapZoneMode, zoneDir } from './tapZones';
-
-test('nearAny: inside a box or within the margin around it', () => {
-  const boxes = [
-    { x: 100, y: 10, w: 60, h: 44 },
-    { x: 0, y: 500, w: 56, h: 56 },
-  ];
-  expect(nearAny(130, 30, boxes, 24)).toBe(true); // on the button
-  expect(nearAny(130, 54 + 24, boxes, 24)).toBe(true); // just under it, within the margin
-  expect(nearAny(130, 54 + 25, boxes, 24)).toBe(false);
-  expect(nearAny(100 - 24, 10 - 24, boxes, 24)).toBe(true); // the corner of the margin
-  expect(nearAny(56 + 10, 520, boxes, 24)).toBe(true); // second box
-  expect(nearAny(200, 300, boxes, 24)).toBe(false);
-  expect(nearAny(200, 300, [], 24)).toBe(false);
-});
+import { describe, expect, test } from 'vitest';
+import {
+  boundsOf,
+  centreOf,
+  isTouchControl,
+  nextTouchControl,
+  zoneArea,
+  zoneAt,
+  zoneDir,
+  zonePolygon,
+} from './tapZones';
 
 describe('zoneDir', () => {
   test('the four triangles of the X', () => {
@@ -56,123 +50,145 @@ describe('zoneDir', () => {
     expect(zoneDir(NaN, 3)).toBeNull();
   });
 
-  test('screen- or player-centred: the same point, seen from another centre', () => {
-    const screen = { x: 180, y: 370 };
-    const player = { x: 120, y: 160 };
-    // a tap just left of the player, high on the screen: "up" from the screen centre
-    const tap = { x: 80, y: 160 };
-    expect(zoneDir(tap.x - screen.x, tap.y - screen.y)).toBe('up');
-    expect(zoneDir(tap.x - player.x, tap.y - player.y)).toBe('left');
-  });
-
   test('modes', () => {
-    expect(nextTapZoneMode('off')).toBe('screen');
-    expect(nextTapZoneMode('screen')).toBe('player');
-    expect(nextTapZoneMode('player')).toBe('off');
-    expect(isTapZoneMode('player')).toBe(true);
-    expect(isTapZoneMode('centre')).toBe(false);
-    expect(isTapZoneMode(undefined)).toBe(false);
+    expect(nextTouchControl('drag')).toBe('tap');
+    expect(nextTouchControl('tap')).toBe('drag');
+    expect(isTouchControl('tap')).toBe(true);
+    expect(isTouchControl('drag')).toBe(true);
+    expect(isTouchControl('player')).toBe(false);
+    expect(isTouchControl(undefined)).toBe(false);
   });
 });
 
-describe('ZoneGesture: tap, hold or drag', () => {
-  let moves: Dir[];
-  let rate: number;
-  const start = (dir: Dir = 'left') =>
-    new ZoneGesture(
-      dir,
-      100,
-      100,
-      (d) => moves.push(d),
-      () => rate,
+describe('zoneArea: the play area without the header, the d-pad and their margins', () => {
+  // a 360×740 phone in portrait: header down to y = 76, d-pad 168×168 at the bottom centre
+  const portraitPad = { x: 96, y: 544, w: 168, h: 168 };
+
+  test('portrait: below the header and above the d-pad, 24 px from both, full width', () => {
+    expect(zoneArea(360, 740, 76, { box: portraitPad, side: false })).toEqual({
+      x: 0,
+      y: 100,
+      w: 360,
+      h: 544 - 24 - 100,
+    });
+  });
+
+  test('landscape: below the header and left of the d-pad column, full height', () => {
+    // 740×360: d-pad column at the right, vertically centred
+    const pad = { x: 740 - 16 - 168, y: 96, w: 168, h: 168 };
+    expect(zoneArea(740, 360, 48, { box: pad, side: true })).toEqual({
+      x: 0,
+      y: 72,
+      w: 740 - 16 - 168 - 24,
+      h: 360 - 72,
+    });
+  });
+
+  test('without a d-pad: down to the given bottom; another margin', () => {
+    expect(zoneArea(1000, 800, 52, null, 10, 776)).toEqual({ x: 0, y: 62, w: 1000, h: 714 });
+  });
+
+  test('no room left: null', () => {
+    expect(zoneArea(360, 200, 76, { box: { x: 96, y: 90, w: 168, h: 100 }, side: false })).toBe(
+      null,
     );
-  beforeEach(() => {
-    vi.useFakeTimers();
-    moves = [];
-    rate = 10; // hold delay 200 ms, then 100 ms
-  });
-  afterEach(() => vi.useRealTimers());
-
-  test('a tap: nothing on touch-down, one move on release', () => {
-    const g = start();
-    expect(moves).toEqual([]);
-    vi.advanceTimersByTime(150);
-    expect(moves).toEqual([]);
-    g.release();
-    expect(moves).toEqual(['left']);
-    vi.advanceTimersByTime(2000);
-    expect(moves).toEqual(['left']);
+    expect(zoneArea(200, 360, 48, { box: { x: 10, y: 96, w: 168, h: 168 }, side: true })).toBe(
+      null,
+    );
   });
 
-  test('a small wiggle within the slop is still a tap', () => {
-    const g = start('up');
-    expect(g.move(106, 96)).toBe(false);
-    expect(g.move(93, 104)).toBe(false);
-    g.release();
-    expect(moves).toEqual(['up']);
+  test('boundsOf and centreOf', () => {
+    const b = boundsOf([
+      { x: 10, y: 20, w: 5, h: 5 },
+      { x: 0, y: 30, w: 4, h: 10 },
+    ]);
+    expect(b).toEqual({ x: 0, y: 20, w: 15, h: 20 });
+    expect(centreOf(b)).toEqual([7.5, 30]);
+  });
+});
+
+describe('zoneAt: the X centred on the area, nothing outside it', () => {
+  const area = { x: 0, y: 100, w: 360, h: 420 }; // centre (180, 310)
+
+  test('the four triangles around the centre of the area', () => {
+    expect(zoneAt(180, 150, area)).toBe('up');
+    expect(zoneAt(180, 480, area)).toBe('down');
+    expect(zoneAt(30, 310, area)).toBe('left');
+    expect(zoneAt(330, 320, area)).toBe('right');
+    expect(zoneAt(185, 305, area)).toBeNull(); // the dead circle
+    expect(zoneAt(280, 410, area)).toBeNull(); // a diagonal
   });
 
-  test('holding still: a move at the hold delay, then at the repeat rate, none on release', () => {
-    const g = start('down');
-    vi.advanceTimersByTime(199);
-    expect(moves).toEqual([]);
-    vi.advanceTimersByTime(1);
-    expect(moves).toEqual(['down']);
-    vi.advanceTimersByTime(300);
-    expect(moves).toHaveLength(4);
-    g.release();
-    vi.advanceTimersByTime(1000);
-    expect(moves).toHaveLength(4);
+  test('the header, the d-pad and their margins are outside: nothing', () => {
+    expect(zoneAt(180, 99, area)).toBeNull(); // above the area (header margin)
+    expect(zoneAt(180, 100, area)).toBe('up'); // its edge
+    expect(zoneAt(180, 521, area)).toBeNull(); // below (d-pad margin)
+    expect(zoneAt(180, 600, area)).toBeNull(); // on the d-pad
+    expect(zoneAt(180, 300, null)).toBeNull(); // no area
+  });
+});
+
+describe('zonePolygon: the triangle of a zone, clipped to the area', () => {
+  const area = { x: 0, y: 100, w: 360, h: 420 }; // centre (180, 310)
+  const within = (pts: [number, number][]) =>
+    pts.every(
+      ([x, y]) =>
+        x >= area.x - 1e-9 &&
+        x <= area.x + area.w + 1e-9 &&
+        y >= area.y - 1e-9 &&
+        y <= area.y + area.h + 1e-9,
+    );
+  const round = (pts: [number, number][]): [number, number][] =>
+    pts.map(([x, y]) => [Math.round(x * 1000) / 1000, Math.round(y * 1000) / 1000]);
+
+  test('every zone stays inside the area and starts at its centre', () => {
+    for (const d of ['up', 'down', 'left', 'right'] as const) {
+      const pts = zonePolygon(d, area);
+      expect(within(pts), d).toBe(true);
+      expect(round(pts)).toContainEqual([180, 310]);
+    }
   });
 
-  test('the repeat follows the rate setting, read at each step', () => {
-    rate = 4; // 250 ms, then 250 ms
-    const g = start();
-    vi.advanceTimersByTime(249);
-    expect(moves).toHaveLength(0);
-    vi.advanceTimersByTime(1);
-    expect(moves).toHaveLength(1);
-    rate = 20;
-    vi.advanceTimersByTime(250); // the interval already scheduled (250), then 50 ms
-    expect(moves).toHaveLength(2);
-    vi.advanceTimersByTime(100);
-    expect(moves).toHaveLength(4);
-    g.cancel();
+  test('up: the centre and the top corners (the diagonals reach the top edge inside it)', () => {
+    // from (180, 310), the diagonals meet the top edge (y = 100) at x = -30 and 390: clipped
+    // to the sides, they leave the area at (0, 130) and (360, 130)
+    expect(round(zonePolygon('up', area)).sort()).toEqual(
+      [
+        [180, 310],
+        [0, 130],
+        [0, 100],
+        [360, 100],
+        [360, 130],
+      ].sort(),
+    );
   });
 
-  test('moving beyond the slop before the delay: a drag, the zone emits nothing', () => {
-    const g = start('right');
-    vi.advanceTimersByTime(100);
-    expect(g.move(111, 100)).toBe(true);
-    expect(g.dragging).toBe(true);
-    // the drag goes on, even back over the start
-    expect(g.move(100, 100)).toBe(true);
-    vi.advanceTimersByTime(2000);
-    g.release();
-    expect(moves).toEqual([]);
+  test('down: the bottom edge, never below it (the d-pad side)', () => {
+    const pts = round(zonePolygon('down', area));
+    expect(Math.max(...pts.map(([, y]) => y))).toBe(520);
+    // 210 px from the centre to the bottom: the diagonals meet it at x = -30 and 390, so the
+    // zone runs to the side edges
+    expect(pts.sort()).toEqual(
+      [
+        [180, 310],
+        [0, 490],
+        [0, 520],
+        [360, 520],
+        [360, 490],
+      ].sort(),
+    );
   });
 
-  test('moving away while repeating stops the repeat, and makes no drag', () => {
-    const g = start('up');
-    vi.advanceTimersByTime(300);
-    expect(moves).toHaveLength(2);
-    expect(g.move(130, 100)).toBe(false);
-    expect(g.move(200, 100)).toBe(false);
-    vi.advanceTimersByTime(1000);
-    g.release();
-    expect(moves).toHaveLength(2);
-  });
-
-  test('a cancelled touch emits nothing, before or during a hold', () => {
-    const a = start();
-    a.cancel();
-    vi.advanceTimersByTime(1000);
-    a.release(); // a release after the cancel: nothing either
-    expect(moves).toEqual([]);
-    const b = start();
-    vi.advanceTimersByTime(200);
-    b.cancel();
-    vi.advanceTimersByTime(1000);
-    expect(moves).toEqual(['left']);
+  test('left in a wide area: a plain triangle cut by the top and bottom edges', () => {
+    const wide = { x: 0, y: 50, w: 600, h: 200 }; // centre (300, 150)
+    expect(round(zonePolygon('left', wide)).sort()).toEqual(
+      [
+        [300, 150],
+        [200, 50],
+        [0, 50],
+        [0, 250],
+        [200, 250],
+      ].sort(),
+    );
   });
 });
