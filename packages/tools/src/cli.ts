@@ -41,7 +41,7 @@ if (process.argv[2] === 'explore') {
   // relative to the directory npm was started from
   const cwd = process.env.INIT_CWD ?? '.';
   // the result lines are streamed through log as well
-  const r = exploreCommand(LEVELS_DIR, p.ids, {
+  const r = await exploreCommand(LEVELS_DIR, p.ids, {
     ...p.opts,
     save: p.opts.save && resolve(cwd, p.opts.save),
     from: p.opts.from && resolve(cwd, p.opts.from),

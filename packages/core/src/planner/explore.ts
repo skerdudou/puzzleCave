@@ -216,6 +216,11 @@ export interface RebuildOptions {
   /** wall-clock limit of a wide merged stage (60 s by default) */
   mergeTimeoutMs?: number;
   now?: () => number;
+  /**
+   * polled between stages and during each search (through its clock): once true, the rebuild
+   * stops with `failed: 'cancelled'` and nothing it was computing goes into the memo
+   */
+  cancelled?: () => boolean;
 }
 
 interface StepResult {
@@ -265,7 +270,10 @@ export class Rebuilder {
       const key = `${model.encode(s).join(',')}|${unitSig(u)}|${cells.join(',')}`;
       let r = this.memo.get(key);
       if (!r || (retry && r.retry)) {
+        if (this.opts.cancelled?.()) return { failed: 'cancelled' };
         r = this.runUnit(s, u, ids, cells, retry);
+        // a search cut short by a cancellation is not a result: never memoised
+        if (this.opts.cancelled?.()) return { failed: 'cancelled' };
         if (this.memo.size >= 300_000) this.memo.clear();
         this.memo.set(key, r);
       }
@@ -326,8 +334,13 @@ export class Rebuilder {
         ? (opts.mergeTimeoutMs ?? 60_000) * scale
         : (opts.stageTimeoutMs ?? 10_000);
       const limit = u.wide ? baseCap : Math.max(baseCap, opts.maxStatesLimit ?? 3_200_000);
+      // a cancellation stops the search through its clock (checked every 256 pops)
+      const cancelled = opts.cancelled;
+      const clock = opts.now ?? (() => performance.now());
+      const now = cancelled ? () => (cancelled() ? Infinity : clock()) : opts.now;
       let cap = baseCap;
       for (;;) {
+        if (cancelled?.()) return { ok: false, moves: [] };
         this.searches++;
         const large = u.wide || cap > baseCap;
         const mem = large ? (opts.largeMemoryMb ?? 1024) : opts.maxMemoryMb;
@@ -340,7 +353,7 @@ export class Rebuilder {
             win: st.exit,
             timeoutMs: (baseTime * cap) / baseCap,
             ...(mem !== undefined ? { maxMemoryMb: mem } : {}),
-            ...(opts.now ? { now: opts.now } : {}),
+            ...(now ? { now } : {}),
           },
         );
         if (r.ok) {
@@ -700,7 +713,54 @@ export interface PassOptions extends RebuildOptions {
   widen?: number;
   /** candidate plans already rebuilt (by their text), skipped; the pass adds its own */
   tried?: Set<string>;
+  /** rebuilds the candidates (in this thread, one at a time, by default: inlineRunner) */
+  runner?: CandidateRunner;
   log?: (line: string) => void;
+}
+
+/** a rebuilt candidate: its moves, or why it failed ('cancelled': stopped before its end) */
+export type CandidateOutcome = { moves: Dir[] } | { failed: string };
+
+/**
+ * Rebuilds the candidates of the structural pass, possibly several at once (worker threads in
+ * @puzzlecave/tools). Each candidate is an independent rebuild, with stage retries, of a plan of
+ * the solution given to the last `reset`.
+ */
+export interface CandidateRunner {
+  /** candidates rebuilt at once */
+  readonly width: number;
+  /** the next candidates are plans of this solution (segmentSolution of it) */
+  reset(solution: readonly Dir[]): void;
+  /** rebuilds a plan, giving up once longer than bound; cancel: stop it as soon as possible */
+  run(order: Unit[], bound: number): { result: Promise<CandidateOutcome>; cancel: () => void };
+  /** stage searches and retries so far (all candidates) */
+  stats(): { searches: number; retries: number };
+  /** in-thread runner: its rebuilder of the current solution (its memo is reused) */
+  rebuilder?(): Rebuilder | undefined;
+}
+
+/** the sequential runner: one Rebuilder in this thread, one candidate at a time */
+export function inlineRunner(level: LevelData, o: RebuildOptions = {}): CandidateRunner {
+  let rb: Rebuilder | undefined;
+  let searches = 0;
+  let retries = 0;
+  return {
+    width: 1,
+    reset(solution) {
+      searches += rb?.searches ?? 0;
+      retries += rb?.retries ?? 0;
+      rb = new Rebuilder(segmentSolution(level, solution), o);
+    },
+    run(order, bound) {
+      if (!rb) throw new Error('inlineRunner: reset first');
+      return { result: Promise.resolve(rb.rebuild(order, bound, true)), cancel: () => {} };
+    },
+    stats: () => ({
+      searches: searches + (rb?.searches ?? 0),
+      retries: retries + (rb?.retries ?? 0),
+    }),
+    rebuilder: () => rb,
+  };
 }
 
 export interface PassResult {
@@ -812,77 +872,162 @@ function* passCandidates(
  * (passCandidates) is rebuilt with stage retries and kept when shorter; the pass then starts
  * again from the new solution (candidates already tried are skipped), until every candidate
  * failed or the time is up.
+ *
+ * With a runner wider than 1, up to `width` candidates are rebuilt at once, in the order of the
+ * sequence, and their results are committed in that order: the gain kept is the one of the
+ * lowest candidate index, as in the sequential pass, whatever the width. A gain cancels the
+ * candidates after it (their results could not be kept); those before it still run to their end
+ * and win if they improve too. Only committed candidates join `tried`, so the set is the one of
+ * the sequential pass. At the deadline no new candidate starts and those under way finish (as
+ * the sequential pass finishes its current candidate). Search time limits stay the only source
+ * of differences with the sequential pass (a search slowed down by the other threads may stop
+ * where it would have finished).
  */
-export function structuralPass(
+export async function structuralPass(
   level: LevelData,
   solution: readonly Dir[],
   o: PassOptions,
-): PassResult {
+): Promise<PassResult> {
   const now = o.now ?? (() => performance.now());
-  const deadline = now() + o.timeoutMs;
+  const t0 = now();
+  const deadline = t0 + o.timeoutMs;
   const tried = o.tried ?? new Set<string>();
   const log = o.log ?? (() => {});
+  const runner = o.runner ?? inlineRunner(level, o);
+  const stats0 = runner.stats();
   let cur = solution.slice();
   let m = segmentSolution(level, cur);
-  let rb = new Rebuilder(m, o);
-  const res = { gains: [] as PassResult['gains'], tried: 0, exhausted: false, searches: 0 };
-  let retries = 0;
+  runner.reset(cur);
+  const res = { gains: [] as PassResult['gains'], tried: 0, exhausted: false };
   const window = o.window ?? 6;
   const neighbours = o.neighbours ?? 2;
   const widen = o.widen ?? 5;
   let nextLog = now() + 60_000;
   for (;;) {
-    let better: { what: string; moves: Dir[] } | undefined;
-    let timedOut = false;
-    for (let lv = 0; lv <= widen && !better && !timedOut; lv++) {
-      // logged once per level and solution (later rounds go through the levels again)
-      const mark = `#level ${lv} ${cur.join('')}`;
-      if (lv > 0 && !tried.has(mark)) {
-        tried.add(mark);
-        log(`pass: widened to level ${lv} from ${cur.length} moves`);
-      }
-      for (const c of passCandidates(
-        m,
-        window + 2 * lv,
-        neighbours + 4 * lv,
-        4 + 2 * lv,
-        // the first levels sweep with smaller search limits (¼, ½), the later ones with all
-        Math.min(1, 2 ** (lv - 2)),
-      )) {
-        if (now() > deadline) {
-          timedOut = true;
-          break;
-        }
-        const key = c.order.map((u) => unitText(m, u)).join(' | ');
-        if (tried.has(key)) continue;
-        tried.add(key);
-        res.tried++;
-        if (now() > nextLog) {
-          nextLog = now() + 60_000;
-          log(`pass: ${res.tried} candidates, level ${lv}, at ${c.what}`);
-        }
-        const r = rb.rebuild(c.order, cur.length - 1, true);
-        if ('moves' in r && r.moves.length < cur.length) {
-          better = { what: c.what, moves: r.moves };
-          break;
-        }
-      }
-    }
+    const { better, timedOut } = await sweep();
     if (!better) {
       res.exhausted = !timedOut;
       break;
     }
     res.gains.push({ what: better.what, before: cur.length, after: better.moves.length });
     log(`pass: ${cur.length} → ${better.moves.length} moves: ${better.what}`);
-    res.searches += rb.searches;
-    retries += rb.retries;
     cur = better.moves;
     m = segmentSolution(level, cur);
-    rb = new Rebuilder(m, o);
+    runner.reset(cur);
   }
-  res.searches += rb.searches;
-  retries += rb.retries;
-  return { ...res, moves: cur, retries, model: m, rebuilder: rb };
+  const stats = runner.stats();
+  const rebuilder = runner.rebuilder?.() ?? new Rebuilder(m, o);
+  return {
+    ...res,
+    moves: cur,
+    searches: stats.searches - stats0.searches,
+    retries: stats.retries - stats0.retries,
+    model: rebuilder.m,
+    rebuilder,
+  };
+
+  /** the candidates of the current solution, level after level, up to the first gain */
+  async function sweep(): Promise<{ better?: { what: string; moves: Dir[] }; timedOut: boolean }> {
+    // widening levels reached, logged once per level and solution (later rounds go through the
+    // levels again); marked as the results are committed, as the sequential pass would
+    let reached = 0;
+    const reach = (lv: number) => {
+      for (; reached < lv;) {
+        const mark = `#level ${++reached} ${cur.join('')}`;
+        if (tried.has(mark)) continue;
+        tried.add(mark);
+        log(`pass: widened to level ${reached} from ${cur.length} moves`);
+      }
+    };
+    const sequence = (function* () {
+      for (let lv = 0; lv <= widen; lv++) {
+        for (const c of passCandidates(
+          m,
+          window + 2 * lv,
+          neighbours + 4 * lv,
+          4 + 2 * lv,
+          // the first levels sweep with smaller search limits (¼, ½), the later ones with all
+          Math.min(1, 2 ** (lv - 2)),
+        ))
+          yield { ...c, lv };
+      }
+    })();
+    interface Job {
+      index: number;
+      key: string;
+      what: string;
+      lv: number;
+      cancel: () => void;
+      out?: CandidateOutcome;
+    }
+    const jobs: Job[] = [];
+    const running = new Set<Job>();
+    // keys started in this sweep (the same candidate comes back at later levels)
+    const started = new Set<string>();
+    const improves = (out: CandidateOutcome | undefined): out is { moves: Dir[] } =>
+      out !== undefined && 'moves' in out && out.moves.length < cur.length;
+    // lowest index of a finished candidate that improves
+    let best = Infinity;
+    let commit = 0;
+    let ended = false;
+    let timedOut = false;
+    let better: { what: string; moves: Dir[] } | undefined;
+    let wake = () => {};
+    for (;;) {
+      while (!ended && !timedOut && best === Infinity && running.size < runner.width) {
+        if (now() > deadline) {
+          timedOut = true;
+          break;
+        }
+        const next = sequence.next();
+        if (next.done) {
+          ended = true;
+          break;
+        }
+        const c = next.value;
+        const key = c.order.map((u) => unitText(m, u)).join(' | ');
+        if (tried.has(key) || started.has(key)) continue;
+        started.add(key);
+        const handle = runner.run(c.order, cur.length - 1);
+        const job: Job = { index: jobs.length, key, what: c.what, lv: c.lv, cancel: handle.cancel };
+        jobs.push(job);
+        running.add(job);
+        void handle.result
+          .catch((err: unknown) => ({ failed: `error: ${String(err)}` }))
+          .then((out) => {
+            job.out = out;
+            running.delete(job);
+            if (improves(out) && job.index < best) {
+              best = job.index;
+              // the candidates after it can no longer be kept
+              for (const j of running) if (j.index > best) j.cancel();
+            }
+            wake();
+          });
+      }
+      // results in the order of the sequence
+      while (!better && commit < jobs.length && jobs[commit]!.out) {
+        const job = jobs[commit++]!;
+        reach(job.lv);
+        tried.add(job.key);
+        res.tried++;
+        if (now() > nextLog) {
+          nextLog = now() + 60_000;
+          log(
+            `pass: ${res.tried} candidates in ${((now() - t0) / 1000).toFixed(0)} s, level ${job.lv}, at ${job.what}${runner.width > 1 ? ` (${running.size} under way)` : ''}`,
+          );
+        }
+        if (improves(job.out)) better = { what: job.what, moves: job.out.moves };
+      }
+      if (!running.size && (better || ended || timedOut)) {
+        // every level gone through without a gain
+        if (!better && ended) reach(widen);
+        break;
+      }
+      await new Promise<void>((resolve) => (wake = resolve));
+    }
+    return better ? { better, timedOut } : { timedOut };
+  }
 }
 
 // ---- whole exploration ----
@@ -907,6 +1052,8 @@ export interface ExploreOptions extends RebuildOptions {
   neighbours?: number;
   /** widening levels of the structural pass (5 by default) */
   widen?: number;
+  /** rebuilds the candidates of the structural pass (in this thread by default) */
+  runner?: CandidateRunner;
   seed?: number;
   /** windows of improve on one variant; `polish` by default */
   improve?: (level: LevelData, moves: Dir[], timeoutMs: number) => Dir[];
@@ -963,11 +1110,11 @@ export function polish(
  * solution makes it the next round's starting point; otherwise the next round draws other
  * variants (another seed), never improving a variant twice. Returns the shortest solution seen.
  */
-export function exploreLevel(
+export async function exploreLevel(
   level: LevelData,
   solution: readonly Dir[],
   o: ExploreOptions,
-): ExploreResult {
+): Promise<ExploreResult> {
   const now = o.now ?? (() => performance.now());
   const t0 = now();
   const end = t0 + o.timeoutMs;
@@ -1002,7 +1149,7 @@ export function exploreLevel(
     let passDone = true;
     if (passShare > 0) {
       const p0 = now();
-      const ps = structuralPass(level, res.moves, {
+      const ps = await structuralPass(level, res.moves, {
         ...o,
         timeoutMs: Math.min(o.timeoutMs, end - p0) * passShare,
         tried,

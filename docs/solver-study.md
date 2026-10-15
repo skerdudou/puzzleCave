@@ -523,3 +523,34 @@ Findings:
 - The pass is cheap on small levels (pc-16: 5,437 candidates, every level up to 10 widenings, in 8 min; pc-17: 6,242 in 40 min) and found nothing there: their remaining gaps need another strategy, not a local merge.
 - On large levels a wide search costs 15–60 s: in 40 min the pass does not finish its first level on pc-18 (977 candidates), pc-09 (1,473), pc-08 (1,078). The quick sweeps at ¼ and ½ of the limits found all three pc-08/pc-14 gains; full limits found pc-13's.
 - The screening of reordered variants no longer finds anything on these levels (its best variants equal the saved solution): the time is better spent in the pass (`--pass 0.6–0.9`).
+
+## explore: structural pass on worker threads (2026-10-15)
+
+On large levels a wide search costs 15–60 s and the pass did not finish its first widening level in 40 min; running more explore processes did not help (each one starts the same sequence). The candidates of the pass are independent rebuilds of plans of the same solution, so `--workers N` now hands them to a pool of worker threads (`packages/tools/src/explorePool.ts`, flags in DEVELOPMENT.md):
+
+- **Pool**: N threads (default: cores − 2, at most 16), each with its own Rebuilder and memo of the current solution's stages (the prefix of the plan, shared by every candidate, is rebuilt once per thread: ~90 s on pc-18, seconds elsewhere). The screening and improve stay in the main thread. `--workers 1` keeps the old in-thread pass.
+- **Determinism rule**: candidates start in the sequential order and their results are committed in that order; the gain kept is the one with the lowest candidate index, i.e. the sequential pass's choice whatever N. A gain cancels the candidates after it (a shared flag stops their searches within moments, nothing of them is memoised or counted as tried); the candidates before it still finish and win if they improve too. Only committed candidates join the `tried` set, so later rounds see the same set as with one thread. Search time limits remain the only source of differences (a thread slowed down by the others may stop a search that would have finished). Tests: identical gains, moves and tried sets with 1 and 4 threads (a merged neighbour block; pc-03 with detours, several gains), and with a fake runner returning results out of order.
+- **Memory**: each worker counts max(`--large-memory`, `--max-memory`) + 512 MB (its V8 heap is capped there), the main thread `--max-memory` + 512 MB; `--total-memory` (default: free memory − 4 GB) lowers N to fit. With 14 workers and 1 GB searches the process stayed around 3.5 GB resident on pc-18 and the machine kept more than 16 GB free with the 8 M-state searches (searches rarely fill their budget).
+
+Throughput, 600 s runs with `--pass 0.9` (pass ≈ 545 s); sequential = old code, 3 processes at once on 16 cores; parallel = 14 threads, one level at a time:
+
+| level | sequential: candidates in the pass | parallel: candidates in the pass | parallel: time to the sequential count | speed-up on the same candidates |
+|---|---|---|---|---|
+| pc-18 | 350 (level 0) | 1,434 (level 1) | ~160 s (90 s of prefix rebuild) | 3.4× (≈ 7× after the prefix) |
+| pc-09 | 733 (level 1 started) | 2,173 (level 2) | ~61 s | ≈ 9× |
+| pc-08 | 504 (level 1 started) | 1,666 (level 2) | ~63 s | ≈ 8.6× |
+
+Candidates of the later levels are larger windows at fuller limits, so the per-minute rate falls as the pass goes on in both modes; on the same candidates, the gain is 7–9× on 14 threads (memory bandwidth and the duplicated prefix take the rest). A whole pass (6 widening levels) now ends in 16–39 min: pc-18 4,170 candidates in 39 min, pc-09 2,872 in 17 min, pc-08 2,344 in 18 min, pc-14 (windows up to 12, 6 neighbours) 2,814 in 16 min. The random-mutation screening was not parallelised: it takes 16–60 s of a round, rebuilds hundreds to thousands of variants, and has found nothing on these levels since the pass exists; once the pass is exhausted, the rest of `--timeout` goes to it, so the runs below were stopped (or given `--pass 0.95`) when the pass ended.
+
+Campaign (`--apply`, 14 threads, one level at a time, 2026-10-15): wave 1 with the default limits (pc-14 with `--merge-window 12 --merge-neighbours 6`), wave 2 with 4× the merge limits (`--merge-states 8000000 --merge-timeout 240 --merge-window 8 --merge-neighbours 4 --merge-widen 2`, 30 min per level).
+
+| level | before | after | explore time | result |
+|---|---|---|---|---|
+| pc-18 | 1296 | 1296 | 53 + 31 min | wave 1: whole pass (4,170 candidates, 6 levels) in 39 min, nothing; wave 2: 1,531 candidates (level 1 of 2), nothing |
+| pc-09 | 478 | 478 | 21 + 30 min | wave 1: whole pass (2,872) in 17 min; wave 2: 2,228 (level 2), nothing |
+| pc-08 | 575 | 575 | 18 + 30 min | wave 1: whole pass (2,344) in 18 min; wave 2: 1,423 (level 2), nothing |
+| pc-14 | 542 | **538** | 16 + 30 min | wave 1 (windows up to 12): whole pass (2,814) in 16 min, nothing; wave 2: 5 fills merged with the exit, doors optional, at the full 8 M / 240 s limits, after 12 min; then the pass of 538 was exhausted |
+
+Findings:
+- The pass is no longer the limit on these levels: with the default limits it now goes through all its candidates, and found nothing more on pc-18, pc-09, pc-08 or pc-14. The only gain came from larger searches (8 M macro-states, 240 s), the same kind of merge of fills as the earlier gains: further gains here need larger wide searches rather than more candidates.
+- pc-14's gold (610) stays within [ceil(1.1 × 538), floor(1.25 × 538)] = [592, 672].

@@ -37,6 +37,8 @@ test('explore arguments', () => {
       largeMemoryMb: 1024,
       seed: 1,
       maxMemoryMb: undefined,
+      workers: undefined,
+      totalMemoryMb: undefined,
       save: undefined,
       from: undefined,
       apply: false,
@@ -78,6 +80,10 @@ test('explore arguments', () => {
       '3',
       '--max-memory',
       '2048',
+      '--workers',
+      '4',
+      '--total-memory',
+      '8000',
       '--save',
       'out',
       '--from',
@@ -103,6 +109,8 @@ test('explore arguments', () => {
       largeMemoryMb: 2048,
       seed: 3,
       maxMemoryMb: 2048,
+      workers: 4,
+      totalMemoryMb: 8000,
       save: 'out',
       from: 'best',
       apply: true,
@@ -116,6 +124,9 @@ test('explore arguments', () => {
   expect(parseExploreArgs(['pc-11', '--stage-states', '0'])).toHaveProperty('error');
   expect(parseExploreArgs(['pc-11', '--save'])).toHaveProperty('error');
   expect(parseExploreArgs(['pc-11', '--bogus'])).toHaveProperty('error');
+  expect(parseExploreArgs(['pc-11', '--workers', '0'])).toHaveProperty('error');
+  expect(parseExploreArgs(['pc-11', '--workers', '2.5'])).toHaveProperty('error');
+  expect(parseExploreArgs(['pc-11', '--total-memory', '0'])).toHaveProperty('error');
 });
 
 const opts: ExploreCommandOptions = {
@@ -135,10 +146,11 @@ const opts: ExploreCommandOptions = {
   largeMemoryMb: 1024,
   seed: 1,
   maxMemoryMb: 256,
+  workers: 1,
   apply: false,
 };
 
-test('pc-01: a longer saved solution is beaten, saved and applied with its lower bound', () => {
+test('pc-01: a longer saved solution is beaten, saved and applied with its lower bound', async () => {
   const dir = join(tmp, 'levels');
   mkdirSync(join(dir, 'solutions'), { recursive: true });
   for (const f of ['pc-01.tmx', 'tileset.tsx']) copyFileSync(join(LEVELS_DIR, f), join(dir, f));
@@ -149,7 +161,7 @@ test('pc-01: a longer saved solution is beaten, saved and applied with its lower
     '# best known — not proven optimal (proven lower bound ≥ 24)\nRLRRRRRRRRDDLLLLLLDRDLLDLUUL\n',
   );
   const out = join(tmp, 'out');
-  const r = exploreCommand(dir, ['pc-01'], { ...opts, save: out, apply: true });
+  const r = await exploreCommand(dir, ['pc-01'], { ...opts, save: out, apply: true });
   expect(r.ok).toBe(true);
   expect(r.lines[0]).toMatch(
     /^pc-01: 28 → 26 moves — \d+ round\(s\), pass 28 → 26, \d+ variants \(\d+ feasible, \d+ stage retries\)/,
@@ -166,16 +178,20 @@ test('pc-01: a longer saved solution is beaten, saved and applied with its lower
   );
 });
 
-test('real level: nothing shorter than the proven optimum, nothing written', () => {
+test('real level: nothing shorter than the proven optimum, nothing written', async () => {
   const out = join(tmp, 'none');
-  const r = exploreCommand(LEVELS_DIR, ['pc-01', 'nope'], { ...opts, timeoutMs: 1_000, save: out });
+  const r = await exploreCommand(LEVELS_DIR, ['pc-01', 'nope'], {
+    ...opts,
+    timeoutMs: 1_000,
+    save: out,
+  });
   expect(r.ok).toBe(false);
   expect(r.lines[0]).toMatch(/^pc-01: 26 → 26 moves/);
   expect(r.lines[1]).toBe('nope: unknown level');
   expect(existsSync(out)).toBe(false);
 });
 
-test('--from: starts from the shortest winning <id>-<n>.txt that beats the saved solution', () => {
+test('--from: starts from the shortest winning <id>-<n>.txt that beats the saved solution', async () => {
   const dir = join(tmp, 'levels-from');
   mkdirSync(join(dir, 'solutions'), { recursive: true });
   for (const f of ['pc-01.tmx', 'tileset.tsx']) copyFileSync(join(LEVELS_DIR, f), join(dir, f));
@@ -185,7 +201,7 @@ test('--from: starts from the shortest winning <id>-<n>.txt that beats the saved
   writeFileSync(join(from, 'pc-01-26.txt'), 'RRRRRRRRDDLLLLLLDRDLLDLUUL\n');
   writeFileSync(join(from, 'pc-01-3.txt'), 'RRR\n'); // does not win: ignored
   const lines: string[] = [];
-  const r = exploreCommand(dir, ['pc-01'], { ...opts, from, log: (l) => lines.push(l) });
+  const r = await exploreCommand(dir, ['pc-01'], { ...opts, from, log: (l) => lines.push(l) });
   expect(r.lines[0]).toBe(`pc-01: starting from 26 moves (${from})`);
   expect(r.lines[1]).toMatch(/^pc-01: 26 → 26 moves/);
   // result lines are streamed with the progress lines

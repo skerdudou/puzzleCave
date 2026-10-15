@@ -1,7 +1,7 @@
 // `npm run explore -- <id…> [--timeout s] [--variants n] [--improve-top k] [--screen f]
 // [--pass f] [--merge-window k] [--merge-neighbours n] [--merge-widen n] [--merge-states N] [--merge-timeout s]
 // [--stage-states N] [--stage-states-max N] [--stage-timeout s] [--large-memory MB] [--seed n]
-// [--max-memory MB] [--from dir] [--save dir] [--apply]`: starting points improve cannot reach
+// [--max-memory MB] [--workers n] [--total-memory MB] [--from dir] [--save dir] [--apply]`: starting points improve cannot reach
 // by local changes. The saved solution is cut into its events; a structural pass drops each
 // stage and merges windows of stages into wide searches, then variants of that event plan
 // (reordered, merged, dropped, unpinned, extra waters) are rebuilt by exact per-stage searches
@@ -13,6 +13,7 @@ import { join } from 'node:path';
 import { exploreLevel, formatMoves, parseMoves, replay, type Dir } from '@puzzlecave/core';
 import { loadPack } from '@puzzlecave/tiled';
 import type { CommandResult } from './commands';
+import { ExplorePool, defaultTotalMemoryMb, defaultWorkers, planWorkers } from './explorePool';
 import { applySolution } from './plan';
 
 export interface ExploreCommandOptions {
@@ -38,6 +39,10 @@ export interface ExploreCommandOptions {
   largeMemoryMb: number;
   seed: number;
   maxMemoryMb?: number | undefined;
+  /** worker threads of the structural pass (1: in the main thread; default: defaultWorkers) */
+  workers?: number | undefined;
+  /** memory of the pool and the main thread (MB; default: free memory − 4 GB) */
+  totalMemoryMb?: number | undefined;
   /** directory where shorter solutions are written as <id>-<length>.txt */
   save?: string | undefined;
   /** directory of <id>-<length>.txt solutions to start from when shorter than the saved one */
@@ -47,7 +52,7 @@ export interface ExploreCommandOptions {
 }
 
 export const EXPLORE_USAGE =
-  'usage: explore <id…> [--timeout s] [--variants n] [--improve-top k] [--screen f] [--pass f] [--merge-window k] [--merge-neighbours n] [--merge-widen n] [--merge-states N] [--merge-timeout s] [--stage-states N] [--stage-states-max N] [--stage-timeout s] [--large-memory MB] [--seed n] [--max-memory MB] [--from dir] [--save dir] [--apply]';
+  'usage: explore <id…> [--timeout s] [--variants n] [--improve-top k] [--screen f] [--pass f] [--merge-window k] [--merge-neighbours n] [--merge-widen n] [--merge-states N] [--merge-timeout s] [--stage-states N] [--stage-states-max N] [--stage-timeout s] [--large-memory MB] [--seed n] [--max-memory MB] [--workers n] [--total-memory MB] [--from dir] [--save dir] [--apply]';
 
 export function parseExploreArgs(
   args: string[],
@@ -69,6 +74,8 @@ export function parseExploreArgs(
     '--large-memory',
     '--seed',
     '--max-memory',
+    '--workers',
+    '--total-memory',
     '--save',
     '--from',
   ]);
@@ -99,6 +106,8 @@ export function parseExploreArgs(
   const largeMemory = num('--large-memory', 1024);
   const seed = num('--seed', 1);
   const mem = value('--max-memory') === undefined ? undefined : num('--max-memory', 0);
+  const workers = value('--workers') === undefined ? undefined : num('--workers', 0);
+  const total = value('--total-memory') === undefined ? undefined : num('--total-memory', 0);
   const save = value('--save');
   const from = value('--from');
   const badDir = (name: string, v: string | undefined) =>
@@ -120,6 +129,8 @@ export function parseExploreArgs(
     !(largeMemory > 0) ||
     !Number.isInteger(seed) ||
     (mem !== undefined && !(mem > 0)) ||
+    (workers !== undefined && !(Number.isInteger(workers) && workers >= 1)) ||
+    (total !== undefined && !(total > 0)) ||
     badDir('--save', save) ||
     badDir('--from', from)
   )
@@ -146,6 +157,8 @@ export function parseExploreArgs(
       largeMemoryMb: largeMemory,
       seed,
       maxMemoryMb: mem,
+      workers,
+      totalMemoryMb: total,
       save,
       from,
       apply: args.includes('--apply'),
@@ -155,11 +168,11 @@ export function parseExploreArgs(
 
 const sec = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
 
-export function exploreCommand(
+export async function exploreCommand(
   dir: string,
   ids: string[],
   o: ExploreCommandOptions,
-): CommandResult {
+): Promise<CommandResult> {
   const pack = loadPack(dir);
   const byId = new Map(pack.levels.map((l) => [l.id, l]));
   const lines: string[] = [];
@@ -200,25 +213,47 @@ export function exploreCommand(
         }
       }
     if (start !== saved) emit(`${id}: starting from ${start.length} moves (${o.from})`);
-    const r = exploreLevel(level, start, {
-      timeoutMs: o.timeoutMs,
-      variants: o.variants,
-      improveTop: o.improveTop,
-      screenFraction: o.screen,
-      passFraction: o.pass,
-      window: o.mergeWindow,
-      neighbours: o.mergeNeighbours,
-      widen: o.mergeWiden,
-      mergeStates: o.mergeStates,
-      mergeTimeoutMs: o.mergeTimeoutMs,
+    // worker threads of the structural pass, as many as the memory allows
+    const plan = planWorkers(
+      o.workers ?? defaultWorkers(),
+      o.totalMemoryMb ?? defaultTotalMemoryMb(),
+      o.largeMemoryMb,
+      o.maxMemoryMb ?? 256,
+    );
+    const rebuild = {
       maxStates: o.stageStates,
       maxStatesLimit: o.stageStatesMax,
       stageTimeoutMs: o.stageTimeoutMs,
-      largeMemoryMb: o.largeMemoryMb,
-      seed: o.seed,
+      largeMemoryMb: plan.largeMemoryMb,
+      mergeStates: o.mergeStates,
+      mergeTimeoutMs: o.mergeTimeoutMs,
       ...(o.maxMemoryMb !== undefined ? { maxMemoryMb: o.maxMemoryMb } : {}),
-      log: (line) => o.log?.(`${id}: ${line}`),
-    });
+    };
+    const pool =
+      o.pass > 0 && plan.workers > 1 ? new ExplorePool(level, rebuild, plan.workers) : undefined;
+    if (pool || plan.largeMemoryMb < o.largeMemoryMb)
+      o.log?.(
+        `${id}: structural pass on ${plan.workers} thread(s), ${plan.perWorkerMb} MB each (large searches ${plan.largeMemoryMb} MB)`,
+      );
+    let r;
+    try {
+      r = await exploreLevel(level, start, {
+        ...rebuild,
+        timeoutMs: o.timeoutMs,
+        variants: o.variants,
+        improveTop: o.improveTop,
+        screenFraction: o.screen,
+        passFraction: o.pass,
+        window: o.mergeWindow,
+        neighbours: o.mergeNeighbours,
+        widen: o.mergeWiden,
+        seed: o.seed,
+        ...(pool ? { runner: pool } : {}),
+        log: (line) => o.log?.(`${id}: ${line}`),
+      });
+    } finally {
+      await pool?.close();
+    }
     const improved = r.improved.map((v) => `${v.before} → ${v.after}`).join(', ');
     const pass = r.passGains.map((g) => `${g.before} → ${g.after}`).join(', ');
     emit(

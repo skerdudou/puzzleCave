@@ -10,6 +10,8 @@ import {
   screenVariants,
   segmentSolution,
   structuralPass,
+  type CandidateOutcome,
+  type CandidateRunner,
   type Unit,
 } from './explore';
 
@@ -54,9 +56,9 @@ test('reordering the stages gives a shorter solution than the given one', () => 
   expect(sc.kept.every((v) => v.moves.join('') !== DOORS_LEFT.join(''))).toBe(true);
 });
 
-test('exploreLevel returns the shortest solution seen after improving the best variants', () => {
+test('exploreLevel returns the shortest solution seen after improving the best variants', async () => {
   const calls: number[] = [];
-  const r = exploreLevel(DOORS, DOORS_LEFT, {
+  const r = await exploreLevel(DOORS, DOORS_LEFT, {
     timeoutMs: 5_000,
     variants: 100,
     improveTop: 2,
@@ -75,9 +77,9 @@ test('exploreLevel returns the shortest solution seen after improving the best v
   expect(replay(DOORS, r.moves).status).toBe('won');
 });
 
-test('exploreLevel: the structural pass comes first and its result is improved', () => {
+test('exploreLevel: the structural pass comes first and its result is improved', async () => {
   const calls: number[] = [];
-  const r = exploreLevel(DOORS, DOORS_LEFT, {
+  const r = await exploreLevel(DOORS, DOORS_LEFT, {
     timeoutMs: 5_000,
     variants: 100,
     improveTop: 1,
@@ -200,12 +202,12 @@ test('a stage stopped by its cap is retried with a larger cap when asked', () =>
   expect(rb.retries).toBeGreaterThan(0);
 });
 
-test('structural pass: a useless fill is dropped', () => {
+test('structural pass: a useless fill is dropped', async () => {
   // the given solution sinks the block in (2,1) before walking to the exit
   const level = fromAscii(['@....E', '.B~...']);
   const sol = parseMoves('DRURRRR');
   expect(replay(level, sol).status).toBe('won');
-  const r = structuralPass(level, sol, { timeoutMs: 10_000 });
+  const r = await structuralPass(level, sol, { timeoutMs: 10_000 });
   expect(r.moves).toHaveLength(5);
   expect(r.gains).toEqual([{ what: 'drop water 2,1', before: 7, after: 5 }]);
   expect(r.exhausted).toBe(true);
@@ -213,13 +215,13 @@ test('structural pass: a useless fill is dropped', () => {
   // first gain, so the next ones try the merge of [water, exit] with ¼, ½ and all the merge
   // limits (widening levels), then nothing is left
   const tried = new Set<string>();
-  const counts = [0, 1, 2, 3, 4].map(
-    () => structuralPass(level, sol, { timeoutMs: 10_000, tried }).tried,
-  );
+  const counts: number[] = [];
+  for (let i = 0; i < 5; i++)
+    counts.push((await structuralPass(level, sol, { timeoutMs: 10_000, tried })).tried);
   expect(counts).toEqual([1, 1, 1, 1, 0]);
 });
 
-test('structural pass: a merged window frees a neighbour block that fills the water sooner', () => {
+test('structural pass: a merged window frees a neighbour block that fills the water sooner', async () => {
   // the given solution brings the far block (3,4) up to fill (4,2) (16 moves); the block (3,1),
   // never pushed, does it in 10 moves, which only a wide search of [water, exit] can see
   const level = fromAscii(['@...#..', '...B#..', '....~.E', '....#..', '...B#..', '....#..']);
@@ -229,16 +231,76 @@ test('structural pass: a merged window frees a neighbour block that fills the wa
   // reorders and pins alone cannot do it
   const sc = screenVariants(m, { variants: 300, timeoutMs: 10_000, keep: 2, exclude: [sol] });
   expect(sc.kept.every((v) => v.moves.length >= 16)).toBe(true);
-  const r = structuralPass(level, sol, { timeoutMs: 10_000, window: 2, neighbours: 1 });
+  const r = await structuralPass(level, sol, { timeoutMs: 10_000, window: 2, neighbours: 1 });
   expect(r.moves).toHaveLength(10);
   expect(replay(level, r.moves).status).toBe('won');
   expect(r.gains[0]!.what).toBe(
     'merge water 4,2 + exit -player -at [wide +3,1 doors optional limits ×0.25]',
   );
   // without neighbours, nothing; widening the pass adds them
-  const none = structuralPass(level, sol, { timeoutMs: 10_000, neighbours: 0, widen: 0 });
+  const none = await structuralPass(level, sol, { timeoutMs: 10_000, neighbours: 0, widen: 0 });
   expect(none.moves).toHaveLength(16);
   expect(none.exhausted).toBe(true);
-  const widened = structuralPass(level, sol, { timeoutMs: 10_000, neighbours: 0, widen: 1 });
+  const widened = await structuralPass(level, sol, { timeoutMs: 10_000, neighbours: 0, widen: 1 });
   expect(widened.moves).toHaveLength(10);
+});
+
+/**
+ * a runner rebuilding `width` candidates "at once": each result arrives after a delay that
+ * decreases with its rank, so later candidates finish first
+ */
+function shuffledRunner(level: Parameters<typeof segmentSolution>[0], width: number) {
+  let rb: Rebuilder | undefined;
+  let n = 0;
+  const cancelled: number[] = [];
+  const runner: CandidateRunner = {
+    width,
+    reset: (sol) => (rb = new Rebuilder(segmentSolution(level, sol))),
+    run(order, bound) {
+      const id = n++;
+      const out = rb!.rebuild(order, bound, true);
+      let cancel = () => {};
+      const result = new Promise<CandidateOutcome>((resolve) => {
+        const timer = setTimeout(() => resolve(out), 2 * (width - (id % width)));
+        cancel = () => {
+          clearTimeout(timer);
+          cancelled.push(id);
+          resolve({ failed: 'cancelled' });
+        };
+      });
+      return { result, cancel };
+    },
+    stats: () => ({ searches: rb?.searches ?? 0, retries: rb?.retries ?? 0 }),
+  };
+  return { runner, cancelled };
+}
+
+test('structural pass on a wider runner: same gains and tried set, later candidates cancelled', async () => {
+  // a useless fill, a merged window that frees a neighbour block, a reorder of the keys
+  const cases = [
+    [fromAscii(['@....E', '.B~...']), parseMoves('DRURRRR'), {}],
+    [
+      fromAscii(['@...#..', '...B#..', '....~.E', '....#..', '...B#..', '....#..']),
+      parseMoves('DDDDDRRRUULURRRR'),
+      { window: 2, neighbours: 1 },
+    ],
+    [DOORS, DOORS_LEFT, {}],
+  ] as const;
+  let cancels = 0;
+  for (const [level, sol, o] of cases) {
+    const triedSeq = new Set<string>();
+    const seq = await structuralPass(level, sol, { timeoutMs: 10_000, ...o, tried: triedSeq });
+    for (const width of [2, 5]) {
+      const { runner, cancelled } = shuffledRunner(level, width);
+      const tried = new Set<string>();
+      const par = await structuralPass(level, sol, { timeoutMs: 10_000, ...o, tried, runner });
+      expect(par.moves).toEqual(seq.moves);
+      expect(par.gains).toEqual(seq.gains);
+      expect(par.tried).toBe(seq.tried);
+      expect(par.exhausted).toBe(seq.exhausted);
+      expect([...tried].sort()).toEqual([...triedSeq].sort());
+      cancels += cancelled.length;
+    }
+  }
+  expect(cancels).toBeGreaterThan(0);
 });

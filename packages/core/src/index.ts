@@ -48,6 +48,7 @@ export {
 export {
   baseOrder,
   exploreLevel,
+  inlineRunner,
   mutate,
   polish,
   Rebuilder,
@@ -55,6 +56,9 @@ export {
   segmentSolution,
   structuralPass,
   unitText,
+  type CandidateOutcome,
+  type CandidateRunner,
+  type RebuildOptions,
   type ExploreModel,
   type PassOptions,
   type PassResult,
