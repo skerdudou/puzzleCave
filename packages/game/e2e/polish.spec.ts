@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
 import { initialState, parseMoves, replay, step, type Dir } from '@puzzlecave/core';
 import { parseTmx } from '@puzzlecave/tiled';
+import { goToLevel } from './select';
 
 const SAVE_KEY = 'puzzlecave.save.v1';
 const debug = (page: Page) =>
@@ -198,9 +199,7 @@ test.describe('touch screen', () => {
     await page.goto('/');
     await expect.poll(() => field(page, 'scene')).toBe('Menu');
     await press(page, 'Enter');
-    await expect.poll(() => field(page, 'scene')).toBe('Select');
-    await press(page, 'ArrowLeft');
-    await expect.poll(() => field(page, 'levelId')).toBe(ID);
+    await goToLevel(page, ID);
     await press(page, 'KeyP');
     await expect.poll(() => field(page, 'mode')).toBe('master');
     const key = { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' };

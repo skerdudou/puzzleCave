@@ -3,8 +3,9 @@ import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
 import { initialState, parseMoves, replay, step, type Dir } from '@puzzlecave/core';
 import { parseTmx } from '@puzzlecave/tiled';
+import { goToLevel } from './select';
 
-// pc-31, second level of the Medium chapter (master mode exists there, not on Easy)
+// pc-31, a level of the Medium chapter (master mode exists there, not on Easy)
 const ID = 'pc-31';
 const levelsDir = new URL('../../../levels/', import.meta.url);
 const read = (name: string) => readFileSync(fileURLToPath(new URL(name, levelsDir)), 'utf8');
@@ -50,9 +51,7 @@ test('master mode: locked before gold, no undo, water drowns, grand master', asy
   ]);
 
   // Medium chapter, pc-31: master limits shown, master mode locked until gold
-  await page.keyboard.press('PageDown');
-  await page.keyboard.press('ArrowRight');
-  await expect.poll(() => field(page, 'levelId')).toBe(ID);
+  await goToLevel(page, ID);
   expect(await field(page, 'master')).toBe('locked');
   // master mode has its own third row: master (gold), grand master (platinumMoves) and the time
   // limit (the bronze time), once
@@ -165,8 +164,7 @@ test('master mode: a countdown to the bronze time, paused while hidden; past it 
   await expect.poll(() => field(page, 'scene')).toBe('Menu');
   await page.keyboard.press('Enter');
   await expect.poll(() => field(page, 'scene')).toBe('Select');
-  await page.keyboard.press('ArrowLeft'); // the selection starts on the first unfinished level
-  await expect.poll(() => field(page, 'levelId')).toBe(ID);
+  await goToLevel(page, ID);
   await page.keyboard.press('KeyP');
   await expect.poll(() => field(page, 'scene')).toBe('Game');
   expect(await field(page, 'mode')).toBe('master');
@@ -229,8 +227,7 @@ test('normal mode: no time limit, the clock does not count while hidden', async 
   await expect.poll(() => field(page, 'scene')).toBe('Menu');
   await page.keyboard.press('Enter');
   await expect.poll(() => field(page, 'scene')).toBe('Select');
-  await page.keyboard.press('ArrowLeft');
-  await expect.poll(() => field(page, 'levelId')).toBe(ID);
+  await goToLevel(page, ID);
   await page.keyboard.press('Enter');
   await expect.poll(() => field(page, 'scene')).toBe('Game');
   expect(await field(page, 'timeLeftMs')).toBeNull();
@@ -253,13 +250,11 @@ test('normal mode: no time limit, the clock does not count while hidden', async 
 });
 
 /** From the menu to the selection screen, on pc-31. */
-async function selectLevel(page: Page, presses: string[]): Promise<void> {
+async function selectLevel(page: Page): Promise<void> {
   await page.goto('/');
   await expect.poll(() => field(page, 'scene')).toBe('Menu');
   await page.keyboard.press('Enter');
-  await expect.poll(() => field(page, 'scene')).toBe('Select');
-  for (const k of presses) await page.keyboard.press(k);
-  await expect.poll(() => field(page, 'levelId')).toBe(ID);
+  await goToLevel(page, ID);
 }
 
 /** A master run of `moves` from the selection screen, back to it from the result. */
@@ -280,7 +275,7 @@ test('master mode: master within gold, then grand master, which a later master r
   expect(goldRoute.length).toBeLessThanOrEqual(level.thresholds.goldMoves!);
   expect(replay(level, goldRoute, 'master').status).toBe('won');
   await withMasterOpen(page);
-  await selectLevel(page, ['ArrowLeft']);
+  await selectLevel(page);
   expect(await field(page, 'masterMedal')).toBeNull();
 
   await masterRun(page, goldRoute);
@@ -327,10 +322,9 @@ test('a save of version 1: a platinum becomes grand master, a master run within 
     (save) => localStorage.setItem('puzzlecave.save.v1', save),
     JSON.stringify({ version: 1, settings: {}, levels }),
   );
-  await selectLevel(page, ['ArrowLeft']);
+  await selectLevel(page);
   expect(await field(page, 'masterMedal')).toBe('master');
-  await page.keyboard.press('ArrowLeft');
-  await expect.poll(() => field(page, 'levelId')).toBe('pc-19');
+  await goToLevel(page, 'pc-19');
   expect(await field(page, 'masterMedal')).toBe('grandMaster');
   expect(await field(page, 'master')).toBe('open');
 });

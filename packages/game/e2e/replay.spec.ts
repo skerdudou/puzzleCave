@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
 import { initialState, parseMoves, step } from '@puzzlecave/core';
 import { loadPack } from '@puzzlecave/tiled';
+import { goToLevel } from './select';
 
 const levelsDir = fileURLToPath(new URL('../../../levels', import.meta.url));
 // Keyring: starts with one key, picks up two more
@@ -16,10 +17,7 @@ async function openReplayPaused(page: Page) {
   await page.goto('/');
   await expect.poll(async () => (await debug(page)).scene).toBe('Menu');
   await page.keyboard.press('Enter');
-  await expect.poll(async () => (await debug(page)).scene).toBe('Select');
-  await page.keyboard.press('ArrowRight');
-  await page.keyboard.press('ArrowRight');
-  await expect.poll(async () => (await debug(page)).levelId).toBe('pc-21');
+  await goToLevel(page, 'pc-21');
   await page.keyboard.press('KeyS');
   await expect.poll(async () => (await debug(page)).scene).toBe('Replay');
   await page.keyboard.press('Home');
