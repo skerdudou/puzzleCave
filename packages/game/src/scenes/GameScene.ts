@@ -20,7 +20,7 @@ import { hasMaster, levelById } from '../levels';
 import { syncMusic } from '../music';
 import { AnimClock } from '../render/animTiming';
 import { BoardView } from '../render/BoardView';
-import { boardLayout, type BoardLayout } from '../render/layout';
+import { boardLayout, fractionalZoom, type BoardLayout } from '../render/layout';
 import { HapticFeed, vibrate } from '../haptics';
 import { DragSteps } from '../input/drag';
 import { HoldRepeat } from '../input/holdRepeat';
@@ -276,6 +276,7 @@ export class GameScene extends Phaser.Scene {
       16,
       this.topReserve(),
       this.bottomReserve(),
+      fractionalZoom(window.devicePixelRatio || 1),
     );
   }
 

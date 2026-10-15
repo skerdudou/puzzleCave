@@ -6,7 +6,7 @@ import { levelById } from '../levels';
 import { Playback } from '../author/playback';
 import { onSceneKeyDown } from '../input/sceneKeys';
 import { BoardView } from '../render/BoardView';
-import { boardLayout } from '../render/layout';
+import { boardLayout, fractionalZoom } from '../render/layout';
 import { COLORS, makeButton, px, textStyle } from '../ui';
 
 export interface ReplaySceneData {
@@ -86,6 +86,7 @@ export class ReplayScene extends Phaser.Scene {
       16,
       px(64),
       this.bottomReserve(),
+      fractionalZoom(window.devicePixelRatio || 1),
     );
   }
 
