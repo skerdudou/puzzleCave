@@ -363,6 +363,42 @@ animated, so the floor is the human input rate (10 moves/s), not the animation.
 Touch play (continuous drag, or the D-pad with hold to repeat) is slower than the keyboard; the
 thresholds are calibrated for the keyboard.
 
+## Difficulty: `difficulty`
+
+    npm run difficulty -- [<id…>] [--trap-points n] [--trap-states n] [--solver-states n] [--solver-timeout s]
+
+Ranks the levels (all of them, by default) by a difficulty score computed from the level and its
+saved solution, easiest first, with the chapter of each (`packages/tools/src/difficulty.ts`). The
+move count says little about difficulty: a long walk is long, not hard. The tool measures what
+asks for thought instead, along the saved solution:
+
+- **episodes**: interactions grouped by the object handled — any number of pushes of the same
+  block in a row (walking around it included) is one episode, each key and door one; how many
+  times the player picks what to do next. **Actions** (push runs: the same block pushed on in the
+  same direction) and **stages** (`deriveStages`: keys, waters, doors, exit) are shown too;
+- **irreversible**: commitments — fills, doors opened, and push runs the player cannot push
+  straight back right after;
+- **branching**: the mean number of distinct interactions open at each decision point (the
+  macro-state before each interaction of the solution);
+- **traps**: at up to `--trap-points` (40) decision points evenly spaced, each alternative
+  interaction is applied and tested: lost if the dead-state analysis says so, or if an exact
+  search of at most `--trap-states` (5,000) macro-states (250 ms) proves it unwinnable. On large
+  levels those small searches rarely conclude, so traps are mostly 0 there (a lower bound);
+- **solver states**: macro-states the exact solver explores to find the optimum, capped at
+  `--solver-states` (1,000,000) and `--solver-timeout` (30 s);
+- **walk share**: moves without interaction.
+
+The score is a weighted sum on log scales, so the 40th decision adds less than the 4th:
+
+    score = 10·log2(1 + episodes) + 5·log2(1 + irreversible) + 4·log2(branching)
+          + 2·log10(solver states) + 20·traps / (alternatives + 10) + 2·log2(1 + walking moves)
+
+Calibration (2026-10-15): the Easy levels score 39–58, Medium 66–83, Hard and Expert 100–151;
+Cubomatic (pc-10, 325 moves) scores 101, the lowest of the Hard and Expert levels, below
+levels a third of its length. A score difference of a few points is noise; the tool ranks, the
+designer decides (the tutorial pc-01 scores above most Easy levels: five one-shot lessons, every
+wrong push fatal). The whole table takes about a minute.
+
 ## Designer tools in the game (`npm run dev` only)
 
 In author mode (development server only):

@@ -24,6 +24,7 @@
     "certify": "tsx packages/tools/src/cli.ts certify",
     "explore": "tsx packages/tools/src/cli.ts explore",
     "times": "tsx packages/tools/src/cli.ts times",
+    "difficulty": "tsx packages/tools/src/cli.ts difficulty",
     "dev": "npm run dev -w @puzzlecave/game",
     "build": "npm run build -w @puzzlecave/game",
     "e2e": "npm run e2e -w @puzzlecave/game"

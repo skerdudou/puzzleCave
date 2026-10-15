@@ -11,6 +11,7 @@ import { parseSubgoalArgs, subgoalCommand } from './subgoal';
 import { longRunCommand, parseLongRunArgs } from './longrun/command';
 import { certifyCommand, parseCertifyArgs } from './longrun/certify';
 import { parseTimesArgs, timesCommand } from './times';
+import { difficultyCommand, parseDifficultyArgs } from './difficulty';
 
 if (process.argv[2] === 'plan') {
   const p = parsePlanArgs(process.argv.slice(3));
@@ -29,6 +30,17 @@ if (process.argv[2] === 'times') {
     process.exit(2);
   }
   const r = timesCommand(LEVELS_DIR, p);
+  for (const line of r.lines) console.log(line);
+  process.exit(r.ok ? 0 : 1);
+}
+if (process.argv[2] === 'difficulty') {
+  const p = parseDifficultyArgs(process.argv.slice(3));
+  if ('error' in p) {
+    console.error(p.error);
+    process.exit(2);
+  }
+  // progress on stderr, the table on stdout
+  const r = difficultyCommand(LEVELS_DIR, p, (line) => console.error(line));
   for (const line of r.lines) console.log(line);
   process.exit(r.ok ? 0 : 1);
 }

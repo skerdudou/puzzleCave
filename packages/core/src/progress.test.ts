@@ -24,6 +24,17 @@ test('first level of the first chapter is open, the next one after completion', 
   expect(isLevelUnlocked(chapters, 0, 1, done('a'))).toBe(true);
 });
 
+test('a completed level stays open when a new level is inserted before it', () => {
+  // 'n' replaced a level the save had completed: 'b' was completed before 'n' existed
+  const replaced: Chapter[] = [{ ...chapters[0]!, levels: ['a', 'n', 'b', 'c'] }];
+  const records = { ...done('a', 'b', 'gone') };
+  expect(isLevelUnlocked(replaced, 0, 1, records)).toBe(true);
+  expect(isLevelUnlocked(replaced, 0, 2, records)).toBe(true);
+  expect(isLevelUnlocked(replaced, 0, 3, records)).toBe(true);
+  // but not in a locked chapter
+  expect(isLevelUnlocked(chapters, 1, 1, done('e'))).toBe(false);
+});
+
 test('a chapter opens after unlockAfter levels of the previous one', () => {
   expect(completedCount(chapters[0]!, done('a', 'c'))).toBe(2);
   expect(isChapterUnlocked(chapters, 1, done('a'))).toBe(false);
