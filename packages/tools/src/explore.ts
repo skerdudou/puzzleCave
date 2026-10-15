@@ -1,9 +1,12 @@
 // `npm run explore -- <id…> [--timeout s] [--variants n] [--improve-top k] [--screen f]
-// [--seed n] [--max-memory MB] [--from dir] [--save dir] [--apply]`: starting points improve cannot reach by
-// local changes. The saved solution is cut into its events; variants of that event plan
-// (reordered, merged, unpinned, extra waters) are rebuilt by exact per-stage searches and
-// ranked by length, then improve's windows run on the shortest few (packages/core/src/planner/
-// explore.ts). A separate command rather than an improve flag: it needs a winning solution to
+// [--pass f] [--merge-window k] [--merge-neighbours n] [--merge-widen n] [--merge-states N] [--merge-timeout s]
+// [--stage-states N] [--stage-states-max N] [--stage-timeout s] [--large-memory MB] [--seed n]
+// [--max-memory MB] [--from dir] [--save dir] [--apply]`: starting points improve cannot reach
+// by local changes. The saved solution is cut into its events; a structural pass drops each
+// stage and merges windows of stages into wide searches, then variants of that event plan
+// (reordered, merged, dropped, unpinned, extra waters) are rebuilt by exact per-stage searches
+// and ranked by length, and improve's windows run on the shortest few (packages/core/src/
+// planner/explore.ts). A separate command rather than an improve flag: it needs a winning solution to
 // start from and has its own knobs, and improve stays the reference pipeline (with its proof).
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -19,6 +22,20 @@ export interface ExploreCommandOptions {
   improveTop: number;
   /** share of the time spent screening */
   screen: number;
+  /** share of a round given to the structural pass (0: none) */
+  pass: number;
+  /** largest window of merged stages */
+  mergeWindow: number;
+  mergeNeighbours: number;
+  mergeWiden: number;
+  mergeStates: number;
+  mergeTimeoutMs: number;
+  /** macro-states per stage, and the ceiling of its retries */
+  stageStates: number;
+  stageStatesMax: number;
+  stageTimeoutMs: number;
+  /** memory of each retried or wide search (MB) */
+  largeMemoryMb: number;
   seed: number;
   maxMemoryMb?: number | undefined;
   /** directory where shorter solutions are written as <id>-<length>.txt */
@@ -30,7 +47,7 @@ export interface ExploreCommandOptions {
 }
 
 export const EXPLORE_USAGE =
-  'usage: explore <id…> [--timeout s] [--variants n] [--improve-top k] [--screen f] [--seed n] [--max-memory MB] [--from dir] [--save dir] [--apply]';
+  'usage: explore <id…> [--timeout s] [--variants n] [--improve-top k] [--screen f] [--pass f] [--merge-window k] [--merge-neighbours n] [--merge-widen n] [--merge-states N] [--merge-timeout s] [--stage-states N] [--stage-states-max N] [--stage-timeout s] [--large-memory MB] [--seed n] [--max-memory MB] [--from dir] [--save dir] [--apply]';
 
 export function parseExploreArgs(
   args: string[],
@@ -40,6 +57,16 @@ export function parseExploreArgs(
     '--variants',
     '--improve-top',
     '--screen',
+    '--pass',
+    '--merge-window',
+    '--merge-neighbours',
+    '--merge-widen',
+    '--merge-states',
+    '--merge-timeout',
+    '--stage-states',
+    '--stage-states-max',
+    '--stage-timeout',
+    '--large-memory',
     '--seed',
     '--max-memory',
     '--save',
@@ -60,6 +87,16 @@ export function parseExploreArgs(
   const variants = num('--variants', 1_000_000);
   const top = num('--improve-top', 3);
   const screen = num('--screen', 0.3);
+  const pass = num('--pass', 0.3);
+  const window = num('--merge-window', 6);
+  const neighbours = num('--merge-neighbours', 2);
+  const widen = num('--merge-widen', 5);
+  const mergeStates = num('--merge-states', 2_000_000);
+  const mergeTimeout = num('--merge-timeout', 60);
+  const stageStates = num('--stage-states', 200_000);
+  const stageStatesMax = num('--stage-states-max', 3_200_000);
+  const stageTimeout = num('--stage-timeout', 10);
+  const largeMemory = num('--large-memory', 1024);
   const seed = num('--seed', 1);
   const mem = value('--max-memory') === undefined ? undefined : num('--max-memory', 0);
   const save = value('--save');
@@ -71,6 +108,16 @@ export function parseExploreArgs(
     !(variants >= 1) ||
     !Number.isInteger(top) ||
     !(screen > 0 && screen <= 1) ||
+    !(pass >= 0 && pass < 1) ||
+    !Number.isInteger(window) ||
+    !Number.isInteger(neighbours) ||
+    !Number.isInteger(widen) ||
+    !(mergeStates >= 1) ||
+    !(mergeTimeout > 0) ||
+    !(stageStates >= 1) ||
+    !(stageStatesMax >= 1) ||
+    !(stageTimeout > 0) ||
+    !(largeMemory > 0) ||
     !Number.isInteger(seed) ||
     (mem !== undefined && !(mem > 0)) ||
     badDir('--save', save) ||
@@ -87,6 +134,16 @@ export function parseExploreArgs(
       variants: Math.floor(variants),
       improveTop: top,
       screen,
+      pass,
+      mergeWindow: window,
+      mergeNeighbours: neighbours,
+      mergeWiden: widen,
+      mergeStates: Math.floor(mergeStates),
+      mergeTimeoutMs: mergeTimeout * 1000,
+      stageStates: Math.floor(stageStates),
+      stageStatesMax: Math.floor(stageStatesMax),
+      stageTimeoutMs: stageTimeout * 1000,
+      largeMemoryMb: largeMemory,
       seed,
       maxMemoryMb: mem,
       save,
@@ -148,13 +205,24 @@ export function exploreCommand(
       variants: o.variants,
       improveTop: o.improveTop,
       screenFraction: o.screen,
+      passFraction: o.pass,
+      window: o.mergeWindow,
+      neighbours: o.mergeNeighbours,
+      widen: o.mergeWiden,
+      mergeStates: o.mergeStates,
+      mergeTimeoutMs: o.mergeTimeoutMs,
+      maxStates: o.stageStates,
+      maxStatesLimit: o.stageStatesMax,
+      stageTimeoutMs: o.stageTimeoutMs,
+      largeMemoryMb: o.largeMemoryMb,
       seed: o.seed,
       ...(o.maxMemoryMb !== undefined ? { maxMemoryMb: o.maxMemoryMb } : {}),
       log: (line) => o.log?.(`${id}: ${line}`),
     });
     const improved = r.improved.map((v) => `${v.before} → ${v.after}`).join(', ');
+    const pass = r.passGains.map((g) => `${g.before} → ${g.after}`).join(', ');
     emit(
-      `${id}: ${r.initialLength} → ${r.moves.length} moves — ${r.rounds} round(s), ${r.tried} variants (${r.feasible} feasible), plan rebuilt ${r.baseLength ?? 'failed'}, best variant of round 1 ${r.bestScreened ?? '-'}, improved ${improved || '-'} — ${sec(r.ms)}`,
+      `${id}: ${r.initialLength} → ${r.moves.length} moves — ${r.rounds} round(s), pass ${pass || '-'}, ${r.tried} variants (${r.feasible} feasible, ${r.retries} stage retries), plan rebuilt ${r.baseLength ?? 'failed'}, best variant of round 1 ${r.bestScreened ?? '-'}, improved ${improved || '-'} — ${sec(r.ms)}`,
     );
     if (r.moves.length < saved.length) {
       if (o.save) {

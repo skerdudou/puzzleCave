@@ -4,7 +4,7 @@
   <property name="name" value="Relax"/>
   <property name="author" value="moineau"/>
   <property name="goldMoves" type="int" value="695"/>
-  <property name="platinumMoves" type="int" value="577"/>
+  <property name="platinumMoves" type="int" value="575"/>
   <property name="goldTime" type="int" value="120"/>
  </properties>
  <tileset firstgid="1" source="tileset.tsx"/>

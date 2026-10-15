@@ -4,7 +4,7 @@
   <property name="name" value="Bomberman 2 C"/>
   <property name="author" value="moineau"/>
   <property name="goldMoves" type="int" value="473"/>
-  <property name="platinumMoves" type="int" value="430"/>
+  <property name="platinumMoves" type="int" value="426"/>
   <property name="goldTime" type="int" value="65"/>
  </properties>
  <tileset firstgid="1" source="tileset.tsx"/>

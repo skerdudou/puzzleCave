@@ -9,6 +9,7 @@ import {
   prng,
   screenVariants,
   segmentSolution,
+  structuralPass,
   type Unit,
 } from './explore';
 
@@ -16,6 +17,10 @@ import {
 // first (2 + 6 + 8 = 16 moves); the right key first is shorter (4 + 6 + 2 = 12)
 const CORRIDOR = fromAscii(['E.k.@...k']);
 const LEFT_FIRST = parseMoves('LLRRRRRRLLLLLLLL');
+// the same with two doors before the exit, so that both keys are needed: left key first
+// 2 + 6 + 9 = 17 moves, right key first 4 + 6 + 3 = 13
+const DOORS = fromAscii(['EDDk.@...k']);
+const DOORS_LEFT = parseMoves('LLRRRRRRLLLLLLLLL');
 
 test('segmentSolution: one segment per event, with its pins', () => {
   const m = segmentSolution(CORRIDOR, LEFT_FIRST);
@@ -28,44 +33,65 @@ test('segmentSolution: one segment per event, with its pins', () => {
 });
 
 test('reordering the stages gives a shorter solution than the given one', () => {
-  const m = segmentSolution(CORRIDOR, LEFT_FIRST);
+  const m = segmentSolution(DOORS, DOORS_LEFT);
   const rb = new Rebuilder(m);
   const base = baseOrder(m);
-  expect(rb.rebuild(base)).toEqual({ moves: LEFT_FIRST });
-  const swapped = [base[1]!, base[0]!, base[2]!];
+  expect(rb.rebuild(base)).toEqual({ moves: DOORS_LEFT });
+  const swapped = [base[1]!, base[0]!, ...base.slice(2)];
   const r = rb.rebuild(swapped);
-  expect('moves' in r && r.moves.length).toBe(12);
-  expect(rb.rebuild(swapped, 11)).toEqual({ failed: 'bound' });
+  expect('moves' in r && r.moves.length).toBe(13);
+  expect(rb.rebuild(swapped, 12)).toEqual({ failed: 'bound' });
   const sc = screenVariants(m, {
     variants: 200,
     timeoutMs: 10_000,
     keep: 3,
-    exclude: [LEFT_FIRST],
+    exclude: [DOORS_LEFT],
   });
-  expect(sc.base).toEqual(LEFT_FIRST);
-  expect(sc.kept[0]!.moves).toHaveLength(12);
-  expect(replay(CORRIDOR, sc.kept[0]!.moves).status).toBe('won');
+  expect(sc.base).toEqual(DOORS_LEFT);
+  expect(sc.kept[0]!.moves).toHaveLength(13);
+  expect(replay(DOORS, sc.kept[0]!.moves).status).toBe('won');
   // the given solution itself is never kept
-  expect(sc.kept.every((v) => v.moves.join('') !== LEFT_FIRST.join(''))).toBe(true);
+  expect(sc.kept.every((v) => v.moves.join('') !== DOORS_LEFT.join(''))).toBe(true);
 });
 
 test('exploreLevel returns the shortest solution seen after improving the best variants', () => {
   const calls: number[] = [];
-  const r = exploreLevel(CORRIDOR, LEFT_FIRST, {
+  const r = exploreLevel(DOORS, DOORS_LEFT, {
     timeoutMs: 5_000,
     variants: 100,
     improveTop: 2,
+    passFraction: 0,
     improve: (_level, moves) => {
       calls.push(moves.length);
       return moves;
     },
   });
-  expect(r.initialLength).toBe(16);
-  expect(r.baseLength).toBe(16);
-  expect(r.bestScreened).toBe(12);
-  expect(calls[0]).toBe(12);
-  expect(r.moves).toHaveLength(12);
-  expect(replay(CORRIDOR, r.moves).status).toBe('won');
+  expect(r.initialLength).toBe(17);
+  expect(r.baseLength).toBe(17);
+  expect(r.bestScreened).toBe(13);
+  expect(r.passGains).toEqual([]);
+  expect(calls[0]).toBe(13);
+  expect(r.moves).toHaveLength(13);
+  expect(replay(DOORS, r.moves).status).toBe('won');
+});
+
+test('exploreLevel: the structural pass comes first and its result is improved', () => {
+  const calls: number[] = [];
+  const r = exploreLevel(DOORS, DOORS_LEFT, {
+    timeoutMs: 5_000,
+    variants: 100,
+    improveTop: 1,
+    improve: (_level, moves) => {
+      calls.push(moves.length);
+      return moves;
+    },
+  });
+  // dropping the left key's stage: the walk back to the doors takes it on the way
+  expect(r.passGains[0]).toMatchObject({ round: 1, before: 17, after: 13 });
+  expect(r.passGains[0]!.what).toMatch(/^drop key 3,0/);
+  expect(calls[0]).toBe(13);
+  expect(r.moves).toHaveLength(13);
+  expect(replay(DOORS, r.moves).status).toBe('won');
 });
 
 // the block is pushed twice, a key taken in between: the second stage finds the block by its
@@ -111,16 +137,108 @@ test('extra water: a block the solution never pushes fills a water on the way', 
   expect(sc.kept[0]!.moves).toHaveLength(10);
 });
 
-test('mutate keeps every segment exactly once and the exit last', () => {
+test('mutate keeps every segment at most once and the exit last; dropped stages come back', () => {
   const m = segmentSolution(CORRIDOR, LEFT_FIRST);
-  // a larger plan: repeat the corridor's segments through fake extras
   const rnd = prng(7);
   let order: Unit[] = baseOrder(m);
+  let dropped = 0;
+  let restored = 0;
   for (let i = 0; i < 500; i++) {
+    const before = order.flatMap((u) => u.segs).length;
     order = mutate(m, order, rnd) ?? order;
     const segs = order.flatMap((u) => u.segs).sort();
-    expect(segs).toEqual([0, 1, 2]);
-    expect(order.at(-1)!.segs).toContain(2);
-    expect(order.at(-1)!.segs).toHaveLength(1);
+    if (segs.length < before) dropped++;
+    if (segs.length > before) restored++;
+    expect(new Set(segs).size).toBe(segs.length);
+    expect(segs.every((i) => i >= 0 && i <= 2)).toBe(true);
+    expect(order.at(-1)!.segs).toEqual([2]);
   }
+  expect(dropped).toBeGreaterThan(0);
+  expect(restored).toBeGreaterThan(0);
+});
+
+// twelve keys right of the start, exit on its left: 13 stages
+const KEYS = fromAscii(['E@kkkkkkkkkkkk']);
+const KEYS_SOL = parseMoves('R'.repeat(12) + 'L'.repeat(13));
+
+test('mutate moves a stage, or a chain of stages, further than 8 places', () => {
+  const m = segmentSolution(KEYS, KEYS_SOL);
+  expect(m.segments).toHaveLength(13);
+  const base = baseOrder(m);
+  const rnd = prng(3);
+  let far = 0;
+  let chains = 0;
+  for (let i = 0; i < 200; i++) {
+    const o = mutate(m, base, rnd, 'move');
+    if (o) {
+      const moved = o.findIndex((u, j) => u.segs[0] !== j);
+      const unit = o[moved]!.segs[0]!;
+      const to = o.findIndex((u) => u.segs[0] === unit);
+      // the first displaced unit is either the moved one or its neighbour shifted by one
+      if (Math.abs(unit - to) > 8 || Math.abs(o[moved]!.segs[0]! - moved) > 8) far++;
+    }
+    const c = mutate(m, base, rnd, 'moveChain');
+    if (c) {
+      chains++;
+      expect(c.flatMap((u) => u.segs).sort((a, b) => a - b)).toEqual(base.map((_, j) => j));
+      expect(c.at(-1)!.segs).toEqual([12]);
+    }
+  }
+  expect(far).toBeGreaterThan(0);
+  expect(chains).toBeGreaterThan(0);
+});
+
+test('a stage stopped by its cap is retried with a larger cap when asked', () => {
+  const sol = parseMoves('RRDURRRR');
+  const m = segmentSolution(TWICE, sol);
+  const capped = new Rebuilder(m, { maxStates: 1, maxStatesLimit: 1 });
+  expect(capped.rebuild(baseOrder(m), Infinity, true)).toHaveProperty('failed');
+  const rb = new Rebuilder(m, { maxStates: 1, maxStatesLimit: 10_000 });
+  expect(rb.rebuild(baseOrder(m))).toHaveProperty('failed');
+  expect(rb.retries).toBe(0);
+  expect(rb.rebuild(baseOrder(m), Infinity, true)).toEqual({ moves: sol });
+  expect(rb.retries).toBeGreaterThan(0);
+});
+
+test('structural pass: a useless fill is dropped', () => {
+  // the given solution sinks the block in (2,1) before walking to the exit
+  const level = fromAscii(['@....E', '.B~...']);
+  const sol = parseMoves('DRURRRR');
+  expect(replay(level, sol).status).toBe('won');
+  const r = structuralPass(level, sol, { timeoutMs: 10_000 });
+  expect(r.moves).toHaveLength(5);
+  expect(r.gains).toEqual([{ what: 'drop water 2,1', before: 7, after: 5 }]);
+  expect(r.exhausted).toBe(true);
+  // with a shared tried set, candidates already rebuilt are skipped: each pass stops at its
+  // first gain, so the next ones try the merge of [water, exit] with ¼, ½ and all the merge
+  // limits (widening levels), then nothing is left
+  const tried = new Set<string>();
+  const counts = [0, 1, 2, 3, 4].map(
+    () => structuralPass(level, sol, { timeoutMs: 10_000, tried }).tried,
+  );
+  expect(counts).toEqual([1, 1, 1, 1, 0]);
+});
+
+test('structural pass: a merged window frees a neighbour block that fills the water sooner', () => {
+  // the given solution brings the far block (3,4) up to fill (4,2) (16 moves); the block (3,1),
+  // never pushed, does it in 10 moves, which only a wide search of [water, exit] can see
+  const level = fromAscii(['@...#..', '...B#..', '....~.E', '....#..', '...B#..', '....#..']);
+  const sol = parseMoves('DDDDDRRRUULURRRR');
+  expect(replay(level, sol).status).toBe('won');
+  const m = segmentSolution(level, sol);
+  // reorders and pins alone cannot do it
+  const sc = screenVariants(m, { variants: 300, timeoutMs: 10_000, keep: 2, exclude: [sol] });
+  expect(sc.kept.every((v) => v.moves.length >= 16)).toBe(true);
+  const r = structuralPass(level, sol, { timeoutMs: 10_000, window: 2, neighbours: 1 });
+  expect(r.moves).toHaveLength(10);
+  expect(replay(level, r.moves).status).toBe('won');
+  expect(r.gains[0]!.what).toBe(
+    'merge water 4,2 + exit -player -at [wide +3,1 doors optional limits ×0.25]',
+  );
+  // without neighbours, nothing; widening the pass adds them
+  const none = structuralPass(level, sol, { timeoutMs: 10_000, neighbours: 0, widen: 0 });
+  expect(none.moves).toHaveLength(16);
+  expect(none.exhausted).toBe(true);
+  const widened = structuralPass(level, sol, { timeoutMs: 10_000, neighbours: 0, widen: 1 });
+  expect(widened.moves).toHaveLength(10);
 });

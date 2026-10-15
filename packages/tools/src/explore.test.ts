@@ -25,6 +25,16 @@ test('explore arguments', () => {
       variants: 1_000_000,
       improveTop: 3,
       screen: 0.3,
+      pass: 0.3,
+      mergeWindow: 6,
+      mergeNeighbours: 2,
+      mergeWiden: 5,
+      mergeStates: 2_000_000,
+      mergeTimeoutMs: 60_000,
+      stageStates: 200_000,
+      stageStatesMax: 3_200_000,
+      stageTimeoutMs: 10_000,
+      largeMemoryMb: 1024,
       seed: 1,
       maxMemoryMb: undefined,
       save: undefined,
@@ -44,6 +54,26 @@ test('explore arguments', () => {
       '5',
       '--screen',
       '0.5',
+      '--pass',
+      '0.5',
+      '--merge-window',
+      '4',
+      '--merge-neighbours',
+      '0',
+      '--merge-widen',
+      '1',
+      '--merge-states',
+      '500000',
+      '--merge-timeout',
+      '30',
+      '--stage-states',
+      '100000',
+      '--stage-states-max',
+      '1600000',
+      '--stage-timeout',
+      '5',
+      '--large-memory',
+      '2048',
       '--seed',
       '3',
       '--max-memory',
@@ -61,6 +91,16 @@ test('explore arguments', () => {
       variants: 5000,
       improveTop: 5,
       screen: 0.5,
+      pass: 0.5,
+      mergeWindow: 4,
+      mergeNeighbours: 0,
+      mergeWiden: 1,
+      mergeStates: 500_000,
+      mergeTimeoutMs: 30_000,
+      stageStates: 100_000,
+      stageStatesMax: 1_600_000,
+      stageTimeoutMs: 5_000,
+      largeMemoryMb: 2048,
       seed: 3,
       maxMemoryMb: 2048,
       save: 'out',
@@ -71,6 +111,9 @@ test('explore arguments', () => {
   expect(parseExploreArgs([])).toHaveProperty('error');
   expect(parseExploreArgs(['pc-11', '--timeout', '0'])).toHaveProperty('error');
   expect(parseExploreArgs(['pc-11', '--screen', '2'])).toHaveProperty('error');
+  expect(parseExploreArgs(['pc-11', '--pass', '1'])).toHaveProperty('error');
+  expect(parseExploreArgs(['pc-11', '--merge-window', '2.5'])).toHaveProperty('error');
+  expect(parseExploreArgs(['pc-11', '--stage-states', '0'])).toHaveProperty('error');
   expect(parseExploreArgs(['pc-11', '--save'])).toHaveProperty('error');
   expect(parseExploreArgs(['pc-11', '--bogus'])).toHaveProperty('error');
 });
@@ -80,6 +123,16 @@ const opts: ExploreCommandOptions = {
   variants: 2_000,
   improveTop: 1,
   screen: 0.3,
+  pass: 0.3,
+  mergeWindow: 6,
+  mergeNeighbours: 2,
+  mergeWiden: 5,
+  mergeStates: 2_000_000,
+  mergeTimeoutMs: 60_000,
+  stageStates: 200_000,
+  stageStatesMax: 3_200_000,
+  stageTimeoutMs: 10_000,
+  largeMemoryMb: 1024,
   seed: 1,
   maxMemoryMb: 256,
   apply: false,
@@ -98,7 +151,9 @@ test('pc-01: a longer saved solution is beaten, saved and applied with its lower
   const out = join(tmp, 'out');
   const r = exploreCommand(dir, ['pc-01'], { ...opts, save: out, apply: true });
   expect(r.ok).toBe(true);
-  expect(r.lines[0]).toMatch(/^pc-01: 28 → 26 moves — \d+ round\(s\), \d+ variants/);
+  expect(r.lines[0]).toMatch(
+    /^pc-01: 28 → 26 moves — \d+ round\(s\), pass 28 → 26, \d+ variants \(\d+ feasible, \d+ stage retries\)/,
+  );
   expect(r.lines).toContain(`pc-01: shorter solution saved to ${join(out, 'pc-01-26.txt')}`);
   expect(r.lines).toContain('pc-01: solution written (26 moves)');
   expect(parseMoves(readFileSync(join(out, 'pc-01-26.txt'), 'utf8'))).toHaveLength(26);

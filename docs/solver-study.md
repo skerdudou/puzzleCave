@@ -490,3 +490,36 @@ A 10-minute long run per level (`--threads 10 --gpu auto --compress all`, domina
 | pc-07 | 388 | 114 | 118 | ×1.22 | ~270 |
 
 The practical ceiling is a few 10⁹ states (pc-11 ≥ 156: 2 G states, 259 GB). Even the slowest growth (×1.1 per layer) over 200+ layers is beyond 10²⁰ states, and the dense levels (pc-17, pc-16) would need ×4 every two layers over 50+ layers: **no proof is reachable** for any of them with this search, so no long run was started. The proven bounds are kept where higher; pc-13 and pc-14 rise from ≥ 100 to ≥ 108.
+
+## explore: structural pass, dropped stages, retried stage caps (2026-10-14)
+
+Ten hand-reasoning runs had just shortened the unproven levels by changes `explore` could not make. `packages/core/src/planner/explore.ts` now covers them (flags in DEVELOPMENT.md):
+
+- **Dropping any stage** (pc-04's useless fill of 3,16): a `drop` mutation removes any stage but the exit (its event is no longer required) and `restore` brings a dropped one back; the structural pass also drops every stage in turn.
+- **Long-distance moves** (pc-09's fill moved 17 places, pc-13's chain): `move` goes anywhere 40 % of the time (else up to 8 places as before), `moveChain` moves 2–6 consecutive stages anywhere.
+- **Stage caps** (pc-18's 3-block stage above 200,000 macro-states: "plan rebuilt failed"): `--stage-states`, `--stage-states-max`, `--stage-timeout`; the rebuild of the plan as is and the structural pass search a stage stopped by its cap again with 4× the cap and the time, up to 3.2 M macro-states, with its own memory budget (`--large-memory`, 1 GB); random variants never retry. pc-18 now rebuilds its 1296-move plan (10 retried stages).
+- **Large merges** (pc-11, pc-09, pc-07, pc-16): a **structural pass** opens each round. From the end of the plan backwards, it drops each stage, merges the stages from there to the exit (door goals optional), and merges every window of 2–6 consecutive stages into one wide search: the blocks the window moves plus the 2 closest blocks it does not move are free, every water may be filled, with the end pinned, free, free with optional doors, free with the neighbours. First improvement wins and the pass starts again from it; when every candidate failed, it widens (windows + 2, neighbours + 4, reach + 2 per level, 5 levels) and the first two levels use ¼ and ½ of the merge limits (2 M macro-states, 60 s).
+- **Spare keys after merges**: a shorter pass result goes through improve's windows and spare keys right away.
+
+Tests on small ASCII levels: a useless fill dropped by the pass, a merged window that frees a neighbour block (16 → 10 moves, out of reach of reorders and pins), stage retries, long moves and chains, `drop`/`restore` invariants, deterministic seeds.
+
+Campaign on the 10 unproven levels, `--apply`, 3 then up to 10 processes at once (one thread each, < 1 GB each): run 2 (35 min per level, `--pass 0.6`), then runs 3–5 (40–45 min, `--pass 0.9`, with wider windows and neighbours on some levels: `--merge-window 8–12 --merge-neighbours 6–10`, or fewer and larger searches: `--merge-window 4 --merge-states 6–8 M --merge-timeout 240`).
+
+| level | before | after | explore time | gain |
+|---|---|---|---|---|
+| pc-04 | 240 | 240 | 125 min | — |
+| pc-07 | 382 | 382 | 125 min | — |
+| pc-08 | 577 | **575** | 125 min (gain after 21 min) | 5 fills merged (6,6 12,5 5,7 5,8 5,9), ¼ limits |
+| pc-09 | 478 | 478 | 125 min | — |
+| pc-11 | 286 | 286 | 125 min | — |
+| pc-13 | 430 | **426** | 160 min (gain after 21 min) | 4 fills merged with the exit, doors optional |
+| pc-14 | 554 | **542** | 200 min (546 after 10 min) | 6 stages merged (5 fills and key 16,16) → 546; 9 stages (with door 4,6) → 544; 12 fills → 542 |
+| pc-16 | 118 | 118 | 80 min | — |
+| pc-17 | 86 | 86 | 80 min | — |
+| pc-18 | 1296 | 1296 | 126 min | — (plan now rebuilt) |
+
+Findings:
+- Every gain came from wide merges of fills (5 to 12 stages, all waters allowed); none from drops or long moves, whose cases were already fixed by hand in the saved solutions. improve's windows and spare keys never shortened a pass result further.
+- The pass is cheap on small levels (pc-16: 5,437 candidates, every level up to 10 widenings, in 8 min; pc-17: 6,242 in 40 min) and found nothing there: their remaining gaps need another strategy, not a local merge.
+- On large levels a wide search costs 15–60 s: in 40 min the pass does not finish its first level on pc-18 (977 candidates), pc-09 (1,473), pc-08 (1,078). The quick sweeps at ¼ and ½ of the limits found all three pc-08/pc-14 gains; full limits found pc-13's.
+- The screening of reordered variants no longer finds anything on these levels (its best variants equal the saved solution): the time is better spent in the pass (`--pass 0.6–0.9`).

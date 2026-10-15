@@ -1,11 +1,14 @@
 // "Explore starting points": the improve pipeline only replaces windows of a solution by shorter
 // paths to the same state, so it never changes the order of the events. This module cuts a
 // winning solution into its events (one unit per key taken, water filled, door opened, exit),
-// generates variants of that event plan (stages reordered, merged or split, end pins dropped,
-// an extra water filled with a block the solution never pushes) and rebuilds each variant with
-// the exact per-stage searches of `runStages` (restricted Dijkstra, everything not allowed is a
-// wall). The rebuilds are cheap: a local search ranks hundreds of variants by length, then the
-// windows of `improve` run on the few best ones and the shortest result is kept.
+// generates variants of that event plan (stages reordered, merged, split or dropped, end pins
+// dropped, an extra water filled with a block the solution never pushes) and rebuilds each
+// variant with the exact per-stage searches of `runStages` (restricted Dijkstra, everything not
+// allowed is a wall). The rebuilds are cheap: a local search ranks hundreds of variants by
+// length, then the windows of `improve` run on the few best ones and the shortest result is kept.
+// A systematic structural pass comes first in each round: every stage dropped in turn, then
+// windows of up to 6 consecutive stages merged into one wide search (all their blocks free, plus
+// a few neighbours, every water allowed, door goals optional), first improvement kept.
 //
 // Blocks are tracked by identity (the block that started on a cell), not by cell: a stage moved
 // earlier or later still names the same blocks, wherever they stand when it runs. A stage's end
@@ -44,6 +47,12 @@ export interface Unit {
   pinAt: boolean;
   /** extra stage: fill this water with that block (identity), no pin */
   extra?: { water: number; block: number };
+  /**
+   * wide merge of a window of stages (structural pass): every water may be filled, these extra
+   * blocks (identities) are free as well, the door goals are only allowed (not required) with
+   * doorsOptional, and the search has the merge limits (times scale, 1 by default)
+   */
+  wide?: { blocks: number[]; doorsOptional: boolean; scale?: number };
 }
 
 export interface ExploreModel {
@@ -53,6 +62,8 @@ export interface ExploreModel {
   blockStart: number[];
   /** (water, block) pairs for extra fills: waters left unfilled, blocks never pushed, nearby */
   extras: { water: number; block: number }[];
+  /** cell of each block identity at the start of each segment (−1: sank) */
+  cellsBefore: number[][];
 }
 
 const cellOf = (p: { x: number; y: number }, width: number) => p.y * width + p.x;
@@ -71,6 +82,13 @@ export function segmentSolution(level: LevelData, moves: readonly Dir[]): Explor
   });
   const pushed = new Set<number>();
   const segments: Segment[] = [];
+  const cellsBefore: number[][] = [];
+  const snapshot = () => {
+    const cells = blockStart.map(() => -1);
+    for (const [c, id] of idAt) cells[id] = c;
+    return cells;
+  };
+  cellsBefore.push(snapshot());
   let moved = new Set<number>();
   let seg: Segment = newSegment();
   for (const d of moves) {
@@ -107,10 +125,12 @@ export function segmentSolution(level: LevelData, moves: readonly Dir[]): Explor
     for (const [c, id] of idAt) if (moved.has(id)) seg.endAt.set(id, c);
     seg.endPlayer = cellOf(s.player, width);
     segments.push(seg);
+    cellsBefore.push(snapshot());
     seg = newSegment();
     moved = new Set();
   }
   if (s.status !== 'won') throw new Error('the solution does not win');
+  cellsBefore.length = segments.length;
   // extra fills: each water still unfilled at the end, with the 3 closest never-pushed blocks
   const extras: { water: number; block: number }[] = [];
   for (let c = 0; c < s.terrain.length; c++) {
@@ -122,7 +142,7 @@ export function segmentSolution(level: LevelData, moves: readonly Dir[]): Explor
       .slice(0, 3);
     for (const e of near) extras.push({ water: c, block: e.id });
   }
-  return { level, segments, blockStart, extras };
+  return { level, segments, blockStart, extras, cellsBefore };
 }
 
 function newSegment(): Segment {
@@ -147,7 +167,9 @@ export function baseOrder(m: ExploreModel): Unit[] {
 }
 
 const unitIds = (m: ExploreModel, u: Unit): number[] =>
-  u.extra ? [u.extra.block] : [...new Set(u.segs.flatMap((i) => m.segments[i]!.ids))];
+  u.extra
+    ? [u.extra.block]
+    : [...new Set([...u.segs.flatMap((i) => m.segments[i]!.ids), ...(u.wide?.blocks ?? [])])];
 
 export function unitText(m: ExploreModel, u: Unit): string {
   const w = m.level.width;
@@ -163,20 +185,36 @@ export function unitText(m: ExploreModel, u: Unit): string {
     ].join(' ');
   });
   const pins = (u.pinPlayer ? '' : ' -player') + (u.pinAt ? '' : ' -at');
-  return parts.join(' + ') + pins;
+  const wide = u.wide
+    ? ` [wide${u.wide.blocks.length ? ` +${u.wide.blocks.map((id) => cell(m.blockStart[id]!)).join(' ')}` : ''}${u.wide.doorsOptional ? ' doors optional' : ''}${u.wide.scale !== undefined && u.wide.scale < 1 ? ` limits ×${u.wide.scale}` : ''}]`
+    : '';
+  return parts.join(' + ') + pins + wide;
 }
 
 const unitSig = (u: Unit) =>
   u.extra
     ? `x${u.extra.water}:${u.extra.block}`
-    : `${u.segs.join('.')}${u.pinPlayer ? 'p' : ''}${u.pinAt ? 'a' : ''}`;
+    : `${u.segs.join('.')}${u.pinPlayer ? 'p' : ''}${u.pinAt ? 'a' : ''}${u.wide ? `w${u.wide.blocks.join('.')}${u.wide.doorsOptional ? 'o' : ''}s${u.wide.scale ?? 1}` : ''}`;
 
 export interface RebuildOptions {
   /** macro-states per stage (200,000 by default) */
   maxStates?: number;
+  /**
+   * in the rebuilds that ask for it (the plan as is, the structural pass), a stage stopped by
+   * its macro-state cap or its time limit is searched again with 4× the cap and the time, up to
+   * this many macro-states (3,200,000 by default; not above maxStates: no retry)
+   */
+  maxStatesLimit?: number;
   /** wall-clock limit per stage (10 s by default) */
   stageTimeoutMs?: number;
+  /** memory budget of each stage search, MB (256 by default) */
   maxMemoryMb?: number;
+  /** memory budget of the retried and the wide merged searches, MB (1,024 by default) */
+  largeMemoryMb?: number;
+  /** macro-states of a wide merged stage (2,000,000 by default) */
+  mergeStates?: number;
+  /** wall-clock limit of a wide merged stage (60 s by default) */
+  mergeTimeoutMs?: number;
   now?: () => number;
 }
 
@@ -187,6 +225,8 @@ interface StepResult {
   end?: Uint32Array;
   /** cells of the unit's blocks at the end (−1: sank) */
   after?: number[];
+  /** failed on a cap that a retry may raise */
+  retry?: boolean;
 }
 
 /**
@@ -197,6 +237,8 @@ export class Rebuilder {
   readonly model: CompactModel;
   private memo = new Map<string, StepResult>();
   searches = 0;
+  /** stage searches run again with a larger cap */
+  retries = 0;
 
   constructor(
     readonly m: ExploreModel,
@@ -205,8 +247,11 @@ export class Rebuilder {
     this.model = new CompactModel(m.level);
   }
 
-  /** moves of the variant, or why it fails; `bound`: give up once longer */
-  rebuild(order: Unit[], bound = Infinity): { moves: Dir[] } | { failed: string } {
+  /**
+   * moves of the variant, or why it fails; `bound`: give up once longer; `retry`: a stage
+   * stopped by a cap is searched again with larger caps (maxStatesLimit)
+   */
+  rebuild(order: Unit[], bound = Infinity, retry = false): { moves: Dir[] } | { failed: string } {
     const { m, model } = this;
     let s: GameState = initialState(m.level);
     const idCell = m.blockStart.slice();
@@ -219,8 +264,8 @@ export class Rebuilder {
       const cells = ids.map((id) => idCell[id]!);
       const key = `${model.encode(s).join(',')}|${unitSig(u)}|${cells.join(',')}`;
       let r = this.memo.get(key);
-      if (!r) {
-        r = this.runUnit(s, u, ids, cells);
+      if (!r || (retry && r.retry)) {
+        r = this.runUnit(s, u, ids, cells, retry);
         if (this.memo.size >= 300_000) this.memo.clear();
         this.memo.set(key, r);
       }
@@ -234,17 +279,25 @@ export class Rebuilder {
     return { moves };
   }
 
-  private runUnit(s: GameState, u: Unit, ids: number[], cells: number[]): StepResult {
-    const { m } = this;
+  private runUnit(
+    s: GameState,
+    u: Unit,
+    ids: number[],
+    cells: number[],
+    retry: boolean,
+  ): StepResult {
+    const { m, opts } = this;
     const width = m.level.width;
     const st: Stage = emptyStage();
+    const doors: number[] = [];
     if (u.extra) st.waters.push(u.extra.water);
     else
       for (const i of u.segs) {
         const g = m.segments[i]!;
         st.keys.push(...g.keys);
         st.waters.push(...g.waters);
-        st.doors.push(...g.doors);
+        doors.push(...g.doors);
+        if (!u.wide?.doorsOptional) st.doors.push(...g.doors);
         st.exit ||= g.exit;
       }
     st.blocks = cells;
@@ -253,27 +306,53 @@ export class Rebuilder {
       if (u.pinPlayer) st.player.push(m.segments[last]!.endPlayer);
       if (u.pinAt)
         for (const id of ids) {
-          // cell after the last segment of the unit that pushes this block
+          // cell after the last segment of the unit that pushes this block (none: a neighbour
+          // of a wide merge, not pinned)
           const seg = [...u.segs]
             .sort((a, b) => b - a)
             .find((i) => m.segments[i]!.ids.includes(id));
-          const c = m.segments[seg!]!.endAt.get(id);
+          const c = seg === undefined ? undefined : m.segments[seg]!.endAt.get(id);
           if (c !== undefined) st.at.push(c);
         }
     }
     const goal = stageGoal(st, s);
     let moves: Dir[] = [];
     if (st.exit || !goal(loaded(this.model, s))) {
-      this.searches++;
-      const r = reachSubgoal(s, { free: st.blocks, doors: st.doors, waters: st.waters }, goal, {
-        maxStates: this.opts.maxStates ?? 200_000,
-        win: st.exit,
-        timeoutMs: this.opts.stageTimeoutMs ?? 10_000,
-        ...(this.opts.maxMemoryMb !== undefined ? { maxMemoryMb: this.opts.maxMemoryMb } : {}),
-        ...(this.opts.now ? { now: this.opts.now } : {}),
-      });
-      if (!r.ok) return { ok: false, moves: [] };
-      moves = r.moves;
+      const scale = u.wide?.scale ?? 1;
+      const baseCap = u.wide
+        ? Math.max(1, Math.floor((opts.mergeStates ?? 2_000_000) * scale))
+        : (opts.maxStates ?? 200_000);
+      const baseTime = u.wide
+        ? (opts.mergeTimeoutMs ?? 60_000) * scale
+        : (opts.stageTimeoutMs ?? 10_000);
+      const limit = u.wide ? baseCap : Math.max(baseCap, opts.maxStatesLimit ?? 3_200_000);
+      let cap = baseCap;
+      for (;;) {
+        this.searches++;
+        const large = u.wide || cap > baseCap;
+        const mem = large ? (opts.largeMemoryMb ?? 1024) : opts.maxMemoryMb;
+        const r = reachSubgoal(
+          s,
+          { free: st.blocks, doors, waters: u.wide ? 'all' : st.waters },
+          goal,
+          {
+            maxStates: cap,
+            win: st.exit,
+            timeoutMs: (baseTime * cap) / baseCap,
+            ...(mem !== undefined ? { maxMemoryMb: mem } : {}),
+            ...(opts.now ? { now: opts.now } : {}),
+          },
+        );
+        if (r.ok) {
+          moves = r.moves;
+          break;
+        }
+        const capped = r.full || r.timedOut;
+        if (!capped || cap >= limit) return { ok: false, moves: [] };
+        if (!retry) return { ok: false, moves: [], retry: true };
+        cap = Math.min(cap * 4, limit);
+        this.retries++;
+      }
     }
     // follow the unit's blocks along the moves (the others are walls: they never move)
     const at = new Map(cells.map((c, j) => [c, j]));
@@ -322,6 +401,7 @@ export function prng(seed: number): () => number {
 export type MutationKind =
   | 'swap'
   | 'move'
+  | 'moveChain'
   | 'reverse'
   | 'blockSwap'
   | 'merge'
@@ -329,13 +409,16 @@ export type MutationKind =
   | 'pinPlayer'
   | 'pinAt'
   | 'addWater'
-  | 'dropWater';
+  | 'dropWater'
+  | 'drop'
+  | 'restore';
 
 const KINDS: MutationKind[] = [
   'swap',
   'swap',
   'move',
   'move',
+  'moveChain',
   'reverse',
   'blockSwap',
   'merge',
@@ -344,11 +427,14 @@ const KINDS: MutationKind[] = [
   'pinAt',
   'addWater',
   'dropWater',
+  'drop',
+  'restore',
 ];
 
 /**
  * A random neighbour of the plan (null if the drawn mutation does not apply). The exit unit
- * stays last; merged units hold at most 4 blocks.
+ * stays last; merged units hold at most 4 blocks. A unit may be dropped (its events are then
+ * not required: a useless fill, a door or key the rest does without) and restored later.
  */
 export function mutate(
   m: ExploreModel,
@@ -359,7 +445,7 @@ export function mutate(
   const n = order.length - 1; // movable units (the exit stays last)
   const int = (k: number) => Math.floor(rnd() * k);
   const o = order.slice();
-  if (n < 2 && kind !== 'pinPlayer' && kind !== 'pinAt' && kind !== 'addWater') return null;
+  if (n < 2 && !['pinPlayer', 'pinAt', 'addWater', 'drop', 'restore'].includes(kind)) return null;
   switch (kind) {
     case 'swap': {
       const i = int(n - 1);
@@ -367,12 +453,26 @@ export function mutate(
       return o;
     }
     case 'move': {
+      // mostly short moves (up to 8 places), else anywhere in the plan
       const i = int(n);
-      const off = (1 + int(8)) * (rnd() < 0.5 ? -1 : 1);
-      const j = Math.max(0, Math.min(n - 1, i + off));
+      const j =
+        rnd() < 0.6
+          ? Math.max(0, Math.min(n - 1, i + (1 + int(8)) * (rnd() < 0.5 ? -1 : 1)))
+          : int(n);
       if (j === i) return null;
       const [u] = o.splice(i, 1);
       o.splice(j, 0, u!);
+      return o;
+    }
+    case 'moveChain': {
+      // a chain of 2 to 6 consecutive units moved anywhere
+      const len = 2 + int(Math.min(5, n - 2));
+      if (len >= n) return null;
+      const i = int(n - len + 1);
+      const chain = o.splice(i, len);
+      const j = int(n - len + 1);
+      if (j === i) return null;
+      o.splice(j, 0, ...chain);
       return o;
     }
     case 'reverse': {
@@ -422,6 +522,7 @@ export function mutate(
     }
     case 'pinPlayer':
     case 'pinAt': {
+      if (n < 1) return null;
       const i = int(n);
       const u = o[i]!;
       if (u.extra) return null;
@@ -443,6 +544,25 @@ export function mutate(
       o.splice(xs[int(xs.length)]!, 1);
       return o;
     }
+    case 'drop': {
+      // any stage of the plan but the exit (extras: dropWater)
+      if (n < 1) return null;
+      const i = int(n);
+      if (o[i]!.extra) return null;
+      o.splice(i, 1);
+      return o;
+    }
+    case 'restore': {
+      // a dropped segment back, as its own unit, at its original rank or anywhere
+      const present = new Set(o.flatMap((u) => u.segs));
+      const missing = m.segments.map((_, i) => i).filter((i) => !present.has(i));
+      if (!missing.length) return null;
+      const seg = missing[int(missing.length)]!;
+      let at = o.findIndex((u) => u.segs.length > 0 && Math.min(...u.segs) > seg);
+      if (at < 0 || at > n || rnd() < 0.3) at = int(n + 1);
+      o.splice(at, 0, { segs: [seg], pinPlayer: true, pinAt: true });
+      return o;
+    }
   }
 }
 
@@ -461,37 +581,42 @@ export interface ScreenOptions extends RebuildOptions {
   seed?: number;
   /** solutions never kept (the input solution, variants already improved) */
   exclude?: readonly (readonly Dir[])[];
+  /** rebuilder of the model to reuse (its memo), e.g. the structural pass's */
+  rebuilder?: Rebuilder;
 }
 
 export interface ScreenResult {
-  /** rebuild of the original plan (fails if a stage limit is hit) */
+  /** rebuild of the original plan (fails if a stage limit is hit, even after retries) */
   base?: Dir[];
   /** shortest distinct variants, shortest first */
   kept: Variant[];
   tried: number;
   feasible: number;
   searches: number;
+  retries: number;
 }
 
 /**
  * Local search over event plans from the solution's own plan: each step draws a random
  * mutation (one or two), rebuilds it, and moves there when it is not longer; after 150 steps
  * without progress it restarts from a random kept variant. The first variants are the plan
- * itself and the plan with all player pins, then all pins, dropped.
+ * itself (with stage retries on a cap) and the plan with all player pins, then all pins, dropped.
  */
 export function screenVariants(m: ExploreModel, o: ScreenOptions): ScreenResult {
   const now = o.now ?? (() => performance.now());
   const deadline = now() + o.timeoutMs;
   const rnd = prng(o.seed ?? 1);
-  const rb = new Rebuilder(m, o);
+  const rb = o.rebuilder ?? new Rebuilder(m, o);
+  const searches0 = rb.searches;
+  const retries0 = rb.retries;
   const exclude = new Set((o.exclude ?? []).map((v) => v.join('')));
   const kept = new Map<string, Variant>();
-  const res: ScreenResult = { kept: [], tried: 0, feasible: 0, searches: 0 };
+  const res: ScreenResult = { kept: [], tried: 0, feasible: 0, searches: 0, retries: 0 };
   const worstKept = () =>
     kept.size < o.keep ? Infinity : Math.max(...[...kept.values()].map((v) => v.moves.length));
-  const consider = (order: Unit[], bound: number): Dir[] | undefined => {
+  const consider = (order: Unit[], bound: number, retry = false): Dir[] | undefined => {
     res.tried++;
-    const r = rb.rebuild(order, bound);
+    const r = rb.rebuild(order, bound, retry);
     if (!('moves' in r)) return undefined;
     res.feasible++;
     const text = r.moves.join('');
@@ -511,7 +636,7 @@ export function screenVariants(m: ExploreModel, o: ScreenOptions): ScreenResult 
     return r.moves;
   };
   const base = baseOrder(m);
-  const start = consider(base, Infinity);
+  const start = consider(base, Infinity, true);
   if (start) res.base = start;
   let cur = base;
   let curLen = start ? start.length : Infinity;
@@ -520,7 +645,7 @@ export function screenVariants(m: ExploreModel, o: ScreenOptions): ScreenResult 
     base.map((u) => ({ ...u, pinPlayer: false, pinAt: false })),
   ]) {
     if (res.tried >= o.variants || now() > deadline) break;
-    const r = consider(variant, Infinity);
+    const r = consider(variant, Infinity, true);
     if (r && r.length < curLen) {
       cur = variant;
       curLen = r.length;
@@ -550,8 +675,214 @@ export function screenVariants(m: ExploreModel, o: ScreenOptions): ScreenResult 
     }
   }
   res.kept = [...kept.values()].sort((a, b) => a.moves.length - b.moves.length);
-  res.searches = rb.searches;
+  res.searches = rb.searches - searches0;
+  res.retries = rb.retries - retries0;
   return res;
+}
+
+// ---- structural pass: every stage dropped, windows of stages merged into wide searches ----
+
+export interface PassOptions extends RebuildOptions {
+  /** wall-clock limit of the pass */
+  timeoutMs: number;
+  /** largest window of consecutive stages merged into one wide search (6 by default; < 2: none) */
+  window?: number;
+  /**
+   * blocks freed besides those of a merged window: the closest ones (≤ 4 cells from its goals
+   * and blocks) it does not move (2 by default; 0: none)
+   */
+  neighbours?: number;
+  /**
+   * when every candidate failed, the pass widens again up to this many times (5 by default):
+   * level i merges windows up to window + 2i stages with neighbours + 4i neighbour blocks taken
+   * up to 4 + 2i cells away, with min(1, 2^(i − 2)) of the merge limits (a quick first sweep)
+   */
+  widen?: number;
+  /** candidate plans already rebuilt (by their text), skipped; the pass adds its own */
+  tried?: Set<string>;
+  log?: (line: string) => void;
+}
+
+export interface PassResult {
+  /** the shortest solution found (the input if nothing beats it) */
+  moves: Dir[];
+  /** each candidate that shortened the solution, in order */
+  gains: { what: string; before: number; after: number }[];
+  /** candidates rebuilt */
+  tried: number;
+  /** every candidate of the last solution has been tried */
+  exhausted: boolean;
+  searches: number;
+  retries: number;
+  /** model and rebuilder of the returned solution (to reuse their memo) */
+  model: ExploreModel;
+  rebuilder: Rebuilder;
+}
+
+interface Candidate {
+  what: string;
+  order: Unit[];
+}
+
+/** blocks alive at the start of the window, not moved in it, closest to its goals and blocks */
+function neighbourBlocks(m: ExploreModel, segs: number[], count: number, reach: number): number[] {
+  if (count <= 0) return [];
+  const w = m.level.width;
+  const cells = m.cellsBefore[segs[0]!]!;
+  const inside = new Set(segs.flatMap((i) => m.segments[i]!.ids));
+  const targets = [
+    ...segs.flatMap((i) => {
+      const g = m.segments[i]!;
+      return [...g.keys, ...g.waters, ...g.doors];
+    }),
+    ...[...inside].map((id) => cells[id]!).filter((c) => c >= 0),
+  ];
+  if (!targets.length) return [];
+  return cells
+    .map((c, id) => ({ id, c }))
+    .filter((e) => e.c >= 0 && !inside.has(e.id))
+    .map((e) => ({ id: e.id, d: Math.min(...targets.map((t) => manhattan(e.c, t, w))) }))
+    .filter((e) => e.d <= reach)
+    .sort((a, b) => a.d - b.d || a.id - b.id)
+    .slice(0, count)
+    .map((e) => e.id);
+}
+
+/**
+ * Candidate plans of the structural pass, from the end of the plan backwards (a change late in
+ * the plan only rebuilds a short suffix): at each stage, the stage dropped, the stages from
+ * there to the exit merged with it (when at most `window`, door goals optional, without and
+ * with neighbour blocks), then every window of 2…window stages starting there merged (pinned
+ * end, free end, free end with optional doors, free end with neighbour blocks).
+ */
+function* passCandidates(
+  m: ExploreModel,
+  window: number,
+  neighbours: number,
+  reach = 4,
+  scale = 1,
+): Generator<Candidate> {
+  const base = baseOrder(m);
+  const n = base.length;
+  const text = (u: Unit) => unitText(m, u);
+  const merged = (from: number, k: number, pinned: boolean, wide: Unit['wide']): Unit => ({
+    segs: base.slice(from, from + k).flatMap((u) => u.segs),
+    pinPlayer: pinned,
+    pinAt: pinned,
+    ...(wide ? { wide } : {}),
+  });
+  const splice = (from: number, k: number, u: Unit) => [
+    ...base.slice(0, from),
+    u,
+    ...base.slice(from + k),
+  ];
+  for (let from = n - 2; from >= 0; from--) {
+    yield {
+      what: `drop ${text(base[from]!)}`,
+      order: [...base.slice(0, from), ...base.slice(from + 1)],
+    };
+    const toExit = n - from;
+    if (toExit <= window) {
+      const segs = base.slice(from).flatMap((u) => u.segs);
+      const nb = neighbourBlocks(m, segs, neighbours, reach);
+      for (const blocks of nb.length ? [[], nb] : [[]]) {
+        const u = merged(from, toExit, false, { blocks, doorsOptional: true, scale });
+        yield { what: `merge ${text(u)}`, order: splice(from, toExit, u) };
+      }
+    }
+    for (let k = 2; k <= window && from + k <= n - 1; k++) {
+      const segs = base.slice(from, from + k).flatMap((u) => u.segs);
+      const hasDoors = segs.some((i) => m.segments[i]!.doors.length > 0);
+      const nb = neighbourBlocks(m, segs, neighbours, reach);
+      const units: Unit[] = [
+        merged(from, k, true, { blocks: [], doorsOptional: false, scale }),
+        merged(from, k, false, { blocks: [], doorsOptional: false, scale }),
+        ...(hasDoors ? [merged(from, k, false, { blocks: [], doorsOptional: true, scale })] : []),
+        ...(nb.length
+          ? [merged(from, k, false, { blocks: nb, doorsOptional: hasDoors, scale })]
+          : []),
+      ];
+      for (const u of units) yield { what: `merge ${text(u)}`, order: splice(from, k, u) };
+    }
+  }
+}
+
+/**
+ * Systematic structural changes of the solution's own plan, first improvement: each candidate
+ * (passCandidates) is rebuilt with stage retries and kept when shorter; the pass then starts
+ * again from the new solution (candidates already tried are skipped), until every candidate
+ * failed or the time is up.
+ */
+export function structuralPass(
+  level: LevelData,
+  solution: readonly Dir[],
+  o: PassOptions,
+): PassResult {
+  const now = o.now ?? (() => performance.now());
+  const deadline = now() + o.timeoutMs;
+  const tried = o.tried ?? new Set<string>();
+  const log = o.log ?? (() => {});
+  let cur = solution.slice();
+  let m = segmentSolution(level, cur);
+  let rb = new Rebuilder(m, o);
+  const res = { gains: [] as PassResult['gains'], tried: 0, exhausted: false, searches: 0 };
+  let retries = 0;
+  const window = o.window ?? 6;
+  const neighbours = o.neighbours ?? 2;
+  const widen = o.widen ?? 5;
+  let nextLog = now() + 60_000;
+  for (;;) {
+    let better: { what: string; moves: Dir[] } | undefined;
+    let timedOut = false;
+    for (let lv = 0; lv <= widen && !better && !timedOut; lv++) {
+      // logged once per level and solution (later rounds go through the levels again)
+      const mark = `#level ${lv} ${cur.join('')}`;
+      if (lv > 0 && !tried.has(mark)) {
+        tried.add(mark);
+        log(`pass: widened to level ${lv} from ${cur.length} moves`);
+      }
+      for (const c of passCandidates(
+        m,
+        window + 2 * lv,
+        neighbours + 4 * lv,
+        4 + 2 * lv,
+        // the first levels sweep with smaller search limits (¼, ½), the later ones with all
+        Math.min(1, 2 ** (lv - 2)),
+      )) {
+        if (now() > deadline) {
+          timedOut = true;
+          break;
+        }
+        const key = c.order.map((u) => unitText(m, u)).join(' | ');
+        if (tried.has(key)) continue;
+        tried.add(key);
+        res.tried++;
+        if (now() > nextLog) {
+          nextLog = now() + 60_000;
+          log(`pass: ${res.tried} candidates, level ${lv}, at ${c.what}`);
+        }
+        const r = rb.rebuild(c.order, cur.length - 1, true);
+        if ('moves' in r && r.moves.length < cur.length) {
+          better = { what: c.what, moves: r.moves };
+          break;
+        }
+      }
+    }
+    if (!better) {
+      res.exhausted = !timedOut;
+      break;
+    }
+    res.gains.push({ what: better.what, before: cur.length, after: better.moves.length });
+    log(`pass: ${cur.length} → ${better.moves.length} moves: ${better.what}`);
+    res.searches += rb.searches;
+    retries += rb.retries;
+    cur = better.moves;
+    m = segmentSolution(level, cur);
+    rb = new Rebuilder(m, o);
+  }
+  res.searches += rb.searches;
+  retries += rb.retries;
+  return { ...res, moves: cur, retries, model: m, rebuilder: rb };
 }
 
 // ---- whole exploration ----
@@ -564,10 +895,18 @@ export interface ExploreOptions extends RebuildOptions {
   /** variants given to improve per round (3 by default) */
   improveTop?: number;
   /**
-   * share of the duration spent screening in a round (0.3 by default); each improved variant
-   * gets at most (1 − share) / improveTop of the duration
+   * share of the duration spent screening in a round (0.3 by default, of what the structural
+   * pass leaves); each improved variant gets at most (1 − share) / improveTop of the duration
    */
   screenFraction?: number;
+  /** share of a round's duration given to the structural pass (0.3 by default; 0: no pass) */
+  passFraction?: number;
+  /** largest window of merged stages in the structural pass (6 by default) */
+  window?: number;
+  /** neighbour blocks freed in a merged window (2 by default) */
+  neighbours?: number;
+  /** widening levels of the structural pass (5 by default) */
+  widen?: number;
   seed?: number;
   /** windows of improve on one variant; `polish` by default */
   improve?: (level: LevelData, moves: Dir[], timeoutMs: number) => Dir[];
@@ -583,8 +922,12 @@ export interface ExploreResult {
   tried: number;
   feasible: number;
   searches: number;
+  /** stage searches run again with a larger cap */
+  retries: number;
   /** shortest variant of the first round, before improve */
   bestScreened?: number;
+  /** gains of the structural pass: round, candidate, length before → after */
+  passGains: { round: number; what: string; before: number; after: number }[];
   /** each variant given to improve: round, length before → after */
   improved: { round: number; before: number; after: number; ms: number }[];
   /** shortest solution seen (the input if nothing beats it) */
@@ -614,11 +957,11 @@ export function polish(
 }
 
 /**
- * Explores starting points around a winning solution, in rounds: screening of event-plan
- * variants of the current best solution, then improve windows on the shortest few. A round that
- * finds a shorter solution makes it the next round's starting point; otherwise the next round
- * draws other variants (another seed), never improving a variant twice. Returns the shortest
- * solution seen.
+ * Explores starting points around a winning solution, in rounds: the structural pass on the
+ * current best solution (its result then gets improve's windows and spare keys), screening of
+ * event-plan variants, then improve windows on the shortest few. A round that finds a shorter
+ * solution makes it the next round's starting point; otherwise the next round draws other
+ * variants (another seed), never improving a variant twice. Returns the shortest solution seen.
  */
 export function exploreLevel(
   level: LevelData,
@@ -631,6 +974,7 @@ export function exploreLevel(
   const log = o.log ?? (() => {});
   const top = o.improveTop ?? 3;
   const screenShare = o.screenFraction ?? 0.3;
+  const passShare = o.passFraction ?? 0.3;
   const improve = o.improve ?? ((lv, mv, ms) => polish(lv, mv, ms, o.maxMemoryMb, now));
   const res: ExploreResult = {
     initialLength: solution.length,
@@ -638,16 +982,61 @@ export function exploreLevel(
     tried: 0,
     feasible: 0,
     searches: 0,
+    retries: 0,
+    passGains: [],
     improved: [],
     moves: solution.slice(),
     ms: 0,
   };
   // variants already improved: never twice
   const done: Dir[][] = [];
+  // candidates of the structural pass already rebuilt
+  const tried = new Set<string>();
+  const cap = (o.timeoutMs * (1 - screenShare) * (1 - passShare)) / top;
+  const accept = (moves: Dir[]) => {
+    if (moves.length < res.moves.length && replay(level, moves).status === 'won') res.moves = moves;
+  };
   while (now() < end) {
     const round = ++res.rounds;
+    let reuse: { m: ExploreModel; rb: Rebuilder } | undefined;
+    let passDone = true;
+    if (passShare > 0) {
+      const p0 = now();
+      const ps = structuralPass(level, res.moves, {
+        ...o,
+        timeoutMs: Math.min(o.timeoutMs, end - p0) * passShare,
+        tried,
+        log,
+        now,
+      });
+      res.searches += ps.searches;
+      res.retries += ps.retries;
+      passDone = ps.exhausted;
+      for (const g of ps.gains) res.passGains.push({ round, ...g });
+      log(
+        `round ${round} pass from ${res.moves.length} moves: ${ps.tried} candidates, ${ps.gains.length} gain(s) → ${ps.moves.length}${ps.exhausted ? ', all tried' : ''} in ${((now() - p0) / 1000).toFixed(1)} s`,
+      );
+      if (ps.moves.length < res.moves.length) {
+        accept(ps.moves);
+        // spare keys and windows on the merged solution (a door made useless frees a key)
+        const left = end - now();
+        if (left > 0) {
+          const t1 = now();
+          const out = improve(level, ps.moves, Math.min(cap, left));
+          const ms = now() - t1;
+          done.push(ps.moves);
+          res.improved.push({ round, before: ps.moves.length, after: out.length, ms });
+          log(
+            `round ${round}, pass result: ${ps.moves.length} → ${out.length} moves (${(ms / 1000).toFixed(1)} s)`,
+          );
+          accept(out);
+        }
+      }
+      if (res.moves === ps.moves) reuse = { m: ps.model, rb: ps.rebuilder };
+    }
+    if (now() >= end) break;
     const cur = res.moves;
-    const m = segmentSolution(level, cur);
+    const m = reuse?.m ?? segmentSolution(level, cur);
     const r0 = now();
     const sc = screenVariants(m, {
       ...o,
@@ -658,21 +1047,25 @@ export function exploreLevel(
       seed: (o.seed ?? 1) + round - 1,
       exclude: [cur, ...done],
       now,
+      ...(reuse ? { rebuilder: reuse.rb } : {}),
     });
     res.tried += sc.tried;
     res.feasible += sc.feasible;
     res.searches += sc.searches;
+    res.retries += sc.retries;
     if (round === 1) {
       if (sc.base) res.baseLength = sc.base.length;
       if (sc.kept.length) res.bestScreened = sc.kept[0]!.moves.length;
     }
     log(
-      `round ${round} from ${cur.length} moves: ${m.segments.length} events, ${sc.tried} variants (${sc.feasible} feasible, ${sc.searches} stage searches) in ${((now() - r0) / 1000).toFixed(1)} s; plan rebuilt ${sc.base?.length ?? 'failed'}, kept ${sc.kept.map((v) => v.moves.length).join(' ') || 'none'}`,
+      `round ${round} from ${cur.length} moves: ${m.segments.length} events, ${sc.tried} variants (${sc.feasible} feasible, ${sc.searches} stage searches, ${sc.retries} retried) in ${((now() - r0) / 1000).toFixed(1)} s; plan rebuilt ${sc.base?.length ?? 'failed'}, kept ${sc.kept.map((v) => v.moves.length).join(' ') || 'none'}`,
     );
-    if (!sc.kept.length) break;
+    if (!sc.kept.length) {
+      if (passDone) break;
+      continue;
+    }
     // a variant shorter than the best wins as it is (rebuilt and replayed), even unimproved
-    if (sc.kept[0]!.moves.length < res.moves.length) res.moves = sc.kept[0]!.moves;
-    const cap = (o.timeoutMs * (1 - screenShare)) / top;
+    accept(sc.kept[0]!.moves);
     for (let i = 0; i < sc.kept.length; i++) {
       const v = sc.kept[i]!;
       const left = end - now();
@@ -685,7 +1078,7 @@ export function exploreLevel(
       log(
         `round ${round}, variant ${i + 1}: ${v.moves.length} → ${out.length} moves (${(ms / 1000).toFixed(1)} s): ${v.order.map((u) => unitText(m, u)).join(' | ')}`,
       );
-      if (out.length < res.moves.length && replay(level, out).status === 'won') res.moves = out;
+      accept(out);
     }
   }
   res.ms = now() - t0;
