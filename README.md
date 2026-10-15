@@ -50,12 +50,17 @@ Master mode has two medals of its own:
 - **Master** (a violet medal with a crown): finish in master mode within the **gold** move limit;
 - **Grand master** (a light-blue medal with a white sparkle): finish in master mode within the
   **grand master** limit, the best solution known — often a different, cleverer route than the
-  gold one. Grand master includes master.
+  gold one — and, on a level with time medals, within its **silver time**. Grand master includes
+  master: a run within the grand master moves but slower than the silver time earns master.
 
-Master mode is a separate achievement, with its own line on the selection and result screens
-(both move limits and the time limit, for example "Master ≤ 610 · Grand master ≤ 538 · ≤ 2:07.50",
-and your best master run). A master finish also counts for the gold, silver and bronze medals it
-qualifies for. (Older versions had a single platinum medal: it is now grand master.)
+Master mode is a separate achievement, with its own line on the selection and result screens: the
+limits, for example "Master ≤ 610 · Grand master ≤ 538 & ≤ 1:46.25 · limit ≤ 2:07.50" (grand
+master's moves and time, then master mode's time limit), and your best master run, under the name
+of the master medal you hold ("Grand master: 538 moves · 1:40.12"), or "Master mode: …" while you
+hold none. The best moves and the best time are kept apart and may come from different runs. A
+master finish also counts for the gold, silver and bronze medals it qualifies for. (Older versions
+had a single platinum medal: it is now grand master. A grand master earned before the silver time
+rule is kept.)
 
 The Easy chapter has no master mode.
 

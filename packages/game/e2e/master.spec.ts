@@ -61,7 +61,7 @@ test('master mode: locked before gold, no undo, water drowns, grand master', asy
   const grandMaster = level.thresholds.platinumMoves!;
   expect(rows[2]!.tiers).toEqual([
     { medal: 'master', text: `≤ ${gold}` },
-    { medal: 'grandMaster', text: `≤ ${grandMaster} · ≤ 0:16.00` },
+    { medal: 'grandMaster', text: `≤ ${grandMaster} & ≤ 0:13.00 · limit ≤ 0:16.00` },
   ]);
   expect(await field(page, 'masterLine')).toBe('');
   await page.keyboard.press('KeyP');
@@ -76,11 +76,11 @@ test('master mode: locked before gold, no undo, water drowns, grand master', asy
   await expect.poll(() => field(page, 'scene')).toBe('Result');
   expect(((await field(page, 'lastAward')) as { moves?: string }).moves).toBe('gold');
   // the result's master line: where the player stands, not this run
-  expect(await field(page, 'resultMasterLine')).toBe('Master: not finished yet');
+  expect(await field(page, 'resultMasterLine')).toBe('Master mode: not finished yet');
   await page.keyboard.press('Escape');
   await expect.poll(() => field(page, 'scene')).toBe('Select');
   expect(await field(page, 'master')).toBe('open');
-  expect(await field(page, 'masterLine')).toBe('Master: not finished yet');
+  expect(await field(page, 'masterLine')).toBe('Master mode: not finished yet');
 
   // master mode: undo does nothing, not even after a restart
   await page.keyboard.press('KeyP');
@@ -110,7 +110,7 @@ test('master mode: locked before gold, no undo, water drowns, grand master', asy
   await expect.poll(() => field(page, 'moves')).toBe(0);
   await play(page, solution);
   await expect.poll(() => field(page, 'scene')).toBe('Result');
-  // the scripted run is fast enough for a time medal too
+  // the scripted run is fast enough for a time medal, and for grand master (the silver time)
   expect(await field(page, 'lastAward')).toMatchObject({ moves: 'gold', master: 'grandMaster' });
   const last = (await field(page, 'lastResult')) as { mode: string; timeMs: number };
   expect(last.mode).toBe('master');
@@ -120,8 +120,9 @@ test('master mode: locked before gold, no undo, water drowns, grand master', asy
   );
   await page.keyboard.press('Escape');
   await expect.poll(() => field(page, 'scene')).toBe('Select');
+  // the selection screen names the medal held, not the mode
   expect(await field(page, 'masterLine')).toMatch(
-    new RegExp(`^Master: ${solution.length} moves · 0:\\d\\d\\.\\d\\d$`),
+    new RegExp(`^Grand master: ${solution.length} moves · 0:\\d\\d\\.\\d\\d$`),
   );
 });
 
@@ -301,6 +302,53 @@ test('master mode: master within gold, then grand master, which a later master r
   await page.keyboard.press('Escape');
   await expect.poll(() => field(page, 'scene')).toBe('Select');
   expect(await field(page, 'masterMedal')).toBe('grandMaster');
+});
+
+test('master mode: within the grand master moves but slower than the silver time, master only', async ({
+  page,
+}) => {
+  // pc-31: goldTime 10 s, so the silver time (grand master) is max(10 × 1.25, 10 + 3) = 13 s and
+  // master mode's limit (the bronze time) 16 s
+  expect(level.thresholds.goldTime).toBe(10);
+  expect(solution.length).toBeLessThanOrEqual(level.thresholds.platinumMoves!);
+  await page.clock.install();
+  await withMasterOpen(page);
+  await selectLevel(page);
+  await page.keyboard.press('KeyP');
+  await expect.poll(() => field(page, 'scene')).toBe('Game');
+  expect(await field(page, 'mode')).toBe('master');
+  // the page's time only moves when the test says so: the first move starts the clock, then
+  // 14 s pass (past the silver time, within the limit) before the rest of the solution
+  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
+  await play(page, solution.slice(0, 1));
+  expect(await field(page, 'moves')).toBe(1);
+  await page.clock.fastForward(14_000);
+  await page.clock.runFor(50);
+  expect(await field(page, 'status')).toBe('playing');
+  await play(page, solution.slice(1));
+  await page.clock.runFor(500);
+  await expect.poll(() => field(page, 'scene')).toBe('Result');
+  const last = (await field(page, 'lastResult')) as { mode: string; timeMs: number };
+  expect(last.mode).toBe('master');
+  expect(last.timeMs).toBeGreaterThan(13_000);
+  expect(last.timeMs).toBeLessThan(16_000);
+  // the moves of grand master, the time of bronze: master
+  expect(await field(page, 'lastAward')).toEqual({
+    moves: 'gold',
+    time: 'bronze',
+    master: 'master',
+  });
+  expect(await field(page, 'resultReveal')).toContain('master:master:new');
+  expect(await field(page, 'resultMasterLine')).toMatch(
+    new RegExp(`^Master: ${solution.length} · 0:14\\.\\d\\d$`),
+  );
+  await page.clock.resume();
+  await page.keyboard.press('Escape');
+  await expect.poll(() => field(page, 'scene')).toBe('Select');
+  expect(await field(page, 'masterMedal')).toBe('master');
+  expect(await field(page, 'masterLine')).toMatch(
+    new RegExp(`^Master: ${solution.length} moves · 0:14\\.\\d\\d$`),
+  );
 });
 
 test('a save of version 1: a platinum becomes grand master, a master run within gold master', async ({

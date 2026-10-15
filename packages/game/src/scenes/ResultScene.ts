@@ -15,7 +15,13 @@ import { formatTime } from '../format';
 import { t } from '../i18n';
 import { onSceneKeyDown } from '../input/sceneKeys';
 import { chapters, hasMaster, levelById, locate } from '../levels';
-import { masterMedalName, masterStatus, thresholdRows, type ThresholdRow } from '../medalInfo';
+import {
+  masterLineText,
+  masterMedalName,
+  masterStatus,
+  thresholdRows,
+  type ThresholdRow,
+} from '../medalInfo';
 import { planReveal, prefersReducedMotion, type RevealSlot } from '../medalReveal';
 import { MedalReveal, type MedalSpot } from '../render/MedalReveal';
 import { COLORS, drawMedal, drawThresholdLine, makeButton, px, textStyle } from '../ui';
@@ -64,8 +70,9 @@ export class ResultScene extends Phaser.Scene {
     this.add.text(cx, y, t('won'), textStyle(26, COLORS.accent)).setOrigin(0.5);
     y += px(36);
     this.add.text(cx, y, level.name, textStyle(16)).setOrigin(0.5);
+    // the mode, "Master mode" (not "MASTER", the name of a medal too, above the medal won)
     if (mode === 'master')
-      this.add.text(cx, y + px(22), t('masterMode'), textStyle(12, '#9be7ff')).setOrigin(0.5);
+      this.add.text(cx, y + px(22), t('masterModeName'), textStyle(12, '#9be7ff')).setOrigin(0.5);
     y += px(48);
 
     const g = this.add.graphics();
@@ -134,22 +141,18 @@ export class ResultScene extends Phaser.Scene {
     if (master && th.grandMasterMoves !== undefined) {
       let text: string;
       if (mode === 'master') {
-        // this run: moves · time, under the name of its medal (revealed with the others)
+        // this run: moves · time, under the name of its medal (revealed with the others), or of
+        // the mode without a medal ("Master mode", not "Master", the first medal's name)
         medalAt('master', award.master !== undefined);
         text = t('labelValue', {
-          label: award.master ? masterMedalName(award.master) : t('master'),
+          label: award.master ? masterMedalName(award.master) : t('masterModeName'),
           value: `${result.moves} · ${formatTime(result.timeMs)}`,
         });
       } else {
         // a normal run: where the player stands in master mode (its best medal, if any)
         const ms = masterStatus(app.data.levels[levelId], true);
         drawMedal(g, cx - px(130), y, px(10), ms.kind === 'best' ? ms.medal : undefined);
-        text =
-          ms.kind === 'best'
-            ? t('masterBest', { moves: ms.moves, time: formatTime(ms.timeMs) })
-            : ms.kind === 'notYet'
-              ? t('masterNotYet')
-              : t('masterLocked');
+        text = ms.kind === 'locked' ? t('masterLocked') : masterLineText(ms);
       }
       this.add
         .text(cx - px(110), y, text, {

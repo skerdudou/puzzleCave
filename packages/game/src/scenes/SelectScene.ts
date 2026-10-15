@@ -12,7 +12,13 @@ import { formatTime } from '../format';
 import { getLang, t } from '../i18n';
 import { onSceneKeyDown } from '../input/sceneKeys';
 import { chapters, hasMaster, levelById, locate } from '../levels';
-import { masterMedalName, masterStatus, thresholdRows, type MedalKind } from '../medalInfo';
+import {
+  masterLineText,
+  masterMedalName,
+  masterStatus,
+  thresholdRows,
+  type MedalKind,
+} from '../medalInfo';
 import { syncMusic } from '../music';
 import { COLORS, drawMedal, drawThresholdLine, makeButton, px, textStyle } from '../ui';
 import { isTouchDevice } from '../touch';
@@ -217,7 +223,8 @@ export class SelectScene extends Phaser.Scene {
     const tg = this.add.graphics();
     for (const r of rows) {
       // master mode's row names its medals when the line has room ("Master ≤ 610 · Grand
-      // master ≤ 538 · ≤ 2:07.50"), else "Master ♛ ≤ 610 ✦ ≤ 538 · ≤ 2:07.50"
+      // master ≤ 538 & ≤ 1:46.25 · limit ≤ 2:07.50"), else "Master ♛ ≤ 610 ✦ ≤ 538 & …", else
+      // (a narrow phone) "♛ ≤ 610 ✦ ≤ 538 & ≤ 1:46.25 · limit ≤ 2:07.50"
       drawThresholdLine(this, tg, icx, y, t(r.kind), r.tiers, {
         maxWidth: infoW - px(16),
         ...(r.kind === 'master' ? { named: masterMedalName } : {}),
@@ -237,14 +244,9 @@ export class SelectScene extends Phaser.Scene {
         )
         .setOrigin(0.5);
     }
-    // master mode on its own line: best master run, not yet, or locked (said under the buttons)
-    const ms = masterStatus(rec, master !== 'none');
-    const masterText =
-      ms.kind === 'best'
-        ? t('masterBest', { moves: ms.moves, time: formatTime(ms.timeMs) })
-        : ms.kind === 'notYet'
-          ? t('masterNotYet')
-          : '';
+    // master mode on its own line: best master run (named after the medal held), not yet, or
+    // locked (said under the buttons)
+    const masterText = masterLineText(masterStatus(rec, master !== 'none'));
     if (masterText) {
       y += px(18);
       this.add.text(icx, y, masterText, textStyle(12, '#9be7ff')).setOrigin(0.5);

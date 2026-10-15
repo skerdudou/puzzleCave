@@ -68,7 +68,9 @@ export const MIGRATIONS: Readonly<Record<number, Migration>> = {
  * Version 1 → 2: master mode's single platinum medal (`medals.platinum: true`) became two,
  * master and grand master (`medals.master`). A platinum is a grand master; a level's best master
  * run (`masterBestMoves`) also earns the medal it qualifies for under the level's current limits
- * (a master run within gold, short of platinum, earns master).
+ * (a master run within gold, short of platinum, earns master). That run's time is unknown
+ * (`masterBestTimeMs` is a separate minimum, maybe of another run): on a level with time medals it
+ * earns master at most, as grand master also needs the silver time.
  */
 function masterMedals(save: Record<string, unknown>, ctx: SaveContext): Record<string, unknown> {
   if (!isRecord(save.levels)) return save;
@@ -81,7 +83,9 @@ function masterMedals(save: Record<string, unknown>, ctx: SaveContext): Record<s
     const { platinum, ...medals } = raw.medals;
     const th = ctx.masterThresholds(id);
     const derived =
-      th && isCount(raw.masterBestMoves) ? masterMedalFor(th, raw.masterBestMoves) : undefined;
+      th && isCount(raw.masterBestMoves)
+        ? masterMedalFor(th, raw.masterBestMoves, Infinity)
+        : undefined;
     const master = bestMasterMedal(platinum === true ? 'grandMaster' : undefined, derived);
     if (master) medals.master = master;
     levels[id] = { ...raw, medals };

@@ -313,7 +313,11 @@ test.each(['', 'null', '[]', '{"version":1}', '{"version":3,"levels":{}}'])(
 // version 1 → 2: platinum became master / grand master
 const ctx: SaveContext = {
   masterThresholds: (id) =>
-    id === 'pc-14' ? resolveThresholds({ goldMoves: 610, platinumMoves: 538 }) : undefined,
+    id === 'pc-14'
+      ? resolveThresholds({ goldMoves: 610, platinumMoves: 538 })
+      : id === 'timed'
+        ? resolveThresholds({ goldMoves: 610, platinumMoves: 538, goldTime: 85 })
+        : undefined,
 };
 const v1 = (levels: unknown) => JSON.stringify({ version: 1, settings: {}, levels });
 
@@ -338,6 +342,20 @@ test.each([
     ctx,
   );
   expect(d.levels['pc-14']!.medals.master).toBe(medal);
+});
+
+test('version 1: with time medals, the best master run (time unknown) earns master at most', () => {
+  // masterBestTimeMs is a separate minimum, maybe of another run: no grand master derived from it
+  const d = parseSave(
+    v1({
+      timed: { completed: true, masterBestMoves: 500, masterBestTimeMs: 1_000, medals: {} },
+      gm: { completed: true, masterBestMoves: 500, medals: { platinum: true } },
+    }),
+    { masterThresholds: (id) => ctx.masterThresholds(id === 'gm' ? 'timed' : id) },
+  );
+  expect(d.levels.timed!.medals.master).toBe('master');
+  // a platinum earned before stays grand master
+  expect(d.levels.gm!.medals.master).toBe('grandMaster');
 });
 
 test('version 1: a platinum is kept whatever the best master run says', () => {
@@ -372,6 +390,23 @@ test('version 1 through the store: migrated on load, written back as version 2',
     version: 2,
     levels: { 'pc-14': { medals: { master: 'master' } } },
   });
+});
+
+test('version 2: a grand master earned before the silver time rule is kept', () => {
+  // best master time above the silver time (106.25 s): the medal is not taken back
+  const raw = JSON.stringify({
+    version: 2,
+    settings: {},
+    levels: {
+      timed: {
+        completed: true,
+        masterBestMoves: 538,
+        masterBestTimeMs: 120_000,
+        medals: { moves: 'gold', master: 'grandMaster' },
+      },
+    },
+  });
+  expect(parseSave(raw, ctx).levels.timed!.medals.master).toBe('grandMaster');
 });
 
 test('version 2: an invalid master medal is dropped', () => {

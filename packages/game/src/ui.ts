@@ -138,7 +138,8 @@ export interface ThresholdLineOptions {
   maxWidth?: number;
   /**
    * The medals' names: each limit is then written "● name ≤ x", without the label, when that
-   * fits in `maxWidth`; otherwise the line falls back to "label ● ≤ x ● ≤ y".
+   * fits in `maxWidth`; otherwise the line falls back to "label ● ≤ x ● ≤ y", then (still too
+   * wide) to "● ≤ x ● ≤ y".
    */
   named?: (medal: MedalKind) => string;
 }
@@ -166,19 +167,19 @@ export function drawThresholdLine(
     const content = headText.width + items.reduce((w, i) => w + dot + i.text.width, 0);
     return { items, head: headText, content };
   };
+  // the first of these that fits: the medals named (with `named`), the label then the limits,
+  // the limits alone (the medal marks say which they are)
   const named = opts.named;
-  let line = named
-    ? layout(
-        '',
-        tiers.map((tier) => `${named(tier.medal)} ${tier.text}`),
-      )
-    : undefined;
-  if (!line || line.content + px(4) * tiers.length > maxWidth) {
-    if (line) for (const o of [line.head, ...line.items.map((i) => i.text)]) o.destroy();
-    line = layout(
-      label,
-      tiers.map((tier) => tier.text),
-    );
+  const plain = tiers.map((tier) => tier.text);
+  const candidates: [string, string[]][] = [];
+  if (named) candidates.push(['', tiers.map((tier) => `${named(tier.medal)} ${tier.text}`)]);
+  candidates.push([label, plain]);
+  if (label) candidates.push(['', plain]);
+  let line = layout(...candidates[0]!);
+  for (const next of candidates.slice(1)) {
+    if (line.content + px(4) * tiers.length <= maxWidth) break;
+    for (const o of [line.head, ...line.items.map((i) => i.text)]) o.destroy();
+    line = layout(...next);
   }
   const { items, head, content } = line;
   // four medals on a narrow phone: the gaps shrink to keep the line on screen

@@ -93,25 +93,37 @@ the start-up (one reload on the menu). On the dev server the service worker is d
   undo (`Session.canUndo` is false; a restart cannot be undone either). It unlocks on a level
   once the save holds gold (moves) there — or a master medal earned without gold (a platinum of an
   older save) — and author mode does not bypass that. Master mode has two medals
-  (`MasterMedal`, `masterMedalFor`): **master** = a master finish within `goldMoves`
-  (`Thresholds.masterMoves`), **grand master** = within `platinumMoves`
-  (`Thresholds.grandMasterMoves`), which implies master; the save keeps the better one
-  (`medals.master`). Where the two limits are equal (no `platinumMoves`, or equal to `goldMoves`)
-  such a finish is grand master and the third line shows grand master alone. A master finish
-  also earns the move and time medals it qualifies for. On a level with `goldTime`, master mode
-  also has a time limit, the bronze time (`masterTimeLimitMs`): past it the attempt fails like
-  drowning (the game's `RunClock` and `countdown`; the clock starts at the first move and does
-  not count while the page is hidden — the same clock measures the time medals). A platinum
-  route is often longer to find than to play, but it must be played within that limit: keep
-  `bronzeTime` (or `goldTime`) above the time the platinum solution takes. The save keeps the
-  best master run apart (`masterBestMoves`, `masterBestTimeMs`), shown on its own line.
+  (`MasterMedal`, `masterMedalFor(th, moves, timeMs)`): **master** = a master finish within
+  `goldMoves` (`Thresholds.masterMoves`), whatever its time; **grand master** = within
+  `platinumMoves` (`Thresholds.grandMasterMoves`) and, on a level with `goldTime`, within the
+  silver time (`grandMasterTimeMs`, the same test as the silver time medal), which implies
+  master; the save keeps the better one (`medals.master`). A grand master saved before the time
+  condition existed is kept (nothing recomputes saved medals). Where the two move limits are
+  equal (no `platinumMoves`, or equal to `goldMoves`) such a finish is grand master if fast
+  enough; the third line then shows grand master alone only on a level without `goldTime`. A
+  master finish also earns the move and time medals it qualifies for. On a level with
+  `goldTime`, master mode also has a time limit, the bronze time (`masterTimeLimitMs`): past it
+  the attempt fails like drowning (the game's `RunClock` and `countdown`; the clock starts at the
+  first move and does not count while the page is hidden — the same clock measures the time
+  medals). A platinum route is often longer to find than to play, but it must be played within
+  the silver time for grand master: keep `silverTime` (or `goldTime`) above the time the platinum
+  solution takes. The master row of the threshold lines (`thresholdRows`) reads "Master ≤ 610 ·
+  Grand master ≤ 538 & ≤ 1:46.25 · limit ≤ 2:07.50"; where that does not fit (`drawThresholdLine`)
+  it falls back to "Master ♛ ≤ 610 ✦ ≤ 538 & …", then, on a narrow phone, to the marks alone
+  ("♛ ≤ 610 ✦ ≤ 538 & ≤ 1:46.25 · limit ≤ 2:07.50"). The save keeps the best master run apart
+  (`masterBestMoves`, `masterBestTimeMs`, two separate minima, maybe of different runs), shown on
+  its own line (`masterLineText`) under the name of the medal saved ("Grand master: 538 moves ·
+  1:40.12"), never one worked out from those minima, or of the mode without a medal ("Master
+  mode: …"): in every language the mode's name is also the first medal's, so a line about the
+  mode always says "Master mode" (`masterModeName`), never the bare "Master".
 - Medal marks (`paintMedal`), for the colour-blind as well: bronze plain, silver an inner ring,
   gold a star, master a crown on violet, grand master a white sparkle on light blue. The result
   screen reveals master with one ring and sparkles, grand master with two rings and more.
 - Saves: version 2 replaced `medals.platinum: true` with `medals.master` (`'master'` or
   `'grandMaster'`). The migration from version 1 (`MIGRATIONS[1]` in `save.ts`) turns a platinum
   into grand master and also awards, from the level's current thresholds (`SaveContext`, from
-  `levels.ts`), the medal that `masterBestMoves` qualifies for.
+  `levels.ts`), the medal that `masterBestMoves` qualifies for — master at most on a level with
+  `goldTime`, since the time of that run is unknown.
 - Chapters: `"masterMode": false` in `levels/chapters.json` removes master mode and its medals from
   a chapter's levels (the Easy chapter); absent means true. The loader rejects a non-boolean.
 
