@@ -4,7 +4,10 @@ import { DRAG_STEP_DEFAULT, OLD_DRAG_STEP_DEFAULT, nearestDragStep } from './inp
 import { isTouchControl, type TouchControl } from './input/tapZones';
 
 export interface Settings {
+  /** the music (the name is older than the sound effects) */
   sound: boolean;
+  /** sound effects */
+  sfx: boolean;
   lang: Lang | null;
   /** continuous drag: CSS pixels per move (one of DRAG_STEPS) */
   dragStep: number;
@@ -30,12 +33,59 @@ export interface KV {
 
 export const SAVE_KEY = 'puzzlecave.save.v1';
 export const CORRUPT_KEY = 'puzzlecave.save.corrupt';
+/** The save format written by this version of the game. */
+export const SAVE_VERSION = 1;
+
+/**
+ * Turns a save of version `n` (the key) into one of version `n + 1`. A new format adds its step
+ * here and raises SAVE_VERSION (and SaveData's `version`): older saves are carried over, never
+ * reset. A field added with a default needs no step: the sanitising fills it in.
+ */
+export type Migration = (save: Record<string, unknown>) => Record<string, unknown>;
+export const MIGRATIONS: Readonly<Record<number, Migration>> = {};
+
+/** A parsed save brought to version `target`; throws on an unknown (or newer) version. */
+export function migrate(
+  save: Record<string, unknown>,
+  migrations: Readonly<Record<number, Migration>> = MIGRATIONS,
+  target: number = SAVE_VERSION,
+): Record<string, unknown> {
+  let s = save;
+  for (;;) {
+    const v = s.version;
+    if (typeof v !== 'number' || !Number.isInteger(v) || v < 1 || v > target)
+      throw new Error('version');
+    if (v === target) return s;
+    const step = migrations[v];
+    if (!step) throw new Error(`no migration from version ${v}`);
+    s = { ...step(s), version: v + 1 };
+  }
+}
+
+/** A save read from its JSON text (stored, or a file the player imports); throws if unusable. */
+export function parseSave(raw: string): SaveData {
+  const parsed: unknown = JSON.parse(raw);
+  if (!isRecord(parsed)) throw new Error('format');
+  const obj = migrate(parsed);
+  if (!isRecord(obj.levels)) throw new Error('format');
+  return {
+    version: 1,
+    settings: sanitiseSettings(obj.settings),
+    levels: sanitiseLevels(obj.levels),
+  };
+}
+
+/** The save as a file for the player to keep (Options › Export). */
+export function exportSave(d: SaveData): string {
+  return JSON.stringify(d, null, 2);
+}
 
 export function defaultSave(): SaveData {
   return {
     version: 1,
     settings: {
       sound: true,
+      sfx: true,
       lang: null,
       dragStep: DRAG_STEP_DEFAULT,
       dragStepDefault: DRAG_STEP_DEFAULT,
@@ -74,6 +124,7 @@ function sanitiseSettings(raw: unknown): Settings {
   const savedDefault = isNum(s.dragStepDefault) ? s.dragStepDefault : OLD_DRAG_STEP_DEFAULT;
   return {
     sound: typeof s.sound === 'boolean' ? s.sound : d.sound,
+    sfx: typeof s.sfx === 'boolean' ? s.sfx : d.sfx,
     lang,
     // older saves had a swipe threshold instead: they get the default distance; a distance
     // left at the default of its time follows the current default
@@ -136,21 +187,7 @@ export class SaveStore {
     try {
       raw = this.storage.getItem(SAVE_KEY);
       if (raw === null) return defaultSave();
-      const obj = JSON.parse(raw) as Partial<SaveData>;
-      const levels: unknown = obj.levels;
-      if (
-        obj.version !== 1 ||
-        typeof levels !== 'object' ||
-        levels === null ||
-        Array.isArray(levels)
-      ) {
-        throw new Error('format');
-      }
-      return {
-        version: 1,
-        settings: sanitiseSettings(obj.settings),
-        levels: sanitiseLevels(levels as Record<string, unknown>),
-      };
+      return parseSave(raw);
     } catch {
       try {
         if (raw !== null) this.storage.setItem(CORRUPT_KEY, raw);

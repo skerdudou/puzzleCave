@@ -1,5 +1,14 @@
 import { expect, test } from 'vitest';
-import { CORRUPT_KEY, SAVE_KEY, SaveStore, defaultSave, type KV } from './save';
+import {
+  CORRUPT_KEY,
+  SAVE_KEY,
+  SaveStore,
+  defaultSave,
+  exportSave,
+  migrate,
+  parseSave,
+  type KV,
+} from './save';
 import { isMasterUnlocked } from '@puzzlecave/core';
 
 const mem = (init: Record<string, string> = {}): KV & { data: Record<string, string> } => {
@@ -76,6 +85,7 @@ test('invalid settings replaced by defaults', () => {
   });
   expect(new SaveStore(kv).load().settings).toEqual({
     sound: true,
+    sfx: true,
     lang: null,
     dragStep: 40,
     dragStepDefault: 40,
@@ -95,6 +105,7 @@ test('a save from before the drag, vibration and touch control options: defaults
   });
   expect(new SaveStore(kv).load().settings).toEqual({
     sound: false,
+    sfx: true,
     lang: 'fr',
     dragStep: 40,
     dragStepDefault: 40,
@@ -262,3 +273,37 @@ test('save from before master mode: medals kept, master mode open where gold or 
   expect(isMasterUnlocked(levels['pc-06'])).toBe(true);
   expect(isMasterUnlocked(levels['pc-09'])).toBe(false);
 });
+
+test('migrate: each step in turn up to the current version', () => {
+  const steps = {
+    1: (s: Record<string, unknown>) => ({ ...s, a: 1 }),
+    2: (s: Record<string, unknown>) => ({ ...s, b: (s.a as number) + 1 }),
+  };
+  expect(migrate({ version: 1 }, steps, 3)).toEqual({ version: 3, a: 1, b: 2 });
+  expect(migrate({ version: 3, z: 0 }, steps, 3)).toEqual({ version: 3, z: 0 });
+});
+
+test.each([[{ version: 4 }], [{ version: 0 }], [{ version: '1' }], [{}]])(
+  'migrate: %j is refused (unknown or newer version)',
+  (save) => {
+    expect(() => migrate(save, {}, 3)).toThrow();
+  },
+);
+
+test('migrate: a missing step is refused rather than skipped', () => {
+  expect(() => migrate({ version: 1 }, {}, 2)).toThrow();
+});
+
+test('export then import gives the same save', () => {
+  const d = defaultSave();
+  d.levels['pc-01'] = { completed: true, bestMoves: 12, medals: { moves: 'gold' } };
+  d.settings.sfx = false;
+  expect(parseSave(exportSave(d))).toEqual(d);
+});
+
+test.each(['', 'null', '[]', '{"version":1}', '{"version":2,"levels":{}}'])(
+  'an unusable file is refused: %s',
+  (raw) => {
+    expect(() => parseSave(raw)).toThrow();
+  },
+);

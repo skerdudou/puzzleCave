@@ -4,7 +4,7 @@ import { setDebug } from '../debug';
 import { t } from '../i18n';
 import { onSceneKeyDown } from '../input/sceneKeys';
 import { syncMusic } from '../music';
-import { COLORS, makeButton, px, textStyle } from '../ui';
+import { COLORS, KeyFocus, makeButton, px, textStyle } from '../ui';
 
 export class MenuScene extends Phaser.Scene {
   constructor() {
@@ -14,10 +14,20 @@ export class MenuScene extends Phaser.Scene {
     const cx = this.scale.width / 2;
     const cy = this.scale.height / 2;
     this.add.text(cx, cy - px(90), 'puzzleCave', textStyle(36, COLORS.accent)).setOrigin(0.5);
-    makeButton(this, cx, cy, t('play'), () => this.scene.start('Select'), 20);
-    makeButton(this, cx, cy + px(56), t('options'), () => this.scene.start('Options'), 16);
+    const play = () => this.scene.start('Select');
+    const options = () => this.scene.start('Options');
+    const focus = new KeyFocus([
+      { id: 'play', button: makeButton(this, cx, cy, t('play'), play, 20), press: play },
+      {
+        id: 'options',
+        button: makeButton(this, cx, cy + px(56), t('options'), options, 16),
+        press: options,
+      },
+    ]);
+    // arrows or Tab, then Enter; Enter alone plays
     onSceneKeyDown(this, (e) => {
-      if (e.key === 'Enter') this.scene.start('Select');
+      if (focus.key(e)) return;
+      if (e.key === 'Enter') play();
     });
     const onResize = () => this.scene.restart();
     this.scale.on('resize', onResize);

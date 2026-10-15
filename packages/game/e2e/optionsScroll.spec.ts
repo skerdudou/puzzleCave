@@ -11,6 +11,8 @@ type Pc = {
   maxScrollY?: number;
   settings?: Record<string, unknown>;
   buttons?: Record<string, [number, number]>;
+  /** the button the keyboard is on */
+  focus?: string;
 };
 const debug = (page: Page): Promise<Pc> =>
   page.evaluate(() => (window as unknown as { __pc?: Pc }).__pc ?? {});
@@ -109,9 +111,9 @@ test.describe('phone in landscape', () => {
     // the reported positions follow the scroll
     expect((await button(page, 'sound'))[1]).toBeCloseTo(sy - y, 0);
 
-    // a drag starting on the touch control button does not change it either (and comes back
+    // a drag starting on the sound effects button does not change them either (and comes back
     // up: down past the top, the finger staying on the screen, 360 px high)
-    const [px_, py] = await button(page, 'touchControl');
+    const [px_, py] = await button(page, 'sfx');
     const down = 350 - py;
     expect(down).toBeGreaterThan(y);
     await dragFrom(page, px_, py, down);
@@ -196,8 +198,19 @@ test.describe('phone in landscape', () => {
     await expect.poll(async () => (await debug(page)).scrollY).toBe(await wheel());
     await page.keyboard.press('Home');
     await expect.poll(async () => (await debug(page)).scrollY).toBe(0);
+    await page.keyboard.press('PageDown');
+    await expect.poll(async () => (await debug(page)).scrollY).toBe(Math.min(max, 360 - 44));
+    await page.keyboard.press('Home');
+    await expect.poll(async () => (await debug(page)).scrollY).toBe(0);
+    // the arrows go from button to button: the first ones are on the screen, nothing scrolls;
+    // going back from the first wraps to Back, at the bottom: the content follows
     await page.keyboard.press('ArrowDown');
-    await expect.poll(async () => (await debug(page)).scrollY).toBe(44);
+    await expect.poll(async () => (await debug(page)).focus).toBe('sound');
+    expect((await debug(page)).scrollY).toBe(0);
+    await page.keyboard.press('ArrowUp');
+    await expect.poll(async () => (await debug(page)).focus).toBe('back');
+    await expect.poll(async () => (await debug(page)).scrollY).toBe(max);
+    await page.keyboard.press('Home');
     await page.keyboard.press('End');
     await expect.poll(async () => (await debug(page)).scrollY).toBe(max);
 
@@ -205,10 +218,12 @@ test.describe('phone in landscape', () => {
     await page.setViewportSize({ width: 740, height: 400 });
     await expect.poll(async () => (await debug(page)).maxScrollY).toBe(max - 40);
     expect((await debug(page)).scrollY).toBe(max - 40);
-    // portrait: everything fits
+    // portrait: much less to scroll (the sound and progress rows go a little past the screen),
+    // the offset clamped to it; End shows Back
     await page.setViewportSize({ width: 360, height: 740 });
-    await expect.poll(async () => (await debug(page)).maxScrollY).toBe(0);
-    expect((await debug(page)).scrollY).toBe(0);
+    await expect.poll(async () => (await debug(page)).maxScrollY).toBeLessThan(160);
+    const portraitMax = (await debug(page)).maxScrollY!;
+    expect((await debug(page)).scrollY).toBe(portraitMax);
     expect((await button(page, 'back'))[1]).toBeLessThan(740);
   });
 });

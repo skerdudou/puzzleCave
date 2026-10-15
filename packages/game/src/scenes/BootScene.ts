@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { levels } from '../levels';
-import { textStyle } from '../ui';
+import { t } from '../i18n';
+import { makeButton, px, textStyle } from '../ui';
 
 export const TEXTURES = [
   'FLOOR',
@@ -42,12 +43,17 @@ export class BootScene extends Phaser.Scene {
   }
   create(): void {
     if (this.failed.length || levels.length === 0) {
-      this.add.text(
-        16,
-        16,
-        `Loading error: ${this.failed.join(', ') || 'no levels'}`,
-        textStyle(14, '#ff8080'),
-      );
+      // often a network hiccup on the first visit (later ones play from the offline cache)
+      const cx = this.scale.width / 2;
+      const cy = this.scale.height / 2;
+      this.add
+        .text(cx, cy - px(30), t('loadError', { what: this.failed.join(', ') || t('noLevels') }), {
+          ...textStyle(14, '#ff8080'),
+          align: 'center',
+          wordWrap: { width: this.scale.width - px(32) },
+        })
+        .setOrigin(0.5, 1);
+      makeButton(this, cx, cy + px(10), t('retry'), () => location.reload());
       return;
     }
     this.scene.start('Menu');

@@ -26,6 +26,8 @@ import { DragSteps } from '../input/drag';
 import { HoldRepeat } from '../input/holdRepeat';
 import { boundsOf, centreOf, zoneArea, zoneAt, zonePolygon, type Box } from '../input/tapZones';
 import { RunClock, countdown } from '../runClock';
+import { showNotice } from '../notice';
+import { SfxFeed, playSfx, type Sfx } from '../sfx';
 import { dpadLayout, dpadLayoutSide, isLandscape, isTouchDevice } from '../touch';
 import { COLORS, dpr, makeButton, px, textStyle } from '../ui';
 
@@ -34,6 +36,12 @@ const DPAD = 56;
 /** Master mode colour, and the countdown's warning colour. */
 const MASTER_COLOR = '#9be7ff';
 const WARN_COLOR = '#ff6b5e';
+
+/** The sound button: on while the music or the effects play, off when both are off. */
+function muteIcon(): string {
+  const s = app.data.settings;
+  return s.sound || s.sfx ? '🔊' : '🔇';
+}
 
 export interface GameSceneData {
   levelId: string;
@@ -69,12 +77,14 @@ export class GameScene extends Phaser.Scene {
   /** master mode: the time limit is passed, the run has failed (like drowning) */
   private timedOut = false;
   private readonly haptics = new HapticFeed();
+  private readonly sounds = new SfxFeed();
   private finished = false;
   private movesText?: Phaser.GameObjects.Text;
   private timeText?: Phaser.GameObjects.Text;
   private keysText?: Phaser.GameObjects.Text;
   private overlay?: Phaser.GameObjects.Text;
   private rulesNote?: Phaser.GameObjects.Text;
+  private muteButton?: Phaser.GameObjects.Text;
 
   constructor() {
     super('Game');
@@ -91,6 +101,7 @@ export class GameScene extends Phaser.Scene {
         : undefined;
     this.timedOut = false;
     this.haptics.reset();
+    this.sounds.reset();
     setDebug({ timeLeftMs: null, timeWarn: false });
     this.finished = false;
     this.anim.reset();
@@ -108,8 +119,15 @@ export class GameScene extends Phaser.Scene {
     this.buildHud();
     this.controls = new InputController((a) => this.handle(a), app.data.settings.repeatRate);
     const down = (e: KeyboardEvent) => {
-      // a new press (not the key's own repeat): a bump vibrates again
-      if (!e.repeat) this.haptics.reset();
+      // a new press (not the key's own repeat): a bump vibrates (and sounds) again
+      if (!e.repeat) {
+        this.haptics.reset();
+        this.sounds.reset();
+      }
+      if (e.key.toLowerCase() === 'm' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (!e.repeat) this.toggleMute();
+        return;
+      }
       if (this.controls.keydown(e)) e.preventDefault();
     };
     const up = (e: KeyboardEvent) => this.controls.keyup(e);
@@ -133,6 +151,7 @@ export class GameScene extends Phaser.Scene {
         this.dragMoved = false;
         this.zonePress = false;
         this.haptics.reset();
+        this.sounds.reset();
         if (over.length) {
           this.drags.delete(p.id);
           return;
@@ -234,6 +253,7 @@ export class GameScene extends Phaser.Scene {
     this.drags.clear();
     this.timeText?.setText(`${t('timeLeft')} ${formatTime(0)}`).setColor(WARN_COLOR);
     vibrate('fail', app.data.settings.vibration);
+    this.sfx('fail');
     this.showFailed(t('timeUp'));
     setDebug({ status: 'timeout', timeLeftMs: 0, timeWarn: true });
     return true;
@@ -313,6 +333,30 @@ export class GameScene extends Phaser.Scene {
       buttonBoxes.push(css(b.getBounds()));
       x -= b.width + px(6);
       this.hud.push(b);
+    }
+    // sound on/off, like M: in the header with a keyboard; on a touch screen (no M key) by the
+    // d-pad, so that the header keeps its room for the level's name
+    const touch = isTouchDevice();
+    const muteAt = (mx: number, my: number, originX: number) => {
+      const b = makeButton(
+        this,
+        mx,
+        my,
+        muteIcon(),
+        () => {
+          if (!this.dragMoved && !this.zonePress) this.toggleMute();
+        },
+        16,
+      ).setOrigin(originX, 0.5);
+      hudButtons.mute = [b.getBounds().centerX / dpr(), my / dpr()];
+      this.hud.push(b);
+      this.muteButton = b;
+      return b;
+    };
+    if (!touch) {
+      const mute = muteAt(x, y, 1);
+      buttonBoxes.push(css(mute.getBounds()));
+      x -= mute.width + px(6);
     }
     const buttonsLeft = x + px(6);
     // counters, one after the other, each wide enough for its longest value (nothing jumps);
@@ -411,6 +455,10 @@ export class GameScene extends Phaser.Scene {
           .setOrigin(0.5);
         this.hud.push(box, label);
       }
+      // the sound button: under the d-pad column (landscape), or at the left edge on the
+      // d-pad's bottom row (portrait)
+      if (side) muteAt(pad.up.x + pad.up.w / 2, this.scale.height - px(16) - px(22), 0.5);
+      else muteAt(px(12), pad.down.y + pad.down.h / 2, 0);
       // for the e2e tests: button centres in CSS pixels, once drawn (Phaser hit-tests a new
       // interactive object only from its next pre-update on)
       const dpad = Object.fromEntries(
@@ -463,6 +511,7 @@ export class GameScene extends Phaser.Scene {
       case 'undo': {
         const restoring = this.session.canUndoRestart;
         if (this.session.undo()) {
+          this.sfx('undo');
           if (restoring) this.clock.undoRestart();
           this.board.rebuild(this.session.state);
           this.anim.reset();
@@ -471,6 +520,7 @@ export class GameScene extends Phaser.Scene {
         return;
       }
       case 'restart':
+        this.sfx('undo');
         this.session.restart();
         // The previous game stays recoverable via “Undo”: its clock is kept too.
         this.clock.restart(this.session.canUndoRestart);
@@ -498,6 +548,7 @@ export class GameScene extends Phaser.Scene {
     setDebug({ attempts: this.attempts });
     const events = this.session.move(dir);
     vibrate(this.haptics.next(events), app.data.settings.vibration);
+    playSfx(this.sounds.next(events), app.data.settings.sfx);
     if (events.length === 0) return;
     const after = this.session.state;
     const now = performance.now();
@@ -509,6 +560,23 @@ export class GameScene extends Phaser.Scene {
     this.updateHud();
     if (after.status === 'won') this.finish(now);
     else if (after.status === 'drowned') this.showFailed(t('drowned'));
+  }
+
+  private sfx(s: Sfx): void {
+    playSfx(s, app.data.settings.sfx);
+  }
+
+  /** M: all sound off (music and effects), or back on when all is off. */
+  private toggleMute(): void {
+    const s = app.data.settings;
+    const on = !(s.sound || s.sfx);
+    s.sound = on;
+    s.sfx = on;
+    app.persist();
+    syncMusic(this, on, 'music-game');
+    this.muteButton?.setText(muteIcon());
+    showNotice(t(on ? 'unmuted' : 'muted'));
+    setDebug({ settings: { ...s } });
   }
 
   /** The tap zone under a pointer (none outside their area). */
@@ -601,18 +669,33 @@ export class GameScene extends Phaser.Scene {
       .setDepth(10);
   }
 
-  /** Master mode: the run has failed (drowned, or out of time); R or Restart for a new one. */
+  /**
+   * Master mode: the run has failed (drowned, or out of time); R or Restart for a new one. On a
+   * touch screen there is no R key: a tap on the message itself restarts.
+   */
   private showFailed(message: string): void {
     this.overlay?.destroy();
+    const touch = isTouchDevice();
     this.overlay = this.add
-      .text(this.scale.width / 2, this.scale.height / 2, `${message}\n${t('drownedHint')}`, {
-        ...textStyle(22, MASTER_COLOR),
-        align: 'center',
-        backgroundColor: '#000000aa',
-        padding: { x: px(16), y: px(12) },
-      })
+      .text(
+        this.scale.width / 2,
+        this.scale.height / 2,
+        `${message}\n${t(touch ? 'drownedHintTouch' : 'drownedHint')}`,
+        {
+          ...textStyle(22, MASTER_COLOR),
+          align: 'center',
+          backgroundColor: '#000000aa',
+          padding: { x: px(16), y: px(12) },
+        },
+      )
       .setOrigin(0.5)
       .setDepth(10);
+    if (touch) {
+      this.overlay.setInteractive();
+      this.overlay.on('pointerup', () => {
+        if (!this.dragMoved && !this.zonePress) this.handle({ type: 'restart' });
+      });
+    }
   }
 
   private finish(now: number): void {

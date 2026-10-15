@@ -6,7 +6,7 @@ const byId = new Map(levels.map((l) => [l.id, l]));
 
 export function levelById(id: string): LevelData {
   const l = byId.get(id);
-  if (!l) throw new Error(`niveau inconnu : ${id}`);
+  if (!l) throw new Error(`unknown level: ${id}`);
   return l;
 }
 
