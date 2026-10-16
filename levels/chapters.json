@@ -42,7 +42,18 @@
     "id": "hard",
     "name": { "en": "Hard", "fr": "Difficile", "de": "Schwer", "es": "Difícil", "it": "Difficile" },
     "unlockAfter": 4,
-    "levels": ["pc-04", "pc-06", "pc-17", "pc-03", "pc-16"]
+    "levels": [
+      "pc-04",
+      "pc-43",
+      "pc-45",
+      "pc-46",
+      "pc-06",
+      "pc-47",
+      "pc-44",
+      "pc-17",
+      "pc-03",
+      "pc-16"
+    ]
   },
   {
     "id": "expert",
