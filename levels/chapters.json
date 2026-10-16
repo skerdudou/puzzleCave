@@ -45,22 +45,22 @@
     "levels": [
       "pc-04",
       "pc-43",
+      "pc-48",
       "pc-45",
       "pc-46",
+      "pc-49",
       "pc-06",
       "pc-47",
       "pc-44",
       "pc-17",
       "pc-03",
-      "pc-16",
-      "pc-48",
-      "pc-49"
+      "pc-16"
     ]
   },
   {
     "id": "expert",
     "name": { "en": "Expert", "fr": "Expert", "de": "Experte", "es": "Experto", "it": "Esperto" },
     "unlockAfter": 4,
-    "levels": ["pc-08", "pc-12", "pc-11", "pc-13", "pc-14", "pc-07", "pc-09", "pc-18", "pc-50"]
+    "levels": ["pc-08", "pc-12", "pc-11", "pc-13", "pc-14", "pc-50", "pc-07", "pc-09", "pc-18"]
   }
 ]
