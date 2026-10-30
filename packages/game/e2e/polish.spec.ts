@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
 import { initialState, parseMoves, replay, step, type Dir } from '@puzzlecave/core';
 import { parseTmx } from '@puzzlecave/tiled';
+import { exportSave, importSave } from '../src/save';
 import { goToLevel } from './select';
 
 const SAVE_KEY = 'puzzlecave.save.v1';
@@ -69,15 +70,21 @@ test('progress: erased only on a second press', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   await openOptionsByKeyboard(page);
   const [ex, ey] = await button(page, 'erase');
+  const [ix, iy] = await button(page, 'import');
   await page.mouse.click(ex, ey);
-  await expect.poll(() => field(page, 'eraseArmed')).toBe(true);
+  await expect.poll(() => field(page, 'armed')).toBe('erase');
+  // another button that asks takes over: Erase asks again from the start
+  await page.mouse.click(ix, iy);
+  await expect.poll(() => field(page, 'armed')).toBe('import');
+  await page.mouse.click(ex, ey);
+  await expect.poll(() => field(page, 'armed')).toBe('erase');
   expect((await stored(page)).levels['pc-01'].completed).toBe(true);
   await page.mouse.click(ex, ey);
   await expect.poll(async () => (await stored(page)).levels).toEqual({});
   expect(await field(page, 'notice')).toBe('Progress erased');
 });
 
-test('progress: exported to a file, imported back; an unreadable file changes nothing', async ({
+test('progress: exported to an encoded file, imported back after a confirmation; an unreadable or altered file changes nothing', async ({
   page,
 }) => {
   await withProgress(page);
@@ -88,30 +95,48 @@ test('progress: exported to a file, imported back; an unreadable file changes no
   const [xx, xy] = await button(page, 'export');
   await page.mouse.click(xx, xy);
   const file = await download;
-  expect(file.suggestedFilename()).toMatch(/^puzzlecave-\d{4}-\d\d-\d\d\.json$/);
-  const exported = JSON.parse(readFileSync(await file.path(), 'utf8'));
-  expect(exported.levels['pc-01'].bestMoves).toBe(26);
+  expect(file.suggestedFilename()).toMatch(/^puzzlecave-\d{4}-\d\d-\d\d\.save$/);
+  const text = readFileSync(await file.path(), 'utf8');
+  expect(text).not.toContain('bestMoves');
+  const exported = importSave(text);
+  expect(exported.levels['pc-01']!.bestMoves).toBe(26);
 
   const [ix, iy] = await button(page, 'import');
+  // a first press only asks
+  await page.mouse.click(ix, iy);
+  await expect.poll(() => field(page, 'armed')).toBe('import');
+  expect(await field(page, 'importPicker')).toBeUndefined();
   // Import opens the file dialog of a hidden input; the file is handed to that input directly
   // (Playwright's interception of the dialog itself proved unreliable on a loaded machine)
   let n = 0;
-  const choose = async (text: string) => {
+  const choose = async (text: string, confirmed = false) => {
+    if (!confirmed) {
+      await page.mouse.click(ix, iy);
+      await expect.poll(() => field(page, 'armed')).toBe('import');
+    }
     await page.mouse.click(ix, iy);
     await expect.poll(() => field(page, 'importPicker')).toBe(++n);
+    expect(await field(page, 'armed')).toBeNull();
     await page.setInputFiles('#import-save', {
-      name: 'save.json',
-      mimeType: 'application/json',
+      name: 'save.save',
+      mimeType: 'application/octet-stream',
       buffer: Buffer.from(text),
     });
   };
-  await choose('{ not json');
+  await choose('{ not json', true);
   await expect.poll(() => field(page, 'notice')).toBe('Unreadable file: nothing changed');
   expect((await stored(page)).levels['pc-01'].bestMoves).toBe(26);
 
-  exported.levels['pc-01'].bestMoves = 20;
+  // a byte changed in the encoded file: refused by the hash
+  const [head, body] = text.split('\n') as [string, string];
+  const altered = `${head}\n${body[0] === 'A' ? 'B' : 'A'}${body.slice(1)}\n`;
+  await choose(altered);
+  await expect.poll(() => field(page, 'notice')).toBe('Unreadable file: nothing changed');
+  expect((await stored(page)).levels['pc-01'].bestMoves).toBe(26);
+
+  exported.levels['pc-01']!.bestMoves = 20;
   exported.settings.lang = 'de';
-  await choose(JSON.stringify(exported));
+  await choose(exportSave(exported));
   await expect.poll(() => field(page, 'lang')).toBe('de');
   expect((await stored(page)).levels['pc-01'].bestMoves).toBe(20);
   expect(await field(page, 'notice')).toBe('Fortschritt importiert');

@@ -7,7 +7,7 @@ import { shiftDragStep } from '../input/drag';
 import { FocusList, focusKey } from '../input/focusList';
 import { saveContext } from '../levels';
 import { showNotice } from '../notice';
-import { exportSave, parseSave } from '../save';
+import { exportSave, importSave } from '../save';
 import { playSfx } from '../sfx';
 import { onSceneKeyDown } from '../input/sceneKeys';
 import { nextTouchControl } from '../input/tapZones';
@@ -72,8 +72,8 @@ export class OptionsScene extends Phaser.Scene {
   /** the drop-down list's languages, and the one the keyboard is on */
   private langItems: Phaser.GameObjects.Text[] = [];
   private langFocus = new FocusList(0);
-  /** Erase was pressed once: the next press erases the progress */
-  private eraseArmed = false;
+  /** Import or Erase pressed once (the button now asks "Sure?"): its next press acts */
+  private armed: { id: string; button: Phaser.GameObjects.Text; label: string } | null = null;
 
   constructor() {
     super('Options');
@@ -118,7 +118,7 @@ export class OptionsScene extends Phaser.Scene {
     this.langMenu = [];
     this.langItems = [];
     this.focusables = [];
-    this.eraseArmed = false;
+    this.armed = null;
     this.drag = null;
     this.dragged = false;
     this.velocity = 0;
@@ -238,12 +238,21 @@ export class OptionsScene extends Phaser.Scene {
       y += rowStep;
     }
 
-    // the progress: kept in a file, brought back from one, or erased (pressed twice)
+    // the progress: kept in a file, brought back from one (it replaces the progress) or erased;
+    // both of those ask first
     label(t('progress'));
-    const [, , erase] = row([
+    const [, imp, erase] = row([
       ['export', t('exportSave'), () => this.exportProgress()],
-      ['import', t('importSave'), () => this.importProgress()],
-      ['erase', t('resetProgress'), () => this.eraseProgress(erase!)],
+      [
+        'import',
+        t('importSave'),
+        () => this.confirmed('import', imp!, t('importSave')) && this.importProgress(),
+      ],
+      [
+        'erase',
+        t('resetProgress'),
+        () => this.confirmed('erase', erase!, t('resetProgress')) && this.eraseProgress(),
+      ],
     ]);
 
     const back = button(
@@ -401,14 +410,27 @@ export class OptionsScene extends Phaser.Scene {
 
   /** Options › Export: the save as a file the player keeps (to move it, or for safety). */
   private exportProgress(): void {
-    const blob = new Blob([exportSave(app.data)], { type: 'application/json' });
+    const blob = new Blob([exportSave(app.data)], { type: 'application/octet-stream' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `puzzlecave-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `puzzlecave-${new Date().toISOString().slice(0, 10)}.save`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
     setDebug({ exported: a.download });
+  }
+
+  /**
+   * A button that destroys something asks first: a first press turns it to "Sure?" (and puts back
+   * another one that asked), a second one acts and puts it back. True on that second press.
+   */
+  private confirmed(id: string, button: Phaser.GameObjects.Text, label: string): boolean {
+    const prev = this.armed;
+    if (prev) prev.button.setText(prev.label).setColor(COLORS.text);
+    this.armed = prev?.id === id ? null : { id, button, label };
+    if (this.armed) button.setText(t('confirmReset')).setColor('#ff8080');
+    setDebug({ armed: this.armed?.id ?? null });
+    return !this.armed;
   }
 
   /** Options › Import: a file from Export replaces the progress and the settings. */
@@ -419,7 +441,8 @@ export class OptionsScene extends Phaser.Scene {
     const input = document.createElement('input');
     input.id = 'import-save';
     input.type = 'file';
-    input.accept = '.json,application/json';
+    // no file filter: mobile pickers map extensions to known types, and would grey out a .save
+    // file; any other file is refused when read
     input.hidden = true;
     input.addEventListener('change', () => {
       input.remove();
@@ -437,7 +460,7 @@ export class OptionsScene extends Phaser.Scene {
   private applyImport(text: string): void {
     let data;
     try {
-      data = parseSave(text, saveContext);
+      data = importSave(text, saveContext);
     } catch {
       showNotice(t('importFailed'), '#ff8080');
       return;
@@ -450,14 +473,8 @@ export class OptionsScene extends Phaser.Scene {
     this.rebuild();
   }
 
-  /** Options › Erase: a first press asks (the button turns to "Sure?"), a second one erases. */
-  private eraseProgress(button: Phaser.GameObjects.Text): void {
-    if (!this.eraseArmed) {
-      this.eraseArmed = true;
-      button.setText(t('confirmReset')).setColor('#ff8080');
-      setDebug({ eraseArmed: true });
-      return;
-    }
+  /** Options › Erase (once confirmed). */
+  private eraseProgress(): void {
     app.data.levels = {};
     app.persist();
     showNotice(t('progressReset'));

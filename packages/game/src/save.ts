@@ -125,9 +125,62 @@ export function parseSave(raw: string, ctx: SaveContext = NO_LEVELS): SaveData {
   };
 }
 
-/** The save as a file for the player to keep (Options › Export). */
+/** First line of an exported file; the encoded save follows on the next one. */
+export const EXPORT_HEADER = 'puzzlecave-save-1';
+
+/**
+ * The save as a file for the player to keep (Options › Export): not readable as it is, and with a
+ * hash that importSave checks. It stops a quick edit by hand, nothing more: the key is in the
+ * game's code.
+ */
 export function exportSave(d: SaveData): string {
-  return JSON.stringify(d, null, 2);
+  const json = new TextEncoder().encode(JSON.stringify(d));
+  const bytes = new Uint8Array(4 + json.length);
+  new DataView(bytes.buffer).setUint32(0, fnv1a(json));
+  bytes.set(json, 4);
+  scramble(bytes);
+  return `${EXPORT_HEADER}\n${toBase64(bytes)}\n`;
+}
+
+/** A file from Export read back (Options › Import); throws if unusable or changed. */
+export function importSave(text: string, ctx: SaveContext = NO_LEVELS): SaveData {
+  const [head, body, ...rest] = text.trim().split(/\r?\n/);
+  if (head !== EXPORT_HEADER || body === undefined || rest.length > 0) throw new Error('format');
+  const bytes = fromBase64(body);
+  if (bytes.length < 4) throw new Error('format');
+  scramble(bytes);
+  const json = bytes.subarray(4);
+  if (new DataView(bytes.buffer).getUint32(0) !== fnv1a(json)) throw new Error('hash');
+  return parseSave(new TextDecoder('utf-8', { fatal: true }).decode(json), ctx);
+}
+
+/** 32-bit FNV-1a of the bytes, salted so that a plain FNV-1a does not match. */
+function fnv1a(bytes: Uint8Array): number {
+  let h = 0x811c9dc5 ^ 0x5ca1ab1e;
+  for (const b of bytes) h = Math.imul(h ^ b, 0x01000193);
+  return h >>> 0;
+}
+
+/** XORs the bytes with a fixed xorshift32 stream, in place: applied twice, it gives them back. */
+function scramble(bytes: Uint8Array): void {
+  let x = 0x9e3779b9;
+  for (let i = 0; i < bytes.length; i++) {
+    x ^= x << 13;
+    x ^= x >>> 17;
+    x ^= x << 5;
+    bytes[i]! ^= x & 0xff;
+  }
+}
+
+function toBase64(bytes: Uint8Array): string {
+  let s = '';
+  for (const b of bytes) s += String.fromCharCode(b);
+  return btoa(s);
+}
+
+/** Throws on text that is not base64 (atob does). */
+function fromBase64(text: string): Uint8Array {
+  return Uint8Array.from(atob(text), (c) => c.charCodeAt(0));
 }
 
 export function defaultSave(): SaveData {

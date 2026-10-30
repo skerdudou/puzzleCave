@@ -1,15 +1,18 @@
 import { expect, test } from 'vitest';
 import {
   CORRUPT_KEY,
+  EXPORT_HEADER,
   SAVE_KEY,
   SAVE_VERSION,
   SaveStore,
   defaultSave,
   exportSave,
+  importSave,
   migrate,
   parseSave,
   type KV,
   type SaveContext,
+  type SaveData,
 } from './save';
 import { isMasterUnlocked, resolveThresholds } from '@puzzlecave/core';
 
@@ -296,11 +299,46 @@ test('migrate: a missing step is refused rather than skipped', () => {
   expect(() => migrate({ version: 1 }, {}, 2)).toThrow();
 });
 
-test('export then import gives the same save', () => {
+const exported = (): SaveData => {
   const d = defaultSave();
   d.levels['pc-01'] = { completed: true, bestMoves: 12, medals: { moves: 'gold' } };
   d.settings.sfx = false;
-  expect(parseSave(exportSave(d))).toEqual(d);
+  return d;
+};
+
+test('export then import gives the same save', () => {
+  const d = exported();
+  expect(importSave(exportSave(d))).toEqual(d);
+});
+
+test('an exported file cannot be read as it is', () => {
+  const file = exportSave(exported());
+  expect(file.startsWith(`${EXPORT_HEADER}\n`)).toBe(true);
+  for (const word of ['pc-01', 'bestMoves', 'gold', 'levels']) expect(file).not.toContain(word);
+});
+
+test('an exported file changed by hand is refused', () => {
+  const file = exportSave(exported());
+  const [head, body] = file.split('\n') as [string, string];
+  // each character of the body changed in turn: none passes the hash
+  for (let i = 0; i < body.length; i++) {
+    const c = body[i] === 'A' ? 'B' : 'A';
+    const altered = `${head}\n${body.slice(0, i)}${c}${body.slice(i + 1)}\n`;
+    expect(() => importSave(altered), `character ${i}`).toThrow();
+  }
+});
+
+test.each([
+  EXPORT_HEADER,
+  `${EXPORT_HEADER}\n`,
+  `${EXPORT_HEADER}\nnot base64!`,
+  `${EXPORT_HEADER}\nAAAA`,
+])('a broken exported file is refused: %j', (raw) => {
+  expect(() => importSave(raw)).toThrow();
+});
+
+test('a plain JSON save is refused: only an exported file imports', () => {
+  expect(() => importSave(JSON.stringify(exported(), null, 2))).toThrow();
 });
 
 test.each(['', 'null', '[]', '{"version":1}', '{"version":3,"levels":{}}'])(
