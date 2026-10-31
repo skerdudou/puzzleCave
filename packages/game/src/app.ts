@@ -3,10 +3,11 @@ import { setDebug } from './debug';
 import { detectLang, setLang, t } from './i18n';
 import { showNotice } from './notice';
 import { saveContext } from './levels';
+import { SAVE_KEYS } from './preview';
 import { SaveStore, browserStorage, defaultSave, type SaveData } from './save';
 
 export const app = {
-  store: new SaveStore(browserStorage(), saveContext),
+  store: new SaveStore(browserStorage(), saveContext, SAVE_KEYS),
   data: defaultSave() as SaveData,
   author: false,
   init(): void {

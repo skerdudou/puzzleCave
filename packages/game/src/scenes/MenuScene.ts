@@ -4,6 +4,7 @@ import { setDebug } from '../debug';
 import { t } from '../i18n';
 import { onSceneKeyDown } from '../input/sceneKeys';
 import { syncMusic } from '../music';
+import { PREVIEW, PREVIEW_SHA } from '../preview';
 import { COLORS, KeyFocus, dpr, makeButton, px, textStyle } from '../ui';
 
 export class MenuScene extends Phaser.Scene {
@@ -14,6 +15,17 @@ export class MenuScene extends Phaser.Scene {
     const cx = this.scale.width / 2;
     const cy = this.scale.height / 2;
     this.add.text(cx, cy - px(90), 'puzzleCave', textStyle(36, COLORS.accent)).setOrigin(0.5);
+    // the preview of main (src/preview.ts): which commit, small and dim at the bottom
+    if (PREVIEW)
+      this.add
+        .text(
+          cx,
+          this.scale.height - px(6),
+          `preview · main · ${PREVIEW_SHA}`,
+          textStyle(9, COLORS.dim),
+        )
+        .setOrigin(0.5, 1)
+        .setAlpha(0.6);
     const play = () => this.scene.start('Select');
     const options = () => this.scene.start('Options');
     const items = [

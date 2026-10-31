@@ -1,11 +1,15 @@
-# Publishes the game on GitHub Pages, only for a release or a version tag (vX.Y.Z).
+# Publishes the game on GitHub Pages: the latest release (the highest vX.Y.Z tag) at the root and,
+# beside it, the current main as a preview, in a folder known only by its link
+# (preview-<PREVIEW_DIR secret>/; DEVELOPMENT.md › Preview of `main`).
 name: Deploy to GitHub Pages
 
 on:
   release:
     types: [published]
   push:
+    branches: [main]
     tags: ['v*']
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -21,6 +25,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          # the release is built from the highest v* tag, the preview from main
+          fetch-depth: 0
+          fetch-tags: true
       - uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -29,11 +37,16 @@ jobs:
       - run: npm run typecheck
       - run: npm run validate
       - run: npm test
-      - run: npm run build
+      - name: Build the site (the release at the root, the preview of main beside it)
+        env:
+          PREVIEW_DIR: ${{ secrets.PREVIEW_DIR }}
+          # a push to main: that commit; a tag, a release or a manual run: main as it is now
+          PREVIEW_REF: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.sha || 'origin/main' }}
+        run: bash .github/scripts/build-site.sh site
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:
-          path: packages/game/dist
+          path: site
 
   deploy:
     needs: build

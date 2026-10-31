@@ -46,6 +46,20 @@ export interface KV {
 
 export const SAVE_KEY = 'puzzlecave.save.v1';
 export const CORRUPT_KEY = 'puzzlecave.save.corrupt';
+/** Where a save lives in the storage, and where an unreadable one is copied. */
+export interface SaveKeys {
+  save: string;
+  corrupt: string;
+}
+export const RELEASE_KEYS: SaveKeys = { save: SAVE_KEY, corrupt: CORRUPT_KEY };
+/**
+ * The keys of the preview of `main` (src/preview.ts, which chooses): the preview shares the
+ * release's origin, so keys of its own keep it off the player's real progress.
+ */
+export const PREVIEW_KEYS: SaveKeys = {
+  save: 'puzzlecave.preview.save.v1',
+  corrupt: 'puzzlecave.preview.save.corrupt',
+};
 /** The save format written by this version of the game. */
 export const SAVE_VERSION = 2;
 
@@ -294,21 +308,23 @@ function sanitiseLevels(raw: Record<string, unknown>): Record<string, LevelRecor
 export class SaveStore {
   private readonly storage: KV | null;
   private readonly ctx: SaveContext;
-  constructor(storage: KV | null, ctx: SaveContext = NO_LEVELS) {
+  private readonly keys: SaveKeys;
+  constructor(storage: KV | null, ctx: SaveContext = NO_LEVELS, keys = RELEASE_KEYS) {
     this.storage = storage;
     this.ctx = ctx;
+    this.keys = keys;
   }
 
   load(): SaveData {
     if (!this.storage) return defaultSave();
     let raw: string | null = null;
     try {
-      raw = this.storage.getItem(SAVE_KEY);
+      raw = this.storage.getItem(this.keys.save);
       if (raw === null) return defaultSave();
       return parseSave(raw, this.ctx);
     } catch {
       try {
-        if (raw !== null) this.storage.setItem(CORRUPT_KEY, raw);
+        if (raw !== null) this.storage.setItem(this.keys.corrupt, raw);
       } catch {
         /* storage unusable: no copy */
       }
@@ -319,7 +335,7 @@ export class SaveStore {
   save(d: SaveData): boolean {
     if (!this.storage) return false;
     try {
-      this.storage.setItem(SAVE_KEY, JSON.stringify(d));
+      this.storage.setItem(this.keys.save, JSON.stringify(d));
       return true;
     } catch {
       return false;

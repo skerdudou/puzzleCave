@@ -10,6 +10,7 @@ import {
   importSave,
   migrate,
   parseSave,
+  PREVIEW_KEYS,
   type KV,
   type SaveContext,
   type SaveData,
@@ -40,6 +41,25 @@ test('corrupted content: set aside, start from scratch', () => {
   const kv = mem({ [SAVE_KEY]: '{oups' });
   expect(new SaveStore(kv).load()).toEqual(defaultSave());
   expect(kv.data[CORRUPT_KEY]).toBe('{oups');
+});
+
+test('the preview never reads nor writes the release save', () => {
+  const release = defaultSave();
+  release.levels['pc-01'] = { completed: true, bestMoves: 12, medals: { moves: 'gold' } };
+  const kv = mem({ [SAVE_KEY]: JSON.stringify(release) });
+  const preview = new SaveStore(kv, undefined, PREVIEW_KEYS);
+  expect(preview.load()).toEqual(defaultSave());
+  const d = defaultSave();
+  d.settings.sound = false;
+  expect(preview.save(d)).toBe(true);
+  expect(JSON.parse(kv.data[SAVE_KEY]!)).toEqual(release);
+  expect(new SaveStore(kv).load()).toEqual(release);
+  expect(new SaveStore(kv, undefined, PREVIEW_KEYS).load()).toEqual(d);
+  // an unreadable preview save is set aside under the preview's key
+  kv.data['puzzlecave.preview.save.v1'] = '{oups';
+  expect(preview.load()).toEqual(defaultSave());
+  expect(kv.data['puzzlecave.preview.save.corrupt']).toBe('{oups');
+  expect(kv.data[CORRUPT_KEY]).toBeUndefined();
 });
 
 test('wrong version: set aside', () => {

@@ -45,9 +45,54 @@ machine locally (the probe then reports SwiftShader).
 ## Publishing
 
 The game is published on GitHub Pages at https://skerdudou.github.io/puzzleCave/ by
-`.github/workflows/pages.yml`, only when a release is published or a version tag is pushed
-(`git tag v1.0.0 && git push origin v1.0.0`). The workflow runs the typecheck, `validate` and the
-tests before building; pushes to `main` do not deploy anything.
+`.github/workflows/pages.yml`: the root always holds the **latest release**, the highest `v*` tag
+(`git tag v1.0.0 && git push origin v1.0.0`), and a sub-folder known only by its link holds a
+**preview of `main`** (below). The workflow runs when a release is published, a version tag or a
+commit on `main` is pushed, or by hand (Actions › Deploy to GitHub Pages › Run workflow). It runs
+the typecheck, `validate` and the tests on the code pushed, then `.github/scripts/build-site.sh`
+builds both: the release from a `git worktree` of its tag (with its own `npm ci`), the preview
+from the commit pushed to `main` (for a tag, a release or a manual run: `main` as it is then).
+
+### Preview of `main`
+
+The current `main` can be played before it is released, at
+`https://skerdudou.github.io/puzzleCave/preview-<secret>/`, where `<secret>` is the repository
+secret `PREVIEW_DIR`. To set it up once: GitHub › the repository › Settings › Secrets and
+variables › Actions › New repository secret, name `PREVIEW_DIR`, value a random string of 16 or
+more letters and digits (`-` and `_` allowed too; for example `openssl rand -hex 12`). The next
+deploy publishes the preview there; to move it, change the secret and run the workflow again (the
+old folder disappears with that deploy). Without the secret (or with other characters in it), the
+workflow publishes the release alone, with a warning: the preview is never put at a guessable
+path. The folder is not linked from anywhere, and its `index.html` asks search engines not to
+index it; it is hidden, not protected: anyone with the link can play it.
+
+The preview is built with `VITE_PREVIEW=1` and `VITE_PREVIEW_SHA=<short commit>`
+(`packages/game/src/preview.ts`; in the release both are absent and none of this is in the
+bundle):
+
+- it saves under keys of its own, `puzzlecave.preview.save.v1` (and
+  `puzzlecave.preview.save.corrupt`): every project page of the account shares the origin
+  `skerdudou.github.io`, so its `localStorage` too, and the preview never touches the player's
+  real progress (it starts from scratch, and an export/import of progress moves it across);
+- `<meta name="robots" content="noindex, nofollow">`, the title and the app's name
+  "puzzleCave (preview)", and a manifest `id` of its own: installed, it is a second app beside the
+  release, never a replacement;
+- the main menu shows "preview · main · <commit>", small and dim at the bottom;
+- its service worker, registered from its folder, is scoped to that folder (the release's is
+  scoped to `/puzzleCave/`): each precaches and updates its own build, the same way as below.
+
+A navigation into the preview's folder is still within the release worker's scope; the release
+worker leaves those to the network (`navigateFallbackDenylist: /\/preview-[^/]+(\/|$)/`,
+`vite.config.ts`) instead of answering with the release's `index.html`. That rule only ships
+with the releases built after it: until the next release, in a browser where the release's
+worker is installed (the game was opened there) and the preview's is not yet, the preview's link
+shows a blank page (the release's `index.html`, whose files are not in that folder); open the
+preview in a private window there.
+
+One more effect of sharing the origin: when a release's worker takes over, Workbox's
+`cleanupOutdatedCaches` deletes every precache whose name holds its scope, and the preview's
+(`workbox-precache-v2-…/puzzleCave/preview-…/`) does. The preview then still works online (its
+worker falls back to the network), but not offline until its own next update.
 
 ### How a release reaches players
 
