@@ -230,6 +230,8 @@ test.describe('touch screen', () => {
     const key = { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' };
     for (const d of drowning()) await press(page, key[d]);
     await expect.poll(() => field(page, 'status')).toBe('drowned');
+    // a tap before the message is drawn would not reach it (Phaser takes it in on a frame)
+    await expect.poll(() => field(page, 'failedShown')).toBe(true);
     await page.touchscreen.tap(200, 370);
     await expect.poll(() => field(page, 'status')).toBe('playing');
     expect(await field(page, 'moves')).toBe(0);

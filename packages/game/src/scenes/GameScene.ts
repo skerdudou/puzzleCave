@@ -119,7 +119,7 @@ export class GameScene extends Phaser.Scene {
     this.timedOut = false;
     this.haptics.reset();
     this.sounds.reset();
-    setDebug({ timeLeftMs: null, timeWarn: false });
+    setDebug({ timeLeftMs: null, timeWarn: false, failedShown: false });
     this.finished = false;
     this.anim.reset();
     this.overlay = undefined;
@@ -673,6 +673,7 @@ export class GameScene extends Phaser.Scene {
         this.board.rebuild(this.session.state);
         this.overlay?.destroy();
         this.overlay = undefined;
+        setDebug({ failedShown: false });
         this.updateHud();
         return;
       case 'menu':
@@ -843,6 +844,15 @@ export class GameScene extends Phaser.Scene {
         if (!this.dragMoved && !this.zonePress) this.handle({ type: 'restart' });
       });
     }
+    // Phaser hit-tests the message only once its next pre-update has taken it in: the tests
+    // learn that it is shown (and answers a tap) once it has been drawn
+    setDebug({ failedShown: false });
+    const overlay = this.overlay;
+    this.events.once(Phaser.Scenes.Events.PRE_UPDATE, () =>
+      this.events.once(Phaser.Scenes.Events.RENDER, () => {
+        if (this.overlay === overlay) setDebug({ failedShown: true });
+      }),
+    );
   }
 
   private finish(now: number): void {

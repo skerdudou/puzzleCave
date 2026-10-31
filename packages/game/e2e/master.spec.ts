@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
 import { initialState, parseMoves, replay, step, type Dir } from '@puzzlecave/core';
 import { parseTmx } from '@puzzlecave/tiled';
+import { FRAME_MS } from './fps';
 import { goToLevel } from './select';
 
 // pc-31, a level of the Medium chapter (master mode exists there, not on Easy)
@@ -173,35 +174,39 @@ test('master mode: a countdown to the bronze time, paused while hidden; past it 
   expect(await field(page, 'timeLeftMs')).toBe(LIMIT);
   expect(await field(page, 'timeWarn')).toBe(false);
 
-  // from here the page's time only moves when the test says so (a jump, then a few frames)
+  // from here the page's time only moves when the test says so (a jump, then a few frames).
+  // The countdown shown is refreshed by a game step, and the e2e frame cap (e2e/fps.ts) steps
+  // only every FRAME_MS: RUN lets at least one step follow a jump, and the value read can be
+  // up to one RUN old.
+  const RUN = Math.max(50, Math.ceil(2 * FRAME_MS));
   await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
   const after = async (ms: number) => {
     await page.clock.fastForward(ms);
-    await page.clock.runFor(50);
+    await page.clock.runFor(RUN);
   };
-  /** the countdown shown: at most `target`, and at most a few frames (70 ms) above the truth */
+  /** the countdown shown: at most `target`, and at most a few frames above the truth */
   const left = async (target: number) => {
     const v = (await field(page, 'timeLeftMs')) as number;
-    expect(v).toBeLessThanOrEqual(target + 70);
+    expect(v).toBeLessThanOrEqual(target + Math.max(70, RUN));
     expect(v).toBeGreaterThanOrEqual(target);
   };
   await play(page, solution.slice(0, 1));
   expect(await field(page, 'moves')).toBe(1);
   await after(11_500);
-  await left(LIMIT - 11_550);
+  await left(LIMIT - 11_500 - RUN);
   expect(await field(page, 'timeWarn')).toBe(false);
   await after(1000);
   // the last quarter of a 16 s limit: the countdown warns
-  await left(LIMIT - 12_600);
+  await left(LIMIT - 12_500 - 2 * RUN);
   expect(await field(page, 'timeWarn')).toBe(true);
 
   // a minute in another app: not counted
   await setHidden(page, true);
   await page.clock.fastForward(60_000);
   await setHidden(page, false);
-  await page.clock.runFor(50);
+  await page.clock.runFor(RUN);
   expect(await field(page, 'status')).toBe('playing');
-  await left(LIMIT - 12_650);
+  await left(LIMIT - 12_500 - 3 * RUN);
 
   // past the limit: failed, like drowning; moves do nothing more
   await after(3500);

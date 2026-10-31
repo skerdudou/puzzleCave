@@ -14,6 +14,9 @@ import { initSfx } from './sfx';
 import { COLORS } from './ui';
 
 const ratio = () => window.devicePixelRatio || 1;
+// e2e only (playwright.config.ts sets it): the most frames per second the game steps and draws.
+// Unset in dev and in the build: no cap.
+const e2eFps = Number(import.meta.env.VITE_E2E_FPS) || 0;
 
 app.init();
 
@@ -30,6 +33,7 @@ const game = new Phaser.Game({
   backgroundColor: COLORS.bg,
   pixelArt: true,
   input: { activePointers: 3 },
+  ...(e2eFps > 0 && { fps: { limit: e2eFps } }),
   scale: {
     mode: Phaser.Scale.NONE,
     width: Math.round(window.innerWidth * ratio()),
