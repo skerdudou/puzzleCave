@@ -15,6 +15,33 @@ Requirements: Node 24+.
     npm run e2e        # end-to-end test (Playwright)
     npm run build      # publishable build in packages/game/dist (PWA)
 
+### End-to-end tests
+
+`npm run e2e` starts its own Vite server on port 5199 and runs `packages/game/e2e/*.spec.ts` in
+headless Chromium (`e2e/*.test.ts` are unit tests, run by `npm test`). Chromium is launched with
+`--enable-gpu`, and the game is capped at 15 frames a second during the tests (`VITE_E2E_FPS`,
+`e2e/fps.ts`; 0 = uncapped).
+
+Without a usable GPU (a GitHub-hosted runner, a virtual machine), WebGL is drawn in software by
+SwiftShader: one page sitting in a level then costs about 4.5 CPU cores at 15 fps (0.02 with the
+GPU), and Playwright's default workers (half the cores) saturate the machine. So the config first
+probes the renderer (`e2e/gpuProbe.ts`: the same Chromium with the same arguments, a WebGL context
+on a blank page, `WEBGL_debug_renderer_info`; about 0.2–0.4 s) and prints one line, for example:
+
+    e2e: WebGL renderer ANGLE (… SwiftShader Device (Subzero) …) (probed in 212 ms): software, 3 workers unless --workers is given
+
+- Software renderer (SwiftShader, llvmpipe, Microsoft Basic Render Driver…), no WebGL, or the
+  probe failed: workers = max(1, floor(cores / 5)) (`availableParallelism()`; 5 cores a page,
+  measured). On 16 threads that is 3 workers: 2.4 min, as fast as 4 or 5 (the suite is bounded
+  by `fit.spec.ts`, about 130 s in one worker), while 8 workers starved the pages (a timeout
+  every other run).
+- A GPU: Playwright's default.
+- `--workers N` on the command line always wins. The worker processes reuse the runner's result
+  (`PC_E2E_RENDERER` in their environment) instead of probing again.
+
+`PC_E2E_SOFTWARE_GL=1` launches Chromium with `--disable-gpu` instead, to reproduce a GPU-less
+machine locally (the probe then reports SwiftShader).
+
 ## Publishing
 
 The game is published on GitHub Pages at https://skerdudou.github.io/puzzleCave/ by
