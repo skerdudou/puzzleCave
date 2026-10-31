@@ -14,7 +14,7 @@ import { setDebug } from '../debug';
 import { formatTime } from '../format';
 import { t } from '../i18n';
 import { onSceneKeyDown } from '../input/sceneKeys';
-import { chapters, hasMaster, levelById, locate } from '../levels';
+import { chapters, hasMaster, levelById, locate, masterState } from '../levels';
 import {
   masterLineText,
   masterMedalName,
@@ -197,20 +197,32 @@ export class ResultScene extends Phaser.Scene {
     const replay = () => this.scene.start('Game', { levelId, mode });
     const goNext = () => next && this.scene.start('Game', { levelId: next, mode: 'normal' });
     const menu = () => this.scene.start('Select', { levelId });
+    // master mode, as on the select screen (chapter with master mode, gold held), right from the
+    // result; after a master run Replay already starts it again, so the button would duplicate it
+    const masterBtn =
+      mode !== 'master' && masterState(levelId, app.data.levels[levelId]) === 'open';
+    const playMaster = () => this.scene.start('Game', { levelId, mode: 'master' });
+    setDebug({ resultMasterButton: masterBtn });
     if (low) {
       // the buttons in a column on the right
       const bx = this.scale.width - px(100);
-      const by = this.scale.height / 2;
-      makeButton(this, bx, by - px(56), t('replay'), replay);
+      const gap = masterBtn ? px(48) : px(56);
+      let by = this.scale.height / 2 - (masterBtn ? gap / 2 : 0);
+      makeButton(this, bx, by - gap, t('replay'), replay);
       if (next) makeButton(this, bx, by, t('next'), goNext);
-      makeButton(this, bx, by + px(56), t('menu'), menu, 13);
-      y = Math.max(y, by + px(56));
+      if (masterBtn) makeButton(this, bx, (by += gap), t('master'), playMaster, 14);
+      makeButton(this, bx, by + gap, t('menu'), menu, 13);
+      y = Math.max(y, by + gap);
     } else {
       y += px(16);
       makeButton(this, cx - px(80), y, t('replay'), replay);
       if (next) makeButton(this, cx + px(80), y, t('next'), goNext);
       y += px(52);
-      makeButton(this, cx, y, t('menu'), menu, 13);
+      if (masterBtn) {
+        // Menu and master mode share the second row
+        makeButton(this, cx - px(80), y, t('master'), playMaster, 14);
+        makeButton(this, cx + px(80), y, t('menu'), menu, 13);
+      } else makeButton(this, cx, y, t('menu'), menu, 13);
     }
 
     if (app.author) {
@@ -278,6 +290,7 @@ export class ResultScene extends Phaser.Scene {
       this.reveal?.finish();
       if (e.key === 'Enter' && next) this.scene.start('Game', { levelId: next, mode: 'normal' });
       else if (e.key.toLowerCase() === 'r') this.scene.start('Game', { levelId, mode });
+      else if (e.key.toLowerCase() === 'p' && masterBtn) playMaster();
       else if (e.key === 'Escape') this.scene.start('Select', { levelId });
     });
     // the layout (and the interface's size) follows the screen

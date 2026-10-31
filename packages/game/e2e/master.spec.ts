@@ -127,6 +127,63 @@ test('master mode: locked before gold, no undo, water drowns, grand master', asy
   );
 });
 
+/** a winning route made slower than silver: the first move and its way back, repeated */
+function slow(): Dir[] {
+  const back = { up: 'down', down: 'up', left: 'right', right: 'left' } as const;
+  const silver = Math.ceil((level.thresholds.goldMoves! * 11) / 10);
+  const pairs = Math.ceil((silver + 1 - solution.length) / 2);
+  const first = solution[0]!;
+  return [...Array.from({ length: pairs }, () => [first, back[first]]).flat(), ...solution];
+}
+
+test('result screen: a master button, only where master mode is open', async ({ page }) => {
+  await page.goto('/');
+  await expect.poll(() => field(page, 'scene')).toBe('Menu');
+  await page.keyboard.press('Enter');
+  await expect.poll(() => field(page, 'scene')).toBe('Select');
+  // Easy chapter: no master mode, no button (P does nothing)
+  await page.keyboard.press('Enter');
+  await expect.poll(() => field(page, 'scene')).toBe('Game');
+  await play(page, parseMoves(read('solutions/pc-01.txt')));
+  await expect.poll(() => field(page, 'scene')).toBe('Result');
+  expect(await field(page, 'resultMasterButton')).toBe(false);
+  await page.keyboard.press('KeyP');
+  await page.waitForTimeout(300);
+  expect(await field(page, 'scene')).toBe('Result');
+  await page.keyboard.press('Escape');
+
+  // Medium level, no gold yet: no button
+  await expect.poll(() => field(page, 'scene')).toBe('Select');
+  await goToLevel(page, ID);
+  await page.keyboard.press('Enter');
+  await expect.poll(() => field(page, 'scene')).toBe('Game');
+  await play(page, slow());
+  await expect.poll(() => field(page, 'scene')).toBe('Result');
+  expect((await field(page, 'lastAward')) as { moves?: string }).not.toMatchObject({
+    moves: 'gold',
+  });
+  expect(await field(page, 'resultMasterButton')).toBe(false);
+  await page.keyboard.press('KeyP');
+  await page.waitForTimeout(300);
+  expect(await field(page, 'scene')).toBe('Result');
+
+  // gold opens master mode: the button appears, P starts the same level in master mode
+  await page.keyboard.press('KeyR');
+  await expect.poll(() => field(page, 'scene')).toBe('Game');
+  await play(page, solution);
+  await expect.poll(() => field(page, 'scene')).toBe('Result');
+  expect(await field(page, 'resultMasterButton')).toBe(true);
+  await page.keyboard.press('KeyP');
+  await expect.poll(() => field(page, 'scene')).toBe('Game');
+  expect(await field(page, 'mode')).toBe('master');
+  expect(await field(page, 'levelId')).toBe(ID);
+
+  // after a master run Replay already plays master mode again: no duplicate button
+  await play(page, solution);
+  await expect.poll(() => field(page, 'scene')).toBe('Result');
+  expect(await field(page, 'resultMasterButton')).toBe(false);
+});
+
 /** a save where pc-31 has gold (master mode open) and the Medium chapter is open */
 async function withMasterOpen(page: Page): Promise<void> {
   const chapters = JSON.parse(read('chapters.json')) as { levels: string[] }[];

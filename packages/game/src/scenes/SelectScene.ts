@@ -2,7 +2,6 @@ import Phaser from 'phaser';
 import {
   isChapterUnlocked,
   isLevelUnlocked,
-  isMasterUnlocked,
   resolveThresholds,
   type Mode,
 } from '@puzzlecave/core';
@@ -11,7 +10,7 @@ import { setDebug } from '../debug';
 import { formatTime } from '../format';
 import { getLang, t } from '../i18n';
 import { onSceneKeyDown } from '../input/sceneKeys';
-import { chapters, hasMaster, levelById, locate } from '../levels';
+import { chapters, hasMaster, levelById, locate, masterState } from '../levels';
 import {
   masterLineText,
   masterMedalName,
@@ -76,8 +75,7 @@ export class SelectScene extends Phaser.Scene {
   /** master mode of the current level: absent from its chapter, locked (no gold yet) or open */
   private masterState(): 'none' | 'locked' | 'open' {
     const id = this.currentId();
-    if (!hasMaster(id)) return 'none';
-    return isMasterUnlocked(app.data.levels[id]) ? 'open' : 'locked';
+    return masterState(id, app.data.levels[id]);
   }
   private currentId(): string {
     return chapters[this.ci]!.levels[this.li]!;

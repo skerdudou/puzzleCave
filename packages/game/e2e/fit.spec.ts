@@ -170,6 +170,19 @@ for (const { width, height, touch, langs } of VIEWS) {
           await page.keyboard.press('KeyR');
         }
 
+        // pc-40 solved (gold held there): the result with the master mode button
+        await page.keyboard.press('Escape');
+        await sceneIs(page, 'Select');
+        await goToLevel(page, 'pc-40');
+        await page.keyboard.press('Enter');
+        await sceneIs(page, 'Game');
+        for (const d of parseMoves(read('solutions/pc-40.txt')) as Dir[])
+          await page.keyboard.press(KEY[d]);
+        await sceneIs(page, 'Result');
+        await expect.poll(() => field(page, 'resultAnimDone'), { timeout: 10_000 }).toBe(true);
+        expect(await field(page, 'resultMasterButton')).toBe(true);
+        await check('result pc-40 master button');
+
         expect(failures).toEqual([]);
       });
     }

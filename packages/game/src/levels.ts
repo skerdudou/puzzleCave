@@ -1,5 +1,11 @@
 import { chapters, levels } from 'virtual:levels';
-import { hasMasterMode, resolveThresholds, type LevelData } from '@puzzlecave/core';
+import {
+  hasMasterMode,
+  isMasterUnlocked,
+  resolveThresholds,
+  type LevelData,
+  type LevelRecord,
+} from '@puzzlecave/core';
 import type { SaveContext } from './save';
 
 export { chapters, levels };
@@ -15,6 +21,15 @@ export function levelById(id: string): LevelData {
 export function hasMaster(id: string): boolean {
   const pos = locate(id);
   return pos !== null && hasMasterMode(chapters[pos.chapterIndex]);
+}
+
+/** master mode of a level: absent from its chapter, locked (no gold yet) or open */
+export function masterState(
+  id: string,
+  rec: LevelRecord | undefined,
+): 'none' | 'locked' | 'open' {
+  if (!hasMaster(id)) return 'none';
+  return isMasterUnlocked(rec) ? 'open' : 'locked';
 }
 
 export function locate(id: string): { chapterIndex: number; levelIndex: number } | null {
