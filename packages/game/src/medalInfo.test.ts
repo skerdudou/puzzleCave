@@ -20,7 +20,7 @@ test('moves row: gold, silver, bronze limits derived from goldMoves', () => {
 test('time row is formatted like the clock, after the moves row', () => {
   const rows = thresholdRows(resolveThresholds({ goldMoves: 52, goldTime: 12.5, bronzeTime: 30 }));
   expect(rows.map((r) => r.kind)).toEqual(['moves', 'time']);
-  expect(rows[1]!.tiers.map((t) => t.text)).toEqual(['≤ 0:12.50', '≤ 0:15.63', '≤ 0:30.00']);
+  expect(rows[1]!.tiers.map((t) => t.text)).toEqual(['≤ 0:12.50', '≤ 0:17.43', '≤ 0:30.00']);
 });
 
 test('no gold threshold: no row', () => {
@@ -36,7 +36,7 @@ test('master mode: its own third row (master, grand master, time limit), only wh
   // mode's time limit (bronze time)
   expect(rows[2]!.tiers).toEqual([
     { medal: 'master', text: '≤ 430' },
-    { medal: 'grandMaster', text: '≤ 278 & ≤ 1:15.00 · limit ≤ 1:30.00' },
+    { medal: 'grandMaster', text: '≤ 278 & ≤ 1:22.50 · limit ≤ 2:15.13' },
   ]);
   expect(thresholdRows(th, false).map((r) => r.kind)).toEqual(['moves', 'time']);
   // without platinumMoves nor goldTime both limits are gold, no time: grand master alone
@@ -47,7 +47,7 @@ test('master mode: its own third row (master, grand master, time limit), only wh
   const timed = thresholdRows(resolveThresholds({ goldMoves: 20, goldTime: 10 }), true);
   expect(timed[2]!.tiers).toEqual([
     { medal: 'master', text: '≤ 20' },
-    { medal: 'grandMaster', text: '≤ 20 & ≤ 0:13.00 · limit ≤ 0:16.00' },
+    { medal: 'grandMaster', text: '≤ 20 & ≤ 0:13.75 · limit ≤ 0:22.50' },
   ]);
 });
 
@@ -55,7 +55,7 @@ test('master row in French: the limit word is translated', () => {
   setLang('fr');
   try {
     const th = resolveThresholds({ goldMoves: 430, platinumMoves: 278, goldTime: 60 });
-    expect(thresholdRows(th, true)[2]!.tiers[1]!.text).toBe('≤ 278 & ≤ 1:15.00 · limite ≤ 1:30.00');
+    expect(thresholdRows(th, true)[2]!.tiers[1]!.text).toBe('≤ 278 & ≤ 1:22.50 · limite ≤ 2:15.13');
   } finally {
     setLang('en');
   }

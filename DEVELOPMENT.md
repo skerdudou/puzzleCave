@@ -144,6 +144,13 @@ the start-up (one reload on the menu). On the dev server the service worker is d
 
 - `goldMoves`: a "good honest" solution, chosen by the designer. Silver and bronze derive from it
   (`max(⌈1.1 g⌉, g + 2)` and `max(⌈1.25 g⌉, g + 5)`) unless `silverMoves` / `bronzeMoves` are set.
+- `goldTime`: the reference time of the gold route (seconds). The derived silver and bronze times
+  follow the resolved move thresholds, with a slower pace: silver = `max(t × (S/g) × 1.25, t + 3)`
+  and bronze = `max(t × (B/g) × 1.8, t + 6)`, where `t` = `goldTime`, `g` = `goldMoves` and `S` / `B`
+  = the silver / bronze move limits (`silverMoves` / `bronzeMoves` overrides included): a player
+  who earns silver or bronze plays more moves and plays them more slowly. Without `goldMoves`
+  the old rule applies (`t × 1.25` and `t × 1.5`, same minimum gaps). `silverTime` / `bronzeTime`
+  override them. Master mode's time limit (bronze) and grand master's time (silver) follow.
 - `platinumMoves`: the best known solution length (master class, often another route), the
   **grand master** move limit (the "platinum limit" of the tools below); `goldMoves` when it is
   absent. It must not exceed `goldMoves`.
@@ -180,9 +187,9 @@ the start-up (one reload on the menu). On the dev server the service worker is d
   medals). A platinum route is often longer to find than to play, but it must be played within
   the silver time for grand master: keep `silverTime` (or `goldTime`) above the time the platinum
   solution takes. The master row of the threshold lines (`thresholdRows`) reads "Master ≤ 610 ·
-  Grand master ≤ 538 & ≤ 1:46.25 · limit ≤ 2:07.50"; where that does not fit (`drawThresholdLine`)
+  Grand master ≤ 538 & ≤ 1:56.88 · limit ≤ 3:11.38"; where that does not fit (`drawThresholdLine`)
   it falls back to "Master ♛ ≤ 610 ✦ ≤ 538 & …", then, on a narrow phone, to the marks alone
-  ("♛ ≤ 610 ✦ ≤ 538 & ≤ 1:46.25 · limit ≤ 2:07.50"). The save keeps the best master run apart
+  ("♛ ≤ 610 ✦ ≤ 538 & ≤ 1:56.88 · limit ≤ 3:11.38"). The save keeps the best master run apart
   (`masterBestMoves`, `masterBestTimeMs`, two separate minima, maybe of different runs), shown on
   its own line (`masterLineText`) under the name of the medal saved ("Grand master: 538 moves ·
   1:40.12"), never one worked out from those minima, or of the mode without a medal ("Master
@@ -411,8 +418,8 @@ The line per level gives saved → best length, rounds, the gains of the structu
 
 Proposes `goldTime` (seconds) for each level from the shape of its saved solution (or of
 `<dir>/<id>.txt` with `--from`, e.g. the gold reference when the saved solution is the shorter
-platinum one); silver and bronze follow from it (×1.25 and ×1.5, with minimum gaps, see
-`resolveThresholds`). Without `--apply` it only prints the table (moves, turns, interactions,
+platinum one); silver and bronze follow from it and from the move thresholds (move ratio × 1.25 and × 1.8, with
+minimum gaps, see `resolveThresholds`). Without `--apply` it only prints the table (moves, turns, interactions,
 estimate, proposed and current goldTime); `--apply` writes goldTime into levels that have none,
 `--force` also replaces an existing one.
 

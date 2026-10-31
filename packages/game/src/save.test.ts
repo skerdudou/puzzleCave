@@ -457,7 +457,7 @@ test('version 1 through the store: migrated on load, written back as version 2',
 });
 
 test('version 2: a grand master earned before the silver time rule is kept', () => {
-  // best master time above the silver time (106.25 s): the medal is not taken back
+  // best master time above the silver time (116.88 s): the medal is not taken back
   const raw = JSON.stringify({
     version: 2,
     settings: {},

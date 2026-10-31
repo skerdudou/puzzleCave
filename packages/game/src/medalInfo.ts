@@ -36,7 +36,7 @@ function row(kind: ThresholdRow['kind'], tier: Tier, fmt: (v: number) => string)
  * level's chapter has master mode), a third row for master mode, a separate achievement: the
  * master move limit (gold), the grand master one (platinumMoves) and its time (the silver time),
  * then master mode's time limit (the bronze time), when the level has time medals: "≤ 610",
- * "≤ 538 & ≤ 1:46.25 · limit ≤ 2:07.50". Where the two move limits are equal (no platinumMoves)
+ * "≤ 538 & ≤ 1:56.88 · limit ≤ 3:11.38". Where the two move limits are equal (no platinumMoves)
  * and the level has no time medals, only grand master is shown: such a finish earns it.
  */
 export function thresholdRows(th: Thresholds, master = false): ThresholdRow[] {

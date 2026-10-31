@@ -34,6 +34,14 @@ export interface Award {
 export const MEDAL_RANK: Record<Medal, number> = { gold: 3, silver: 2, bronze: 1 };
 export const MASTER_RANK: Record<MasterMedal, number> = { grandMaster: 2, master: 1 };
 
+/**
+ * Pace factors of the derived time tiers: a player who earns silver or bronze in moves plays more
+ * moves (silverMoves / goldMoves, bronzeMoves / goldMoves) and plays them more slowly (hesitating,
+ * backtracking), so the time scales with the move ratio times these factors.
+ */
+const SILVER_PACE = 1.25;
+const BRONZE_PACE = 1.8;
+
 const centi = (x: number) => Math.round(x * 100) / 100;
 
 export function resolveThresholds(o: ThresholdOverrides): Thresholds {
@@ -49,10 +57,13 @@ export function resolveThresholds(o: ThresholdOverrides): Thresholds {
   }
   if (o.goldTime !== undefined) {
     const g = o.goldTime;
+    // Without goldMoves there is no move ratio: silver is g x 1.25 and bronze g x 1.5.
+    const silverFactor = t.moves ? (t.moves.silver / t.moves.gold) * SILVER_PACE : 1.25;
+    const bronzeFactor = t.moves ? (t.moves.bronze / t.moves.gold) * BRONZE_PACE : 1.5;
     t.time = {
       gold: g,
-      silver: o.silverTime ?? centi(Math.max(g * 1.25, g + 3)),
-      bronze: o.bronzeTime ?? centi(Math.max(g * 1.5, g + 6)),
+      silver: o.silverTime ?? centi(Math.max(g * silverFactor, g + 3)),
+      bronze: o.bronzeTime ?? centi(Math.max(g * bronzeFactor, g + 6)),
     };
   }
   if (o.goldMoves !== undefined) {

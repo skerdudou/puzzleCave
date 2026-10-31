@@ -62,7 +62,7 @@ test('master mode: locked before gold, no undo, water drowns, grand master', asy
   const grandMaster = level.thresholds.platinumMoves!;
   expect(rows[2]!.tiers).toEqual([
     { medal: 'master', text: `≤ ${gold}` },
-    { medal: 'grandMaster', text: `≤ ${grandMaster} & ≤ 0:13.00 · limit ≤ 0:16.00` },
+    { medal: 'grandMaster', text: `≤ ${grandMaster} & ≤ 0:13.83 · limit ≤ 0:22.60` },
   ]);
   expect(await field(page, 'masterLine')).toBe('');
   await page.keyboard.press('KeyP');
@@ -214,9 +214,10 @@ async function setHidden(page: Page, hidden: boolean): Promise<void> {
 test('master mode: a countdown to the bronze time, paused while hidden; past it the run fails', async ({
   page,
 }) => {
-  // pc-31: goldTime 10 s, so the bronze time is max(10 × 1.5, 10 + 6) = 16 s
+  // pc-31: goldTime 10 s and 47 gold moves (bronze 59 moves), so the bronze time is
+  // 10 × 59/47 × 1.8 = 22.6 s
   expect(level.thresholds.goldTime).toBe(10);
-  const LIMIT = 16_000;
+  const LIMIT = 22_600;
   await page.clock.install();
   await withMasterOpen(page);
   await page.goto('/');
@@ -249,12 +250,12 @@ test('master mode: a countdown to the bronze time, paused while hidden; past it 
   };
   await play(page, solution.slice(0, 1));
   expect(await field(page, 'moves')).toBe(1);
-  await after(11_500);
-  await left(LIMIT - 11_500 - RUN);
+  await after(16_000);
+  await left(LIMIT - 16_000 - RUN);
   expect(await field(page, 'timeWarn')).toBe(false);
-  await after(1000);
-  // the last quarter of a 16 s limit: the countdown warns
-  await left(LIMIT - 12_500 - 2 * RUN);
+  await after(2000);
+  // the last quarter of a 22.6 s limit: the countdown warns
+  await left(LIMIT - 18_000 - 2 * RUN);
   expect(await field(page, 'timeWarn')).toBe(true);
 
   // a minute in another app: not counted
@@ -263,10 +264,10 @@ test('master mode: a countdown to the bronze time, paused while hidden; past it 
   await setHidden(page, false);
   await page.clock.runFor(RUN);
   expect(await field(page, 'status')).toBe('playing');
-  await left(LIMIT - 12_500 - 3 * RUN);
+  await left(LIMIT - 18_000 - 3 * RUN);
 
   // past the limit: failed, like drowning; moves do nothing more
-  await after(3500);
+  await after(5000);
   expect(await field(page, 'status')).toBe('timeout');
   expect(await field(page, 'timeLeftMs')).toBe(0);
   await play(page, solution.slice(1, 2));
@@ -296,8 +297,8 @@ test('normal mode: no time limit, the clock does not count while hidden', async 
   expect(await field(page, 'timeLeftMs')).toBeNull();
   await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
   await play(page, solution.slice(0, 1));
-  // past pc-31's bronze time (16 s): nothing happens in normal mode
-  await page.clock.fastForward(20_000);
+  // past pc-31's bronze time (22.6 s): nothing happens in normal mode
+  await page.clock.fastForward(25_000);
   await page.clock.runFor(50);
   await setHidden(page, true);
   await page.clock.fastForward(60_000);
@@ -307,8 +308,8 @@ test('normal mode: no time limit, the clock does not count while hidden', async 
   await play(page, solution.slice(1));
   await page.clock.runFor(500);
   await expect.poll(() => field(page, 'scene')).toBe('Result');
-  // 20.1 s of play: the hidden minute is not in the time
-  expect(((await field(page, 'lastResult')) as { timeMs: number }).timeMs).toBe(20_100);
+  // 25.1 s of play: the hidden minute is not in the time
+  expect(((await field(page, 'lastResult')) as { timeMs: number }).timeMs).toBe(25_100);
   await page.clock.resume();
 });
 
@@ -369,8 +370,8 @@ test('master mode: master within gold, then grand master, which a later master r
 test('master mode: within the grand master moves but slower than the silver time, master only', async ({
   page,
 }) => {
-  // pc-31: goldTime 10 s, so the silver time (grand master) is max(10 × 1.25, 10 + 3) = 13 s and
-  // master mode's limit (the bronze time) 16 s
+  // pc-31: goldTime 10 s, and 47 gold moves, so the silver time (grand master) is
+  // 10 × 52/47 × 1.25 = 13.83 s and master mode's limit (the bronze time) 22.6 s
   expect(level.thresholds.goldTime).toBe(10);
   expect(solution.length).toBeLessThanOrEqual(level.thresholds.platinumMoves!);
   await page.clock.install();
@@ -392,8 +393,8 @@ test('master mode: within the grand master moves but slower than the silver time
   await expect.poll(() => field(page, 'scene')).toBe('Result');
   const last = (await field(page, 'lastResult')) as { mode: string; timeMs: number };
   expect(last.mode).toBe('master');
-  expect(last.timeMs).toBeGreaterThan(13_000);
-  expect(last.timeMs).toBeLessThan(16_000);
+  expect(last.timeMs).toBeGreaterThan(13_830);
+  expect(last.timeMs).toBeLessThan(22_600);
   // the moves of grand master, the time of bronze: master
   expect(await field(page, 'lastAward')).toEqual({
     moves: 'gold',

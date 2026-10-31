@@ -153,6 +153,8 @@ Default thresholds (every value can be overridden through a Tiled property):
 | Moves | `ceil(gold × 1.10)`, at least `gold + 2` | `ceil(gold × 1.25)`, at least `gold + 5` |
 | Time | `gold × 1.25`, at least `gold + 3 s` | `gold × 1.50`, at least `gold + 6 s` |
 
+(Superseded: when the level has `goldMoves`, the derived times are `gold × (silverMoves / goldMoves) × 1.25` and `gold × (bronzeMoves / goldMoves) × 1.8`, same minimum gaps; see `resolveThresholds`.)
+
 Without a gold threshold for a criterion, no medal is awarded for that criterion: only the record is
 shown. Gold is set by hand or from a test run: in **author mode** (dev build or `?dev` in the URL),
 the result screen offers "Copy Tiled properties" (moves and time of the run). The solver (phase 4)
