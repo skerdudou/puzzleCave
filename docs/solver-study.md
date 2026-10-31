@@ -2,10 +2,11 @@
 
 > **Level changes after the measurements below.** `pc-11` now has the water put back on the start tile; its former 644-move solution no longer wins. The machine searches failed on it (lower bound ≥ 112); a 340-move solution was then built by decomposing the level into sub-goals (one key or one filled water cell at a time, other blocks frozen as walls, each sub-search under 1,000 states), and `improve` shortened it to 326 (`goldMoves` 326, lower bound ≥ 100 at 50 M states). The chapters are `easy`, `medium`, `hard`.
 
-Two independent studies (Fable and Opus models), which then compared their results. Prototypes: branches `solver-study` (Fable, folder `study/`) and `solver-opus` (Opus, folder `study/`) of the repository.
+Two independent studies (Fable and Opus models), which then compared their results. Their prototypes (branches `solver-study` and `solver-opus`, folder `study/`) were not kept: what they found is recorded here, and the techniques worth having are in `packages/core` and `packages/tools`.
 
 ## Findings
 - **The v2 solver is correct** (A* over interactions, admissible and consistent bounds, complete state key): neither study found a bug. A relaxed reachability analysis shows that no level is unsolvable as encoded.
+- **Profile of the v2 solver** on pc-04 (then lbdl-199): about 70 µs per expansion, 8.3 successors per expansion; time split: `step` 29 %, state key encoding 22 %, exploration 12 %, `map` 10 %, strong bound 3 %. This is what motivated the direct expansion without `step()` and the compact keys of step 2.
 - **The bottleneck is combinatorial, not speed.** The bounds are very weak in depth (h(start)/optimum = 51/401 on pc-03), so the search behaves almost like Dijkstra; the number of states grows by ×1.18 to ×3.9 per extra move of depth. Even 1000× more capacity would not close the gap on the hard levels.
 - Levers measured to have **no notable effect**: strengthened bounds (−0.2% states on pc-06), dead-state pruning (0%), weighted A* W=5 (no solution found), key dominance (0 states pruned), seeding with the upper bound.
 - **Effective** levers:
@@ -181,7 +182,7 @@ Findings:
 
 ## GPU option done — `--gpu` (2026-10-10)
 
-Package `packages/gpu` (WebGPU, `webgpu` 0.6.2 = Dawn, loaded by dynamic import), taken from the prototype of the `gpu-study-opus` branch (`study-gpu/`) into production code. Machine: RTX 4070 12 GB (D3D12), Windows 11, Node 24; measurements made while another agent was using the CPU (`improve --all`).
+Package `packages/gpu` (WebGPU, `webgpu` 0.6.2 = Dawn, loaded by dynamic import), taken from a prototype (branch `gpu-study-opus`, folder `study-gpu/`, not kept) into production code. Machine: RTX 4070 12 GB (D3D12), Windows 11, Node 24; measurements made while another agent was using the CPU (`improve --all`).
 
 - **Same macro-state as the compact engine**: the `CompactModel` key (remaining objects, filled waters, canonical pocket keys, player), hence same states, same codec and same path reconstruction. The level tables (cell codes, bits, grid rows, lower bound) are read from a buffer: the WGSL only depends on the number of key words and its kernels are compiled once per size (~0.3 s), then ~20 ms per small level.
 - **Algorithm**: A* by f buckets (Δ = 1) with **partial expansion** (PEA*) on the card. Open states are selected by sweep, expanded per subgroup (32 threads, one grid row per thread, bit-parallel walk BFS through `subgroupShuffleUp/Down`), deduplicated insertion (linear-probing table, reservation by CAS, best cost by `atomicMin`, one parent per state). 24 micro-iterations per submission driven by the GPU (indirect dispatches), one batch in flight while the host encodes the next; frontiers that are too large go through host-driven slices. Proof of optimality and of the lower bound at the top of `packages/gpu/src/gpuSolve.ts`.
