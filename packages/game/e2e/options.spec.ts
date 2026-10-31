@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { clickScrolled } from './options';
 
 const debug = (page: Page) =>
   page.evaluate(() => (window as unknown as { __pc?: Record<string, unknown> }).__pc ?? {});
@@ -66,4 +67,29 @@ test('the drop-down list is reported open only once it answers clicks (slow fram
   const [dx, dy] = await button(page, 'lang-de');
   await page.mouse.click(dx, dy);
   await expect.poll(async () => (await debug(page)).lang).toBe('de');
+});
+
+test('graphics toggles persist', async ({ page }) => {
+  await page.goto('/');
+  await expect.poll(async () => (await debug(page)).scene).toBe('Menu');
+  await page.mouse.click(640, 360 + 56);
+  await expect.poll(async () => (await debug(page)).scene).toBe('Options');
+  const settings = () =>
+    page.evaluate(
+      () => JSON.parse(localStorage.getItem('puzzlecave.save.v1') ?? '{}').settings ?? {},
+    );
+  expect((await debug(page)).settings).toMatchObject({ torchlight: true, dust: true });
+
+  await clickScrolled(page, 'torchlight');
+  await expect.poll(async () => (await settings()).torchlight).toBe(false);
+  await expect.poll(async () => (await debug(page)).scene).toBe('Options');
+  await clickScrolled(page, 'dust');
+  await expect.poll(async () => (await settings()).dust).toBe(false);
+
+  await page.reload();
+  await expect.poll(async () => (await debug(page)).scene).toBe('Menu');
+  await page.mouse.click(640, 360 + 56);
+  await expect.poll(async () => (await debug(page)).scene).toBe('Options');
+  expect((await debug(page)).settings).toMatchObject({ torchlight: false, dust: false });
+  expect(await settings()).toMatchObject({ torchlight: false, dust: false });
 });

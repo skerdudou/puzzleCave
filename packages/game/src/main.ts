@@ -1,3 +1,4 @@
+import '@fontsource/silkscreen/400.css';
 import Phaser from 'phaser';
 import { BootScene } from './scenes/BootScene';
 import { GameScene } from './scenes/GameScene';
@@ -7,6 +8,7 @@ import { SelectScene } from './scenes/SelectScene';
 import { ResultScene } from './scenes/ResultScene';
 import { ReplayScene } from './scenes/ReplayScene';
 import { app } from './app';
+import { textBoxes, type TextBox } from './debug';
 import { startUpdates } from './pwa';
 import { initSfx } from './sfx';
 import { COLORS } from './ui';
@@ -14,6 +16,13 @@ import { COLORS } from './ui';
 const ratio = () => window.devicePixelRatio || 1;
 
 app.init();
+
+// Phaser rasterises text with whatever font exists when the Text is created: wait for the pixel
+// font (or 3 s) before creating the game
+await Promise.race([
+  document.fonts.load('16px Silkscreen').catch(() => []),
+  new Promise((resolve) => setTimeout(resolve, 3000)),
+]);
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -31,6 +40,11 @@ const game = new Phaser.Game({
 });
 startUpdates(game);
 initSfx(game);
+// for the e2e tests: the texts of the scene on top (see textBoxes)
+(window as unknown as { __pcTexts: () => TextBox[] }).__pcTexts = () => {
+  const top = game.scene.getScenes(true).at(-1);
+  return top ? textBoxes(top) : [];
+};
 
 window.addEventListener('resize', () => {
   game.scale.resize(

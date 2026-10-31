@@ -5,10 +5,12 @@ import { t } from '../i18n';
 import { levelById } from '../levels';
 import { Playback } from '../author/playback';
 import { onSceneKeyDown } from '../input/sceneKeys';
+import { chapterTint } from '../render/ambience';
+import { AmbienceView, HUD_DEPTH } from '../render/AmbienceView';
 import { BoardView } from '../render/BoardView';
 import { boardLayout, fractionalZoom } from '../render/layout';
 import { isTouchDevice } from '../touch';
-import { COLORS, makeButton, px, textStyle } from '../ui';
+import { COLORS, makeButton, placeIconBefore, px, textIcon, textStyle } from '../ui';
 
 export interface ReplaySceneData {
   levelId: string;
@@ -28,11 +30,14 @@ export class ReplayScene extends Phaser.Scene {
   private level!: LevelData;
   private session!: Session;
   private board!: BoardView;
+  private ambience!: AmbienceView;
   private playback!: Playback;
   /** number of moves currently applied to the board */
   private shown = 0;
   private hud: Phaser.GameObjects.GameObject[] = [];
   private moveText?: Phaser.GameObjects.Text;
+  private keysText?: Phaser.GameObjects.Text;
+  private keyIcon?: Phaser.GameObjects.Image;
   private speedText?: Phaser.GameObjects.Text;
   private playBtn?: Phaser.GameObjects.Text;
 
@@ -50,7 +55,15 @@ export class ReplayScene extends Phaser.Scene {
 
   create(): void {
     this.session = new Session(this.level);
-    this.board = new BoardView(this, this.session.state, this.layoutNow());
+    // the cave first: the board and the HUD go over it (a resize restarts the scene)
+    const layout = this.layoutNow();
+    this.ambience = new AmbienceView(this, {
+      levelId: this.level.id,
+      hudHeight: this.topReserve(),
+    });
+    this.ambience.layout(layout);
+    this.board = new BoardView(this, this.session.state, layout);
+    this.board.setTerrainTint(chapterTint(this.level.id));
     this.buildHud();
     const start = this.info.startIndex ?? 0;
     if (start > 0) {
@@ -68,11 +81,15 @@ export class ReplayScene extends Phaser.Scene {
         paused: !this.playback.playing,
       });
     this.scale.on('resize', onResize);
-    this.events.once('shutdown', () => this.scale.off('resize', onResize));
+    this.events.once('shutdown', () => {
+      this.scale.off('resize', onResize);
+      this.ambience.destroy();
+    });
     setDebug({ scene: 'Replay', levelId: this.level.id, replayTotal: this.info.moves.length });
   }
 
-  override update(_time: number, delta: number): void {
+  override update(time: number, delta: number): void {
+    this.ambience.update(time, this.board.heroCentre());
     const n = this.playback.tick(delta);
     if (n > 0) this.sync(this.playback.animMs());
     this.refreshHud();
@@ -85,10 +102,15 @@ export class ReplayScene extends Phaser.Scene {
       this.level.width,
       this.level.height,
       16,
-      px(64),
+      this.topReserve(),
       this.bottomReserve(),
       fractionalZoom(window.devicePixelRatio || 1),
     );
+  }
+
+  /** The title and the move counter above the board. */
+  private topReserve(): number {
+    return px(64);
   }
 
   private narrow(): boolean {
@@ -133,9 +155,12 @@ export class ReplayScene extends Phaser.Scene {
         )
         .setOrigin(0, 0),
     );
+    // "Move 3/12 · ", then the key's art and "Keys 1" (placed again as the move count grows)
     this.moveText = this.add.text(px(12), px(38), '', textStyle(14)).setOrigin(0, 0);
+    this.keysText = this.add.text(px(12), px(38), '', textStyle(14)).setOrigin(0, 0);
+    this.keyIcon = textIcon(this, 'KEY');
     this.speedText = this.add.text(w - px(12), px(38), '', textStyle(14)).setOrigin(1, 0);
-    this.hud.push(this.moveText, this.speedText);
+    this.hud.push(this.moveText, this.keyIcon, this.keysText, this.speedText);
     // the keys only: a touch screen has the buttons
     const help = this.add
       .text(w / 2, h - px(10), isTouchDevice() ? '' : t('replayHelp'), {
@@ -180,14 +205,20 @@ export class ReplayScene extends Phaser.Scene {
       if (pi >= 0 && pi < buttons.length) this.playBtn = buttons[pi];
       y += px(48);
     }
+    // above the cave's darkness, vignette and HUD band (a button's frame follows it, 1 below)
+    for (const o of this.hud) (o as Phaser.GameObjects.Text).setDepth(HUD_DEPTH);
   }
 
   private refreshHud(): void {
     const p = this.playback;
     const keys = this.session.state.keys;
-    this.moveText?.setText(
-      `${t('replayMove', { i: p.index, n: p.total })} · ${t('keys')} ${keys}${p.atEnd && p.total > 0 ? ` · ${t('replayEnd')}` : ''}`,
-    );
+    if (this.moveText && this.keysText && this.keyIcon) {
+      this.moveText.setText(`${t('replayMove', { i: p.index, n: p.total })} · `);
+      this.keysText.setText(
+        `${t('keys')} ${keys}${p.atEnd && p.total > 0 ? ` · ${t('replayEnd')}` : ''}`,
+      );
+      placeIconBefore(this.keyIcon, this.keysText, this.moveText.x + this.moveText.width);
+    }
     this.speedText?.setText(t('replaySpeed', { v: p.speed }));
     this.playBtn?.setText(p.playing ? t('pause') : t('playBtn'));
     setDebug({

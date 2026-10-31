@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import type { GameEvent, GameState, ObjKind, Pos, Terrain } from '@puzzlecave/core';
+import { mixTowards } from './ambience';
 import { wallMask, wallTexture } from './autotile';
 import type { BoardLayout } from './layout';
 
@@ -27,6 +28,8 @@ export class BoardView {
   private player!: Phaser.GameObjects.Image;
   private pending: Pending[] = [];
   private width = 0;
+  /** chapter colour of the terrain's gentle tint, kept across `rebuild` */
+  private terrainTint: number | null = null;
 
   constructor(scene: Phaser.Scene, state: GameState, layout: BoardLayout) {
     this.scene = scene;
@@ -54,6 +57,7 @@ export class BoardView {
       root.add(img);
       return img;
     });
+    this.applyTerrainTint();
     this.objects = state.objects.map((o, i) => {
       if (!o) return null;
       const img = this.scene.add
@@ -80,6 +84,21 @@ export class BoardView {
   cellCentre(p: Pos): [number, number] {
     const { x, y, scale } = this.layout;
     return [x + (p.x + 0.5) * TILE * scale, y + (p.y + 0.5) * TILE * scale];
+  }
+
+  /** Centre of the player sprite in world coordinates (device px), following its slide. */
+  heroCentre(): [number, number] {
+    const { x, y, scale } = this.layout;
+    return [x + (this.player.x + TILE / 2) * scale, y + (this.player.y + TILE / 2) * scale];
+  }
+
+  /**
+   * Multiply tint towards the chapter colour (~12 %) on the terrain only: keys, doors, blocks
+   * and the hero keep their exact colours. `null` clears it.
+   */
+  setTerrainTint(color: number | null): void {
+    this.terrainTint = color;
+    this.applyTerrainTint();
   }
 
   /** Immediately finishes all running animations (final positions). */
@@ -146,6 +165,14 @@ export class BoardView {
     this.finishAll();
     this.root?.destroy();
     this.root = null;
+  }
+
+  private applyTerrainTint(): void {
+    const c = this.terrainTint;
+    for (const img of this.terrain) {
+      if (c === null) img.clearTint();
+      else img.setTint(mixTowards(c, 0.12));
+    }
   }
 
   private at(p: Pos): number {

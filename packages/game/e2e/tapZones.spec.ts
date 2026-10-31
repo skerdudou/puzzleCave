@@ -18,7 +18,7 @@ type Pc = {
   zoneFlashPoints?: Pt[] | null;
   dpad?: Record<string, Pt> | null;
   hudButtons?: Record<string, Pt> | null;
-  hudLayout?: { name: Box; buttons: Box[]; counters: Box[] };
+  hudLayout?: { name: Box; buttons: Box[]; counters: Box[]; keyIcon?: Box };
   buttons?: Record<string, Pt>;
 };
 const debug = (page: Page): Promise<Pc> =>
@@ -127,10 +127,11 @@ async function dpadBox(page: Page): Promise<Box> {
   const y = Math.min(...ys) - 28;
   return { x, y, w: Math.max(...xs) + 28 - x, h: Math.max(...ys) + 28 - y };
 }
-/** the bottom of the header, CSS px */
+/** the bottom of the header (the key's icon included), CSS px */
 async function headerBottom(page: Page): Promise<number> {
   const l = (await debug(page)).hudLayout!;
-  return Math.max(...[l.name, ...l.buttons, ...l.counters].map((b) => b.y + b.h));
+  const boxes = [l.name, ...l.buttons, ...l.counters, ...(l.keyIcon ? [l.keyIcon] : [])];
+  return Math.max(...boxes.map((b) => b.y + b.h));
 }
 
 test('drag mode (the default): a tap in a zone moves nothing', async ({ page }) => {

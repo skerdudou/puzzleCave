@@ -25,6 +25,7 @@ import {
   COLORS,
   KeyFocus,
   TOUCH_TARGET,
+  devicePx,
   dpr,
   makeButton,
   px,
@@ -126,10 +127,11 @@ export class OptionsScene extends Phaser.Scene {
     // next label
     const touch = isTouchDevice();
     const labelGap = px(touch ? TOUCH_TARGET / 2 + 6 : 16);
-    const rowStep = px(touch ? TOUCH_TARGET / 2 + 26 : 44);
-    let y = px(50);
+    // with a mouse, a little tighter: everything fits a 1280×720 screen
+    const rowStep = px(touch ? TOUCH_TARGET / 2 + 26 : 40);
+    let y = px(touch ? 50 : 44);
     this.add.text(cx, y, t('options'), textStyle(24, COLORS.accent)).setOrigin(0.5);
-    y += px(56);
+    y += px(touch ? 56 : 48);
     const change = (fn: () => void) => {
       fn();
       app.persist();
@@ -149,15 +151,39 @@ export class OptionsScene extends Phaser.Scene {
       this.focusables.push({ id, button: b, press: fn });
       return b;
     };
-    // buttons side by side, centred on the row
-    const row = (items: [id: string, label: string, fn: () => void][]) => {
-      const bs = items.map(([id, text, fn]) => button(id, 0, y, text, fn));
-      const gap = px(12);
-      let x = cx - (bs.reduce((w, b) => w + b.width, 0) + gap * (bs.length - 1)) / 2;
-      bs.forEach((b, i) => {
-        b.setX(x + b.width / 2);
-        this.buttons[items[i]![0]] = [b.x, y];
-        x += b.width + gap;
+    // buttons side by side, centred on the row; on a narrow screen a little smaller (`sizes`, the
+    // first that fits), else one under the other as many per line as fit, at the first size
+    const gap = px(12);
+    const lineStep = px(touch ? TOUCH_TARGET + 6 : 34);
+    const row = (items: [id: string, label: string, fn: () => void][], sizes = [14]) => {
+      const room = this.scale.width - px(16);
+      // a button's width: its label and padding, at least TOUCH_TARGET on a touch screen
+      const widths = (size: number) =>
+        items.map(([, text]) => {
+          const m = this.add.text(0, 0, text, textStyle(size));
+          const w = Math.max(m.width + 2 * px(8), touch ? px(TOUCH_TARGET) : 0);
+          m.destroy();
+          return w;
+        });
+      const total = (ws: number[]) => ws.reduce((a, w) => a + w, 0) + gap * (ws.length - 1);
+      const size = sizes.find((s) => total(widths(s)) <= room) ?? sizes[0]!;
+      const ws = widths(size);
+      // the lines: as many buttons on each as fit
+      const lines: number[][] = [[]];
+      ws.forEach((w, i) => {
+        const line = lines.at(-1)!;
+        if (line.length && total([...line.map((j) => ws[j]!), w]) > room) lines.push([i]);
+        else line.push(i);
+      });
+      const bs: Phaser.GameObjects.Text[] = [];
+      lines.forEach((line, k) => {
+        if (k) y += lineStep;
+        let x = cx - total(line.map((i) => ws[i]!)) / 2;
+        for (const i of line) {
+          const [id, text, fn] = items[i]!;
+          bs[i] = button(id, x + ws[i]! / 2, y, text, fn, size);
+          x += ws[i]! + gap;
+        }
       });
       y += rowStep;
       return bs;
@@ -179,24 +205,30 @@ export class OptionsScene extends Phaser.Scene {
       y += rowStep;
     };
 
-    // the music and the sound effects, one under the other
+    // the music and the sound effects, side by side (one under the other on a narrow screen)
     label(t('sound'));
-    const onOff = (key: 'music' | 'effects', on: boolean) =>
+    const onOff = (key: 'music' | 'effects' | 'torchlight' | 'dust', on: boolean) =>
       t('labelValue', { label: t(key), value: on ? t('on') : t('off') });
-    button('sound', cx, y, onOff('music', s.sound), () =>
-      change(() => {
-        s.sound = !s.sound;
-        syncMusic(this, s.sound, 'music-menu');
-      }),
-    );
-    y += px(touch ? TOUCH_TARGET + 6 : 34);
-    button('sfx', cx, y, onOff('effects', s.sfx), () =>
-      change(() => {
-        s.sfx = !s.sfx;
-        playSfx('key', s.sfx); // a sample when turned on
-      }),
-    );
-    y += rowStep;
+    row([
+      [
+        'sound',
+        onOff('music', s.sound),
+        () =>
+          change(() => {
+            s.sound = !s.sound;
+            syncMusic(this, s.sound, 'music-menu');
+          }),
+      ],
+      [
+        'sfx',
+        onOff('effects', s.sfx),
+        () =>
+          change(() => {
+            s.sfx = !s.sfx;
+            playSfx('key', s.sfx); // a sample when turned on
+          }),
+      ],
+    ]);
 
     label(t('language'));
     const langY = y;
@@ -238,22 +270,34 @@ export class OptionsScene extends Phaser.Scene {
       y += rowStep;
     }
 
+    // graphics: the cave ambience, one switch each, laid out like music and effects
+    label(t('graphics'));
+    const graphic = (key: 'torchlight' | 'dust'): [string, string, () => void] => [
+      key,
+      onOff(key, s[key]),
+      () => change(() => (s[key] = !s[key])),
+    ];
+    row([graphic('torchlight'), graphic('dust')]);
+
     // the progress: kept in a file, brought back from one (it replaces the progress) or erased;
     // both of those ask first
     label(t('progress'));
-    const [, imp, erase] = row([
-      ['export', t('exportSave'), () => this.exportProgress()],
+    const [, imp, erase] = row(
       [
-        'import',
-        t('importSave'),
-        () => this.confirmed('import', imp!, t('importSave')) && this.importProgress(),
+        ['export', t('exportSave'), () => this.exportProgress()],
+        [
+          'import',
+          t('importSave'),
+          () => this.confirmed('import', imp!, t('importSave')) && this.importProgress(),
+        ],
+        [
+          'erase',
+          t('resetProgress'),
+          () => this.confirmed('erase', erase!, t('resetProgress')) && this.eraseProgress(),
+        ],
       ],
-      [
-        'erase',
-        t('resetProgress'),
-        () => this.confirmed('erase', erase!, t('resetProgress')) && this.eraseProgress(),
-      ],
-    ]);
+      [14, 13, 12],
+    );
 
     const back = button(
       'back',
@@ -333,7 +377,8 @@ export class OptionsScene extends Phaser.Scene {
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
       const d = this.drag;
       if (!d || d.id !== p.id || !p.isDown) return;
-      if (!this.dragged && !isDrag(p.x - d.x, p.y - d.y, px(8))) return;
+      // a finger's slop: a physical size, not grown with the interface
+      if (!this.dragged && !isDrag(p.x - d.x, p.y - d.y, devicePx(8))) return;
       this.dragged = true;
       d.samples.push({ t: now(), y: p.y });
       if (d.samples.length > 8) d.samples.shift();

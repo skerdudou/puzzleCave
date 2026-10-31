@@ -39,7 +39,7 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,png,mp3}'],
+        globPatterns: ['**/*.{js,css,html,png,mp3,woff2}'],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         // the previous version's files are deleted once the new one takes over
         cleanupOutdatedCaches: true,

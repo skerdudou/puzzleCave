@@ -1,0 +1,263 @@
+<title>Ambiance puzzleCave</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600;700&family=Silkscreen&family=IBM+Plex+Sans:wght@400;600&display=swap">
+<style>
+/* Layout : réglages en haut, puis un écran de jeu complet (décor en canvas, interface en HTML par-dessus). Look sombre unique, celui du jeu. */
+:root {
+  --bg: #1d1b26; --panel: #2c2838; --focus: #4a4360; --line: #3a3650;
+  --fg: #f2efe6; --muted: #a59fbd; --gold: #ffd25e;
+  --display: "Pixelify Sans", "Courier New", monospace;
+  --body: "IBM Plex Sans", system-ui, sans-serif;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--fg); font: 16px/1.5 var(--body); }
+main { max-width: 1100px; margin: 0 auto; padding-block: 28px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 18px; }
+h1 { font-family: var(--display); color: var(--gold); font-size: clamp(28px, 4.5vw, 40px); margin: 0; }
+p { margin: 0; max-width: 74ch; }
+.lead { color: var(--muted); }
+.controls { display: grid; gap: 10px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.row > span { color: var(--muted); font-size: 13px; min-width: 7.5em; }
+.row button { font: 600 13px var(--body); color: var(--fg); background: var(--panel); border: 2px solid var(--line);
+  padding: 5px 11px; border-radius: 3px; cursor: pointer; }
+.row button[aria-pressed="true"] { border-color: var(--gold); color: var(--gold); }
+.row button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.row.big button { font-size: 15px; padding: 7px 16px; }
+
+/* --- the mock game screen --- */
+.stage { position: relative; width: 100%; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; background: #1d1b26; }
+.stage canvas { display: block; width: 100%; height: auto; image-rendering: pixelated; }
+.hud { position: absolute; left: 2.5%; top: 3%; display: flex; flex-wrap: wrap; gap: 0 1.6em; align-items: center;
+  font-size: var(--hud); color: #f2efe6; max-width: 52%; }
+.hud span { white-space: nowrap; }
+.hud .name { color: #ffd25e; }
+.hud img { width: 1.1em; height: 1.1em; image-rendering: pixelated; vertical-align: -0.2em; margin-right: .25em; }
+.cmds { position: absolute; right: 1.5%; top: 2.5%; display: flex; gap: .5em; font-size: var(--hud); }
+.pad { position: absolute; right: 4%; top: 50%; transform: translateY(-45%); display: grid;
+  grid-template-columns: repeat(3, var(--pad)); grid-template-rows: repeat(3, var(--pad)); }
+.pad button:nth-child(1) { grid-area: 1 / 2; } .pad button:nth-child(2) { grid-area: 2 / 1; }
+.pad button:nth-child(3) { grid-area: 2 / 3; } .pad button:nth-child(4) { grid-area: 3 / 2; }
+.stage button { font: inherit; color: #f2efe6; cursor: pointer; }
+
+/* current UI: system monospace, flat panels */
+.ui-current .hud, .ui-current .cmds { font-family: ui-monospace, Consolas, monospace; }
+.ui-current .hud img { display: none; }
+.ui-current .cmds button { background: #2c2838; border: 0; padding: .55em .8em; }
+.ui-current .pad button { background: #2c2838; border: 0; font-size: calc(var(--pad) * .35); }
+
+/* pixel UI: pixel font, stepped corners, bevel */
+.ui-pixel .hud, .ui-pixel .cmds, .ui-pixel .pad { font-family: var(--uifont); }
+.ui-pixel .hud { text-shadow: 0 2px 0 #0d0c12; }
+.ui-pixel .cmds button, .ui-pixel .pad button {
+  background: #2c2838; border: 0; padding: .5em .8em;
+  clip-path: polygon(0 4px, 4px 4px, 4px 0, calc(100% - 4px) 0, calc(100% - 4px) 4px, 100% 4px, 100% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), calc(100% - 4px) 100%, 4px 100%, 4px calc(100% - 4px), 0 calc(100% - 4px));
+  box-shadow: inset 4px 4px 0 #4a4360, inset -4px -4px 0 #15131c;
+}
+.ui-pixel .cmds button:hover, .ui-pixel .pad button:hover { background: #363046; }
+.ui-pixel .cmds button:active, .ui-pixel .pad button:active { box-shadow: inset 4px 4px 0 #15131c, inset -4px -4px 0 #4a4360; }
+.ui-pixel .pad button { padding: 0; display: grid; place-items: center; }
+.ui-pixel .pad svg { width: 42%; height: 42%; fill: #f2efe6; shape-rendering: crispEdges; }
+.ui-current .pad svg { display: none; }
+.ui-pixel .pad .arrow-txt { display: none; }
+.stage button:focus-visible { outline: 2px solid #ffd25e; outline-offset: 2px; }
+
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 14px; }
+.notes div { background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: 12px 14px; display: grid; gap: 4px; }
+.notes b { font-family: var(--display); font-weight: 600; color: var(--gold); }
+.notes p { font-size: 14px; color: var(--muted); }
+</style>
+<main>
+  <h1>Ambiance puzzleCave</h1>
+  <p class="lead">Les points 3 et 4 posés sur tes textures actuelles, sans y toucher : ambiance de grotte autour et sur le plateau, puis interface en pixel art. Chaque effet s'active séparément ; « Avant » et « Après » règlent tout d'un coup. Les flèches et Annuler/Recommencer de l'écran sont factices.</p>
+  <div class="controls">
+    <div class="row big" id="preset"><span>Réglage</span><button data-v="before">Avant</button><button data-v="after">Après</button></div>
+    <div class="row" id="fx"><span>Ambiance (3)</span>
+      <button data-k="rock">Roche autour du plateau</button><button data-k="torch">Lueur du nain</button>
+      <button data-k="vignette">Vignettage</button><button data-k="dust">Poussière</button></div>
+    <div class="row" id="tint"><span>Teinte chapitre</span>
+      <button data-v="none">Aucune</button><button data-v="easy">Facile · mousse</button><button data-v="medium">Moyen · roche froide</button>
+      <button data-v="hard">Difficile · braise</button><button data-v="expert">Expert · cristal</button></div>
+    <div class="row" id="ui"><span>Interface (4)</span>
+      <button data-v="current">Actuelle</button><button data-v="Pixelify Sans">Pixel · Pixelify Sans</button><button data-v="Silkscreen">Pixel · Silkscreen</button></div>
+    <div class="row" id="lvl"><span>Niveau</span></div>
+  </div>
+
+  <div class="stage ui-current" id="stage">
+    <canvas id="cv" aria-label="Écran de jeu simulé"></canvas>
+    <div class="hud"><span>Coups 12</span><span>Temps 0:07.42</span><span id="keys"><img alt="" id="hudkey">Clés 0</span><span class="name" id="lname"></span></div>
+    <div class="cmds"><button>Annuler</button><button>Recommencer</button><button>Menu</button></div>
+    <div class="pad">
+      <button aria-label="Haut"><span class="arrow-txt">▲</span><svg viewBox="0 0 7 7"><path d="M3 1h1v1h1v1h1v1h1v1H0V4h1V3h1V2h1z"/></svg></button>
+      <button aria-label="Gauche"><span class="arrow-txt">◀</span><svg viewBox="0 0 7 7"><path d="M1 3h1V2h1V1h1V0h1v7H4V6H3V5H2V4H1z"/></svg></button>
+      <button aria-label="Droite"><span class="arrow-txt">▶</span><svg viewBox="0 0 7 7"><path d="M6 3H5V2H4V1H3V0H2v7h1V6h1V5h1V4h1z"/></svg></button>
+      <button aria-label="Bas"><span class="arrow-txt">▼</span><svg viewBox="0 0 7 7"><path d="M3 6h1V5h1V4h1V3h1V2H0v1h1v1h1v1h1z"/></svg></button>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div><b>Roche autour du plateau</b><p>Le vide sombre devient une masse rocheuse faite de tes propres pierres de mur, qui s'éteint en s'éloignant. Le plateau a l'air creusé dans la roche.</p></div>
+    <div><b>Lueur du nain</b><p>Une lumière chaude qui vacille un peu autour du perso. Sur le plateau, l'ombre reste légère : aucune case n'est jamais cachée, c'est un puzzle.</p></div>
+    <div><b>Vignettage et poussière</b><p>Bords d'écran assombris et quelques grains qui flottent. Purement décoratif, rien ne dépend des coups joués.</p></div>
+    <div><b>Teinte de chapitre</b><p>Une couleur dominante par chapitre, appliquée surtout à la roche du décor et très peu au plateau, pour que les cases gardent leurs couleurs.</p></div>
+    <div><b>Interface pixel</b><p>Police pixel, boutons à coins crantés avec relief, flèches dessinées au pixel, icône de clé dans le compteur. Mêmes emplacements qu'aujourd'hui.</p></div>
+  </div>
+</main>
+<script>
+const LEVELS = [{"id":"pc-36","name":"Drop Shaft","rows":["###########","#@........#","#..B...B..#","#....B....#","###.#.#####","#~.B..~~~E#","###########"],"chapter":"Moyen"},{"id":"pc-40","name":"Twin Channels","rows":["##############","#....~~.#.~~.#","#.BB.~~.#.~~.#","#@.B.~~...~~##","#..BB~~.##~~##","#....~~...~~E#","##############"],"chapter":"Moyen"},{"id":"pc-10","name":"Cubomatic","rows":["@..B..........#...","..B...........#.#.",".B................","###############...","..#.............##",".................#","...###########...#","#............#####",".............#~...","...#########.#E~#.","#####..#......#..D","....#.........#...",".##.#....##..##...","..#.##~###....##..","~......B.#....#...","..#......#~#####D#","..########.B......",".......~k#........"],"chapter":"Moyen"},{"id":"pc-43","name":"Gold Teeth","rows":["#################","#####.B.Ek.k#####","###DDDD###DDDD###","##..#k.k#...#..##","###DD#DD#DD#DD###","#..#k...#.B..#..#","#DDDDDDD#DDDDDDD#","#.......@.......#","#..~~~~...~~~~..#","#.~~~k~...~k~~~.#","#..~~~~.~.~~~~..#","#k..B..~~~..B...#","##.............##","###D#D#D#D#D#D###","###..B........###","####D#D#D#D#D####","#####kkkkk..#####","#################"],"chapter":"Difficile"},{"id":"pc-47","name":"No Way Down","rows":["~~~~~~~~#E#~~~~~~~~","~~~~~~~##DD#~~~~~~~","~~~~~~..,#D##~~~~~~","~~~~~#.#B.D###~~~~~","~~~~##...######~~~~","~~~~#.##,B....#~~~~","~~~~#.~~~,BBB.#~~~~","~~~~#.~k~.....#~~~~","~~~~#.~~~..####~~~~","~~~~#B..B.#,..#~~~~","~~~~#..,BD.B#.#~~~~","~~~~#######...#~~~~","~~~~#.B~...,###~~~~","~~~##...B.B.B.##~~~","~~###..###..~.###~~","~#..#~#..,#~B.D~.#~","~#..#k#.#B..B.#~,#~","~#..###...#####kk#~","~##~~~~~#,#~~~~~##~","~#~~~B~..,,.B.~~~#~","~~~~.~~B,B.B~B.~~~~","~~~~k~~~~@.~~~k~~~~"],"chapter":"Difficile"},{"id":"pc-16","name":"Thirteen Doors","rows":["@~~~~~~~~~~~~~~...",".k.k.k.k.k.k.k.k~D","DDDDDDDDDDD~DDDD#D","~k.k.k.~kk#kB.#k#D","DDDDDDDDDD#.#~#~#D","~k.k.~..B.#.#.B.#D","DDDDDDDDDD#.#~~...","~k.~B.....#.#..##~",".~########~.##.DD#","..DDDDDDDDD.~k#~DE"],"chapter":"Difficile"}];
+const CUR = {"BLOCK":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsSAAALEgHS3X78AAAAnUlEQVR42o2TUQqAMAxDdxlBUCYiCH54Ay/g/Q9SiVAIXTr9CJSueUtlFjMrSuOwGCubS43HtNu1za9QZ6DG7MYIYFAKUKYo9CVAxc5qTpEC4q2/APdZP78BZroJMADFBN7vJoCigY0487m1niYTfL0Dr1NANHAyPpMAXqH3kCQADb4xW8HNDYDXUCtw380NwMlsiEA2y79RrRNjsx6jZQqrk9DsigAAAABJRU5ErkJggg==","DOOR":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsSAAALEgHS3X78AAAAsElEQVR42qWTwQoCMQxE8zOCoOwiguDBBe9L7979/19QEpgyiWm3i4ehS9p5m6SplNf7Ay3PUtfjYXbSGITzGpcIuEwP27ifbk4a0z0AcE7YjD9HM0NwrgI4tWher2dTBukCYGIA1r8AKi4jBYzIAdDZ2IPetwPw9fRKyDJQ3zCgdZUCKg/QVhN5dn4y2NNEl8HeJqrZAPHxjJSActUrcbZb7yB7VNYDpAIAD1ZL3PgvSOWlLqNTlrcAAAAASUVORK5CYII=","EXIT":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsSAAALEgHS3X78AAAAdUlEQVR42mPwi0z5D8OGerb/7Rz9cGKYfExZBRwzIEuSgmH6GGACGqr6YIxPE0weWR3YBcR6AYZh6sEuQA4DXH7GphmGqRsGxGpGCQNSohGnF3CFAa4woV0YUJwOiEkDGF7AF4iE0gHYCzRNB7jCBGc6ICcMAJhHv1ktHwAxAAAAAElFTkSuQmCC","FLOOR":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsSAAALEgHS3X78AAAAGUlEQVR42mOwc/T7TwlmGDVg1IBRA4aLAQByu8wQ0c0dsgAAAABJRU5ErkJggg==","GRAVEL":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsSAAALEgHS3X78AAAAXklEQVR42mOwc/T7TwlmGJwG+EWmgDEyG8bHawCyYmwGYDMIpwExZRVgMRANwiQZANNkqGcLZyMbQpIByJioMEC2kWwXwAxCNoDkQARhmAFkxQJZ0UhxQho8eYEUDACVVeIaeO8J3AAAAABJRU5ErkJggg==","KEY":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsSAAALEgHS3X78AAABAklEQVR42qVSMRKCQAzkJ4IFgrXO6A+k9wFgI3yFCl+BtvoLG+EF8AQ7Dpt4GzwGhBHUIkPI7G42yWlEpCGO3oxUPhRNbF3wN9ZogcCxKHYrEc2XPyKZdMgQPElhFne64iLRaS8xrCbKB71bFIlBhRAcyFVHFaiDy52KQlAWVQB8QUDdXoVkr0PO0TF/YfKDRbUACrFrMqlJ3l7vDNLkmiDETl+YMjVILbJlWwkhn8vOICOWwZlrinj0zPYV+ubHdxFcJPnC8xc3nU677ql7zwRgFlVuynTKs8NdH3bwwQw9sI8CcNBne7RAc9vqWl8JYHEIOME7+GEE/b8R0P2vJY6JJ7J6yp8JP5MtAAAAAElFTkSuQmCC","player":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAASCAYAAABSO15qAAAACXBIWXMAAAsSAAALEgHS3X78AAAA+ElEQVR42p1SwQkCQQzcckSPAxUEka1AGxDBl/i1A23BEvwIluJPrCgy0VlyMbeIj8E1yUwmuaT9dpMCyOmwk9v1osAbMV8nIqlKfj7uij6RXoHjYiLn5aw4wBsx5EAKBdABQOE6t7KaNsIY3oghx1joAJ0AdAKB9vFGzOTjEWgdHWg7ilUFSHiPkhU2VhWYj767ejeoCQUwK5blRTyZy+0IgIwlIelFPNl+nSLAIyGZvxY2x2NTgWY4KDeAz0VYAu+A8Y6APV8QIgEr/FliuUoVGLdZAGvXO7BjsV4F+MfbtIV+FwBzKSrynWq5IvAPML4eA/Er0XJeQTsNl4PX0J8AAAAASUVORK5CYII=","WALL":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsSAAALEgHS3X78AAAAjElEQVR42q2TQQrAIAwE90WFPqCFfsB7oce+ofT3KSsoEpKo0MMedM0kmAQignTecj1vFc/UumyivdZnLMpBmy3A8ynoCw9gicAQsB8pDHYBDLRkAlgm5QX1IBjNbgHMT5ytAlZrRrP/A5jpghY/f7gL1pBVQFRFb1IRjesUINrGyM8Ava7lkbfOrf8BoVX7rZBucfcAAAAASUVORK5CYII=","WALL_E":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsSAAALEgHS3X78AAAAgElEQVR42mP4//8/g19kyv+Ysgo4BvFB2FDP9j+6HLo8A4yDLolsAD55BmQBdIxsAC55vAbYOfrh1QySZ8ClkVjMADIJZho5mIES26ljAHrUkBwGFBtAt1jAZQkDrtSGSyO6GgZ8yZWQAeCkjC3H4ctMGLkRRKBnV5giXNkZWR4A9eTxvmnV1ooAAAAASUVORK5CYII=","WALL_ES":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsSAAALEgHS3X78AAAAZElEQVR42mP4//8/g19kyv+Ysgo4BvFB2FDP9j+6HLo8A4yDLolsAD55BmQBdIxsAC55vAbYOfrh1QySZ8ClkVjMADIJZho5mIES22ljAMlhgB63ZBmAbgj9DaDICwMfjZSmRADil+eNmQRGvwAAAABJRU5ErkJggg==","WALL_N":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsSAAALEgHS3X78AAAAgUlEQVR42mPwi0z5j4ztHP2IwoZ6tmDMQKoB6OoZYsoqSLIdWTNIL9gAmCGkGADTh2IAKV5AMYDcMAAbQHEgwqKD2OhDNwTDC/hcga6OOgZgEyQlNRIdBuiWwJMyiMDnCmxyyIbgNABmCNEGwFIWcqAiG45LHmwAsiSyImyGo8sDANOe8AVv7IbwAAAAAElFTkSuQmCC","WALL_NE":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsSAAALEgHS3X78AAAAaklEQVR42mPwi0z5j4ztHP1IwgwxZRWUG4BsCMUGkGoIA3oYkGyAoZ7tfxAm1em2Dr5gzED1WCDZCwNvAN1iAZclYAPwuQKbHLIanAbAFOAzAKQXbgAsSSMHKrLhuOTBBiBLIivCZji6PAAVv+frnnYDjwAAAABJRU5ErkJggg==","WALL_NES":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsSAAALEgHS3X78AAAAT0lEQVR42mPwi0z5j4ztHP1IwgwUGxBTVkG2ZrgBMEMoNoBYQ2wdfMEYwwsDE4iGerb/QZgc/2N1AamuoNwA9EAkNSYwopEsF1BswNBOBwBsTdx+hpNDZwAAAABJRU5ErkJggg==","WALL_NS":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsSAAALEgHS3X78AAAAc0lEQVR42mPwi0z5j4ztHP2IwoZ6tmDMQKoB6OoZYsoqSLIdWTNIL9gAmCGkGADTh2IAKV5AMYDcMAAbQHEgwqKD2OhDNwTDBcQGJs50QMgAvOmAVAOwRiOxBuBMB/gMQLed5HSA7lWS0wG2ACc5HaAbAACJ8+zG1bcPDgAAAABJRU5ErkJggg==","WALL_NW":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsSAAALEgHS3X78AAAAa0lEQVR42mOwc/T7Tw421LMFYwZyDYBhkgzwi0zBwEQbgE0zxQbElFUgDLB18AVjYg0AaUYxgFQXUGwAhhdoHgtUMQBbaiQ7DOBJGVcCIZSAYIYw4FNAkgGweAVhZAWE5BnQJZEVwQzAJw8AL7LoicfBKHEAAAAASUVORK5CYII=","WALL_NWE":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsSAAALEgHS3X78AAAAU0lEQVR42mOwc/T7TwlmGDUAYYCtgy8YE9KArm4QeWEEGOAXmYKC4QagS6ArwCUPU8NASAE+eUM9W4QBMWUVcIysgJA8A7oksiKYAbjkNVT1/wMA0sHdKdFj324AAAAASUVORK5CYII=","WALL_NWES":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsSAAALEgHS3X78AAAAGUlEQVR42mOwc/T7TwlmGDVg1IBRA4aLAQByu8wQ0c0dsgAAAABJRU5ErkJggg==","WALL_NWS":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsSAAALEgHS3X78AAAAQ0lEQVR42mOwc/T7Tw421LMFYwZSNfpFpqBgigyIKasg3wCQ5oE1gGIvkB2I6IaQZcBITgfotlNkAFleQDeA4kAEYQB3rdxMTI1QcQAAAABJRU5ErkJggg==","WALL_S":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsSAAALEgHS3X78AAAAhElEQVR42qWSSwqAMAxEcyLBAyh4ge4Fl55BvH1kFi0lTmpTF7NIQ14+HVFVSfupx3UXIYbmaVGbq/OolRzYZA3w8pDYBw/ABGATsG6pWewCUMhEARgT8oq+INLbnQHoEaNThG5QK68eBrxWYOYIHZE5rAdQvjECoD4Y6T7sA3bwX06EHleq+G4/Re7EAAAAAElFTkSuQmCC","WALL_W":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsSAAALEgHS3X78AAAAg0lEQVR42mPwi0z5H1NWgYJBYiBsqGf7H588EDAwwDjoksgG4JIHYQZ0AVwGYMMgA/EaYOfoh1cz2ACQIlwKYXLY1GAYQCzG8AIlBoADkVQD0A0hyQBs4URfA9AxKJ0QbQC2RAY2AF8iwpeQYIaQnRIxDMCXG/HJM2DLrjBFuLIzsjwAf1j3adJi5ccAAAAASUVORK5CYII=","WALL_WE":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsSAAALEgHS3X78AAAAaElEQVR42mPwi0z5H1NWgYJBYiBsqGf7n5A8A4yDLolsAD55BmQBdIxsAC55vAbYOfrh1QySZwARuBTC5PBhBmIUjRowWAzAFcUM+BIRvoQEU0N2SsSZmbDlRnzyDNiyK0wRruyMLA8A0+ftemBk6KYAAAAASUVORK5CYII=","WALL_WES":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsSAAALEgHS3X78AAAAVklEQVR42mPwi0z5H1NWgYJBYiBsqGf7n5A8A4yDLolsAD55BmQBdIxsAC55sg0Aydk5+v1nABEgjE8RPsxASAHMMIoNwOUaBlyaiHE+US4YNWBEGAAAQz3cpzgF/2MAAAAASUVORK5CYII=","WALL_WS":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsSAAALEgHS3X78AAAAdUlEQVR42mPwi0z5H1NWgYJBYiBsqGf7H588EDAwwDjoksgG4JIHYQZ0AVwGYMMgA8k2AOYiBjtHv/8gjMsAmDy6GgwDiMUYXqDEAHAgkmoAuiFkGQDCoPABYfp7gWqBSFY0UpwOsCZlSgzACERbB18wJsUQAPvG7K7FlDg2AAAAAElFTkSuQmCC","WATER":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsSAAALEgHS3X78AAAAGUlEQVR42mOwdVrznxLMMGrAqAGjBgwXAwA97CofGMn0LwAAAABJRU5ErkJggg==","m_idle_0":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAcCAYAAABoMT8aAAAAAXNSR0IArs4c6QAAAUlJREFUOI1jYBgFwwAwEqtQSUnpPzL/3r17jAwMDAwsxGrcoSMGF/O48grOxmkANo3YAIYBxGrEaoCSktJ/YjXCABOy5kM+ggQ1eFx5BQ9AFAPIBRQbgJIOYN749oCVgYGBgeGlvQVWTfFTNxFOBy/tLRhEJXixym1rjmbwql36H8UA9JQmKsHLwLRyN06n79ARY/C48grVBduaoxm+MDAwMD2AaPwX7srgVbsULgcDMLF79+4xYg3Ef+GueG1HBhiBuENHjOFfuCtc7PWLz3AvIYvBAhKrC5BtF5XgxQhMZD5GLHAp/Gb49oAVwwvIrkKWwzBgunQiQybDfHhawKYJRRyb4HTpRIaF1jFYNcBcidMFfy4fZGBgYGBYfewsw3KoGHoms9vyHn9KXH3sLEqOs9ui9D/UyhhDHAMoKSn9R0+R+MQZGBgYAIoYebjQTLSRAAAAAElFTkSuQmCC","m_idle_1":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAcCAYAAABoMT8aAAAAAXNSR0IArs4c6QAAAUlJREFUOI3tUjFLw0AU/hLsImRwSAh0kZvzAwqCmQJB3DNUKJ2kq7tTf0PpWDo4FLciJeCkg5uTmY8sgo2Dg9JFSRzkwl3eXVvpJn7T3bv3fe977x7wjz8Aa9tExlglzpzzmre3LTENPABAnBXKu1GgSTRBK8AYqzYRBexdyESAMVbdnx4Yk+OsUAaodfBb7CxA9kC0scpbWkKzjbV7sAw7JDYNgd5oXgkRxYFcfRl24PqOUfzk8kp1IK8qALi+A3t2axRIAw9xVqgtLIZdfACw8x9imUR1pcWwS6pzzi3tL5RJtLa6DDKDNPBQJlEde315r1uSY73R3OxAru76DhmmfCffuH/4iVXeIi3IruQ3IjBu9zHAhCySaSbaFsbtPqZHZ1qCcGl08PV0BwC4fngEzi8AAIPniZJzfPMG4yaKM+fcai6XiMv3bwVpeOU7YsTJAAAAAElFTkSuQmCC","m_idle_2":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAcCAYAAABoMT8aAAAAAXNSR0IArs4c6QAAATJJREFUOI1jYBgFo4CBgZFYhUpKSv9h7Hv37sH1sRCrcYeOGAMDAwODx5VXKPI4DUDXiAtgNUBJSek/IY0wwESJZgwDlJSU/h/yEcSp2OPKK5QAxOoCUgHFBmCkA5g3vj1gxaoB3Rt408FLewsMsYX2DAzxUzf9hxmC4gJk21/aWzCISvDiNNyrdimqC5CTKgMDA4OoBC8D08rdOA3YoSPG4HHlFaoXtjVHM3xhYGBgegDR+C/cFW7TtuZoDNvv3bvHiDUW/oW74rUdGWCEwQ4dMYZ/4a5wsdcvPsO9hCwWP3UTbhcg2y4qwYsRmMh8jGjkUvjN8O0BK4YXkF2FLIdhwHTpRAYGaQaG+KNLcLoKGaBEY6iVMcOfywcZkj89xnAVBrgCoeCBiJ4OiAH37t1jBAAdgW1LgtMn5AAAAABJRU5ErkJggg==","m_idle_3":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAcCAYAAABoMT8aAAAAAXNSR0IArs4c6QAAAR5JREFUOI3tlDFLw0AYhp8EuxQydEgNuJSb+wMKDp0CRbpnUCj+ECd/gzgLOrh2kEKndnI380dGW0elSyV1KBdyuaSeq/RZkryX7/3ey3cEjhz5F3iuLyqldlVNRLwT18JZv2voo3QNQKNBU2EVy8C10DL4a6HGLz8sxx2nolG6RkQ8I4Gm3duyyVoArIaDeod0WiQuxqiF5bjDJmuxGg44Xbz+msRI8HJ7yRfgZ3PCKCBPYi5unoo1jdZExDO+gSZPYvzn+cHuGuMkKqV2s36XPIkL7eP9E4AwCgxtcjdtTlDuHkaBUVw1swzava1lcghrjPdn10yyR2eT2i08nF85da9N8P22APYz1sdab8sg3V+sKeh7EfHq/gHldYAfCNld3dGLxygAAAAASUVORK5CYII=","f_idle_0":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAcCAYAAABoMT8aAAAAAXNSR0IArs4c6QAAATlJREFUOI3tU7FKA0EQfSeWJ6QRLKymOGIbbI/0QmyvuMIf8BfEYn9BaysLW4Wr0lxSBey0kBQrSApRCIJprNZCZ7N7O0uOpBNfdfdu3pvZd7PAP/4AkraFRGTcd611AgDbbYVPN/uW6xYz+xw1kIQSAoO2QtGAiExbIWPLFd+fpisF3WJmA/QM1sXGBt4e8DHSvAMAmIx6oujk8nb1HkxGPezu7YjfKlXi6OzaAI0Q3SIWU1aDstozoKy2v9mboFIl3gCkWAp46yqFgNNaJ2KIetoPusYQhFip0it4f/30jsQcBxmu8m9nPe0HQobLBQaL8QfSvBMcgQ3dJqLBfDgAcGd3QRK5EEOcDwd4Oc9FAU8ZnWD8/AAAUF+PQPHDNS/Z4cXCu1DLMYnM1cGxaS5VjBcNpKIYDwDfyJN2SkSqxV0AAAAASUVORK5CYII=","f_idle_1":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAcCAYAAABoMT8aAAAAAXNSR0IArs4c6QAAAURJREFUOI3tUj1LA0EQfSeWFwhCIEWqKY7Uh+2RxkpIHcQiP0D/gqS4v2B+QAqLtAmkkDSXVAE7LUKKESSFKATBNFZnNefuza5G0omv2p2d9+ZjH/CPP4Bg10QiyuXMzAXvcFfictgAADQ7a+vdK1Am+uAUIKL8J6LgYB+yEiCi/O4y9CY3O2trgc4Ofou9BZQPZIwwqToJ5TG+9cFiFqvY4CJGtz/KRcTqwKy+mMWo1Ste8dOrGwDGDkyrAijIFGWgKLPIFGWFwawRJuk5XgCE+CKIdScpVIyZA+cv8KqlqvqgdrAcNsCrVhF7fX63RpJYtz/yd2BWr9UrapnmXX3jdv6GMKmqEcyuzDclsJm2AYyVkXw7cY6wmbbx1EucBOnS28H88R4AkH484LZ3BgA4OhlbOcfXW3idKGdmDsrmkrh5/wSDlXbjPPycDwAAAABJRU5ErkJggg==","f_idle_2":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAcCAYAAABoMT8aAAAAAXNSR0IArs4c6QAAASxJREFUOI3tUqFuAkEQfUea1BwJhgRBECMuiKrzBN8EjUDwAfQXEA3fwAfQpAKLQGGOUyR1GIKYGgSBhJAUv6jd7t7c0muwPHU3u+/Nm9kHPPAAEBS9SERKfzOz4T0VJW6mdQBAs7tzzr0CWaIPuQJEpP4iapTuIQsBIlJfb6H3crO7cxaY6+C/uFtA5ECPEbYquYTsGDdzsFrGojYZxOiPZ0qLOA7s7qtljGqt7BV/HX4CsHZgRxWAIVOUgKLEIVOUmIA5I8xHPRwAhPgl6OjORxA1Zg5yX4G3bdHVB7GDzbQO3rZN7bj/cUbStf545ndgd6/WymKZ9r94xkt6RtiqiBFsV/aZEDgtOjgtgMZ76nVlwwgQkRo+vyD9XqP3cRaufDBLzOagCJg5uAJD1WwM78384AAAAABJRU5ErkJggg==","f_idle_3":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAcCAYAAABoMT8aAAAAAXNSR0IArs4c6QAAARZJREFUOI3tlCFuw0AQRZ+rwrUUYskgaEFlHG7lBMUGBb1A7lCQM/QQoQVFJYlRpLCSKGAqVQuqRKoiJTwB0a68Xrvd0iof2X/3//njGRmuuOJfIIm9qLU+tTkRSW5jhevZ0OOLygDQa9AnbCMwiBUGBn8VWtw0X1YTFSUqKoOIJF4Ci2O9R5UDAJaLUY+FcYndGC2xmihUOWC5GJHlKfpuDoBsxk5uuaIyfoLX6QNbQDEny1N36XLmtwCXPfC+gYVsxq7Kb/A2UWt9Ws+GXtzd1wHAJbLc4/NLf4Jm9SxPPXHbLDA41vvA5CcEY/x+u0eVdbRJZwufT2VU9c4E9cc7ANPKuLW2bXUhmIJ9FpGk6x/QPAc4A6UFX+7apcexAAAAAElFTkSuQmCC"};
+const imgs = {};
+const load = (src) => { const i = new Image(); i.src = src; return i.decode().then(() => i); };
+const st = { rock: false, torch: false, vignette: false, dust: false, tint: "none", ui: "current", lvl: "pc-40" };
+const TINTS = { easy: "#4f9a5a", medium: "#4a6fa5", hard: "#c8643c", expert: "#8a6ee0" };
+const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function hash(x, y) { let h = (x * 374761393 + y * 668265263) ^ 0x5bd1e995; h = (h ^ (h >>> 13)) * 1274126177; return (h ^ (h >>> 16)) >>> 0; }
+function wallTex(rows, x, y) {
+  const w = (a, b) => b >= 0 && a >= 0 && b < rows.length && a < rows[0].length && rows[b][a] === "#";
+  const m = (w(x, y - 1) ? 1 : 0) | (w(x - 1, y) ? 2 : 0) | (w(x + 1, y) ? 4 : 0) | (w(x, y + 1) ? 8 : 0);
+  return m === 0 ? "WALL" : "WALL_" + (m & 1 ? "N" : "") + (m & 2 ? "W" : "") + (m & 4 ? "E" : "") + (m & 8 ? "S" : "");
+}
+
+// stage geometry in game pixels
+let geo, off, dust = [];
+function layout() {
+  const l = LEVELS.find((v) => v.id === st.lvl), rows = l.rows;
+  const bw = rows[0].length * 16, bh = rows.length * 16;
+  const H = Math.max(225, bh + 64), W = Math.max(Math.round(H * 16 / 9), bw + 200);
+  const bx = Math.round((W - 110 - bw) / 2), by = Math.round(32 + (H - 32 - bh) / 2);
+  let px = 0, py = 0;
+  rows.forEach((r, y) => [...r].forEach((c, x) => { if (c === "@") { px = x; py = y; } }));
+  geo = { l, rows, W, H, bw, bh, bx, by, px: bx + px * 16 + 8, py: by + py * 16 + 8 };
+  off = document.createElement("canvas"); off.width = W; off.height = H;
+  dust = Array.from({ length: 46 }, (_, i) => ({ x: (hash(i, 1) % W), y: (hash(i, 2) % H), s: 0.08 + (hash(i, 3) % 100) / 900, p: hash(i, 4) % 628 / 100 }));
+  document.getElementById("lname").textContent = l.name;
+  const cv = document.getElementById("cv");
+  const K = Math.max(1, Math.floor((cv.parentElement.clientWidth * devicePixelRatio) / W));
+  cv.width = W * K; cv.height = H * K;
+  const cssW = cv.parentElement.clientWidth, scale = cssW / W;
+  document.getElementById("stage").style.setProperty("--hud", Math.max(7, Math.round(scale * 9.5)) + "px");
+  document.getElementById("stage").style.setProperty("--pad", Math.round(scale * 26) + "px");
+}
+
+function drawRock(g) {
+  const { W, H, bx, by, bw, bh } = geo;
+  g.fillStyle = "#1d1b26"; g.fillRect(0, 0, W, H);
+  for (let y = -1; y < H / 16 + 1; y++) for (let x = -1; x < W / 16 + 1; x++) {
+    const cx = x * 16 + 8, cy = y * 16 + 8;
+    const dx = Math.max(bx - cx, 0, cx - (bx + bw)), dy = Math.max(by - cy, 0, cy - (by + bh));
+    const d = Math.hypot(dx, dy);
+    if (d < 1) continue;
+    const a = Math.max(0, 1 - d / 150) * (0.75 + (hash(x, y) % 25) / 100);
+    if (a <= 0.02) continue;
+    g.globalAlpha = a;
+    const jx = (hash(x, y) % 5) - 2, jy = (hash(y, x) % 5) - 2;
+    g.drawImage(imgs.WALL, cx - 8 + jx, cy - 8 + jy);
+    if (hash(x * 3, y) % 3 === 0) g.drawImage(imgs.WALL, cx - 8 + jx + 6, cy - 8 + jy + 7);
+  }
+  g.globalAlpha = 1;
+}
+function drawBoard(g) {
+  const { rows, bx, by } = geo;
+  rows.forEach((r, y) => [...r].forEach((ch, x) => {
+    const X = bx + x * 16, Y = by + y * 16;
+    const T = ch === "#" ? wallTex(rows, x, y) : ch === "," ? "GRAVEL" : ch === "~" ? "WATER" : ch === "E" ? "EXIT" : "FLOOR";
+    g.drawImage(imgs[T], X, Y);
+    const O = ch === "k" ? "KEY" : ch === "D" ? "DOOR" : ch === "B" ? "BLOCK" : null;
+    if (O) g.drawImage(imgs[O], X, Y);
+  }));
+}
+function tint(g, x, y, w, h, alpha) {
+  if (st.tint === "none") return;
+  g.save(); g.globalCompositeOperation = "color"; g.globalAlpha = alpha; g.fillStyle = TINTS[st.tint];
+  g.fillRect(x, y, w, h); g.restore();
+}
+
+let t0 = performance.now();
+function frame(now) {
+  const t = still ? 0 : (now - t0) / 1000;
+  const { W, H, bx, by, bw, bh, px, py } = geo, g = off.getContext("2d");
+  g.imageSmoothingEnabled = false;
+  g.globalCompositeOperation = "source-over";
+  if (st.rock) drawRock(g); else { g.fillStyle = "#1d1b26"; g.fillRect(0, 0, W, H); }
+  tint(g, 0, 0, W, H, 0.55);
+  drawBoard(g);
+  tint(g, bx, by, bw, bh, 0.12);
+  g.drawImage(imgs.player, px - 8, py - 10);
+
+  if (st.torch) {
+    const flick = still ? 0 : Math.sin(t * 9.1) * 1.5 + Math.sin(t * 23.7) * 1;
+    const R = 78 + flick;
+    const dark = document.createElement("canvas"); dark.width = W; dark.height = H;
+    const d = dark.getContext("2d");
+    d.fillStyle = "rgba(6,5,12,0.72)"; d.fillRect(0, 0, W, H);
+    d.globalCompositeOperation = "destination-out";
+    d.fillStyle = "rgba(0,0,0,0.6)"; d.fillRect(bx, by, bw, bh);           // board never darker than ~0.29
+    const gr = d.createRadialGradient(px, py, 4, px, py, R);
+    gr.addColorStop(0, "rgba(0,0,0,1)"); gr.addColorStop(1, "rgba(0,0,0,0)");
+    d.fillStyle = gr; d.fillRect(0, 0, W, H);
+    g.drawImage(dark, 0, 0);
+    g.save(); g.globalCompositeOperation = "soft-light";
+    const warm = g.createRadialGradient(px, py, 2, px, py, R * 0.9);
+    warm.addColorStop(0, "rgba(255,170,80,0.55)"); warm.addColorStop(1, "rgba(255,170,80,0)");
+    g.fillStyle = warm; g.fillRect(0, 0, W, H); g.restore();
+  }
+  if (st.dust) {
+    for (const p of dust) {
+      const x = (p.x + Math.sin(t * 0.6 + p.p) * 6 + W) % W, y = ((p.y - t * 60 * p.s) % H + H) % H;
+      const lit = st.torch ? Math.max(0.15, 1 - Math.hypot(x - px, y - py) / 110) : 0.5;
+      g.fillStyle = `rgba(220,212,235,${(0.25 + 0.5 * lit).toFixed(2)})`;
+      g.fillRect(Math.round(x), Math.round(y), 1, 1);
+    }
+  }
+  if (st.vignette) {
+    const v = g.createRadialGradient(W * 0.42, H * 0.55, Math.min(W, H) * 0.35, W * 0.42, H * 0.55, Math.max(W, H) * 0.72);
+    v.addColorStop(0, "rgba(0,0,0,0)"); v.addColorStop(1, "rgba(0,0,0,0.6)");
+    g.fillStyle = v; g.fillRect(0, 0, W, H);
+  }
+  // HUD band stays readable
+  g.fillStyle = "rgba(29,27,38,0.55)"; g.fillRect(0, 0, W, 26);
+
+  const cv = document.getElementById("cv"), c = cv.getContext("2d");
+  c.imageSmoothingEnabled = false; c.drawImage(off, 0, 0, cv.width, cv.height);
+  if (!still) requestAnimationFrame(frame);
+}
+function redraw() { if (still) frame(performance.now()); }
+
+function sync() {
+  for (const b of document.querySelectorAll("#fx button")) b.setAttribute("aria-pressed", String(st[b.dataset.k]));
+  for (const b of document.querySelectorAll("#tint button")) b.setAttribute("aria-pressed", String(b.dataset.v === st.tint));
+  for (const b of document.querySelectorAll("#ui button")) b.setAttribute("aria-pressed", String(b.dataset.v === st.ui));
+  for (const b of document.querySelectorAll("#lvl button")) b.setAttribute("aria-pressed", String(b.dataset.v === st.lvl));
+  const all = st.rock && st.torch && st.vignette && st.dust && st.tint !== "none" && st.ui !== "current";
+  const none = !st.rock && !st.torch && !st.vignette && !st.dust && st.tint === "none" && st.ui === "current";
+  for (const b of document.querySelectorAll("#preset button")) b.setAttribute("aria-pressed", String(b.dataset.v === "after" ? all : none));
+  const stage = document.getElementById("stage");
+  stage.className = "stage " + (st.ui === "current" ? "ui-current" : "ui-pixel");
+  stage.style.setProperty("--uifont", `"${st.ui}", monospace`);
+  redraw();
+}
+
+(async () => {
+  for (const [k, v] of Object.entries(CUR)) imgs[k] = await load(v);
+  document.getElementById("hudkey").src = CUR.KEY;
+  const lv = document.getElementById("lvl");
+  for (const l of LEVELS) { const b = document.createElement("button"); b.textContent = l.name; b.dataset.v = l.id; lv.append(b); }
+  document.getElementById("fx").onclick = (e) => { const k = e.target.dataset?.k; if (k) { st[k] = !st[k]; sync(); } };
+  document.getElementById("tint").onclick = (e) => { const v = e.target.dataset?.v; if (v) { st.tint = v; sync(); } };
+  document.getElementById("ui").onclick = (e) => { const v = e.target.dataset?.v; if (v) { st.ui = v; sync(); } };
+  lv.onclick = (e) => { const v = e.target.dataset?.v; if (v) { st.lvl = v; layout(); sync(); } };
+  document.getElementById("preset").onclick = (e) => {
+    const v = e.target.dataset?.v; if (!v) return;
+    const on = v === "after";
+    Object.assign(st, { rock: on, torch: on, vignette: on, dust: on, tint: on ? "medium" : "none", ui: on ? "Pixelify Sans" : "current" });
+    sync();
+  };
+  Object.assign(st, { rock: true, torch: true, vignette: true, dust: true, tint: "medium", ui: "Pixelify Sans" });
+  layout(); sync();
+  addEventListener("resize", () => { layout(); redraw(); });
+  requestAnimationFrame(frame);
+})();
+</script>

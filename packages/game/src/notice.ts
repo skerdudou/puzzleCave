@@ -1,23 +1,25 @@
 import { setDebug } from './debug';
-import { COLORS } from './ui';
+import { COLORS, FONT, uiScale } from './ui';
 
 /** A short line over the top of the play area for a few seconds; it never takes a touch. */
 export function showNotice(text: string, color: string = COLORS.text): void {
   const el = document.createElement('div');
   el.textContent = text;
   el.setAttribute('role', 'status');
+  // CSS px, grown with the interface like the canvas' texts
+  const s = (n: number) => `${Math.round(n * uiScale())}px`;
   Object.assign(el.style, {
     position: 'fixed',
-    top: 'calc(env(safe-area-inset-top, 0px) + 104px)',
+    top: `calc(env(safe-area-inset-top, 0px) + ${s(104)})`,
     left: '50%',
     transform: 'translateX(-50%)',
     maxWidth: 'calc(100vw - 32px)',
     boxSizing: 'border-box',
-    padding: '6px 12px',
-    borderRadius: '6px',
+    padding: `${s(6)} ${s(12)}`,
+    borderRadius: s(6),
     background: 'rgba(0, 0, 0, 0.75)',
     color,
-    font: '13px monospace',
+    font: `${s(13)} ${FONT}`,
     textAlign: 'center',
     pointerEvents: 'none',
     transition: 'opacity 0.5s',

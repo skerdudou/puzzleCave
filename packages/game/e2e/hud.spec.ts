@@ -6,6 +6,7 @@ type Pc = {
   levelId?: string;
   dpad?: unknown;
   hudName?: string;
+  hudIcons?: Record<string, string> | null;
   hudLayout?: { name: Box; buttons: Box[]; counters: Box[] };
 };
 const debug = (page: Page): Promise<Pc> =>
@@ -51,8 +52,21 @@ test.describe('small phone, 320 px', () => {
   });
 });
 
-test.describe('very narrow screen, 280 px', () => {
+test.describe('narrow screen, 280 px', () => {
   test.use({ viewport: { width: 280, height: 640 }, hasTouch: true, deviceScaleFactor: 2 });
+  test('Undo and Restart become icons to leave the name its room, nothing overlaps', async ({
+    page,
+  }) => {
+    const pc = await startPc01(page);
+    expect(pc.hudName).toBe('Five Lessons');
+    // the words are kept (the buttons' names)
+    expect(pc.hudIcons).toEqual({ undo: 'Undo', restart: 'Restart' });
+    checkLayout(pc, 280);
+  });
+});
+
+test.describe('very narrow screen, 220 px', () => {
+  test.use({ viewport: { width: 220, height: 640 }, hasTouch: true, deviceScaleFactor: 2 });
   test('a name too long for the room is cut with an ellipsis, nothing overlaps', async ({
     page,
   }) => {
@@ -60,7 +74,7 @@ test.describe('very narrow screen, 280 px', () => {
     expect(pc.hudName).toMatch(/…$/);
     expect('Five Lessons'.startsWith(pc.hudName!.slice(0, -1))).toBe(true);
     expect(pc.hudName!.length).toBeGreaterThan(1);
-    checkLayout(pc, 280);
+    checkLayout(pc, 220);
   });
 });
 

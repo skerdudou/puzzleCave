@@ -4,7 +4,7 @@ import { setDebug } from '../debug';
 import { t } from '../i18n';
 import { onSceneKeyDown } from '../input/sceneKeys';
 import { syncMusic } from '../music';
-import { COLORS, KeyFocus, makeButton, px, textStyle } from '../ui';
+import { COLORS, KeyFocus, dpr, makeButton, px, textStyle } from '../ui';
 
 export class MenuScene extends Phaser.Scene {
   constructor() {
@@ -16,14 +16,15 @@ export class MenuScene extends Phaser.Scene {
     this.add.text(cx, cy - px(90), 'puzzleCave', textStyle(36, COLORS.accent)).setOrigin(0.5);
     const play = () => this.scene.start('Select');
     const options = () => this.scene.start('Options');
-    const focus = new KeyFocus([
+    const items = [
       { id: 'play', button: makeButton(this, cx, cy, t('play'), play, 20), press: play },
       {
         id: 'options',
         button: makeButton(this, cx, cy + px(56), t('options'), options, 16),
         press: options,
       },
-    ]);
+    ];
+    const focus = new KeyFocus(items);
     // arrows or Tab, then Enter; Enter alone plays
     onSceneKeyDown(this, (e) => {
       if (focus.key(e)) return;
@@ -33,6 +34,10 @@ export class MenuScene extends Phaser.Scene {
     this.scale.on('resize', onResize);
     this.events.once('shutdown', () => this.scale.off('resize', onResize));
     syncMusic(this, app.data.settings.sound, 'music-menu');
-    setDebug({ scene: 'Menu' });
+    // button centres in CSS pixels, for the e2e tests
+    const buttons = Object.fromEntries(
+      items.map(({ id, button: b }) => [id, [b.x / dpr(), b.y / dpr()]]),
+    );
+    setDebug({ scene: 'Menu', buttons });
   }
 }

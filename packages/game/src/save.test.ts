@@ -97,6 +97,8 @@ test('invalid settings replaced by defaults', () => {
     repeatRate: 10,
     vibration: true,
     touchControl: 'drag',
+    torchlight: true,
+    dust: true,
   });
 });
 
@@ -117,6 +119,8 @@ test('a save from before the drag, vibration and touch control options: defaults
     repeatRate: 12,
     vibration: true,
     touchControl: 'drag',
+    torchlight: true,
+    dust: true,
   });
 });
 
@@ -454,4 +458,17 @@ test('version 2: an invalid master medal is dropped', () => {
     levels: { a: { completed: true, medals: { master: 'platinum', platinum: true } } },
   });
   expect(parseSave(raw).levels.a!.medals).toEqual({});
+});
+
+test('graphics switches: on by default, a saved value is kept, an invalid one falls back', () => {
+  expect(defaultSave().settings.torchlight).toBe(true);
+  expect(defaultSave().settings.dust).toBe(true);
+  const load = (settings: object) =>
+    parseSave(JSON.stringify({ version: 2, settings, levels: {} })).settings;
+  const missing = load({});
+  expect([missing.torchlight, missing.dust]).toEqual([true, true]);
+  const off = load({ torchlight: false, dust: false });
+  expect([off.torchlight, off.dust]).toEqual([false, false]);
+  const bad = load({ torchlight: 'x', dust: 0 });
+  expect([bad.torchlight, bad.dust]).toEqual([true, true]);
 });

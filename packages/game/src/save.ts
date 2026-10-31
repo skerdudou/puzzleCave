@@ -27,6 +27,10 @@ export interface Settings {
   repeatRate: number;
   /** touch control: continuous drag (default) or tap zones; the d-pad works with both */
   touchControl: TouchControl;
+  /** cave ambience: the torch's light around the player */
+  torchlight: boolean;
+  /** cave ambience: drifting dust motes */
+  dust: boolean;
 }
 export interface SaveData {
   version: 2;
@@ -195,6 +199,8 @@ export function defaultSave(): SaveData {
       repeatRate: 10,
       vibration: true,
       touchControl: 'drag',
+      torchlight: true,
+      dust: true,
     },
     levels: {},
   };
@@ -237,6 +243,8 @@ function sanitiseSettings(raw: unknown): Settings {
     repeatRate: clampNumber(s.repeatRate, 4, 20, d.repeatRate),
     vibration: typeof s.vibration === 'boolean' ? s.vibration : d.vibration,
     touchControl: touchControlOf(s),
+    torchlight: typeof s.torchlight === 'boolean' ? s.torchlight : d.torchlight,
+    dust: typeof s.dust === 'boolean' ? s.dust : d.dust,
   };
 }
 

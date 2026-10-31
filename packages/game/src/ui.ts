@@ -2,9 +2,32 @@ import Phaser from 'phaser';
 import type { MedalKind } from './medalInfo';
 import { FocusList, focusKey } from './input/focusList';
 import { isTouchDevice } from './touch';
+import { steppedFrame } from './render/frame';
 
+/** The pixel font (bundled, see main.ts); monospace while it loads or if it is missing. */
+export const FONT = 'Silkscreen, monospace';
+
+/** Device pixels per CSS pixel: converts between the two (hit boxes, debug coordinates). */
 export const dpr = (): number => window.devicePixelRatio || 1;
-export const px = (n: number): number => Math.round(n * dpr());
+
+/**
+ * How much bigger than its base the interface is drawn on a screen of `cssW×cssH` CSS px: 1 up
+ * to 1280×720 (phones, small windows), then with the screen (1920×1080: 1.5, 2560×1440: 2), by
+ * the smaller of the two ratios so that the 1280×720 layout always fits.
+ */
+export function uiScaleFor(cssW: number, cssH: number): number {
+  const s = Math.min(cssW / 1280, cssH / 720);
+  return s > 1 ? s : 1;
+}
+export const uiScale = (): number => uiScaleFor(window.innerWidth, window.innerHeight);
+
+/** An interface size (text, padding, margin, HUD…), `n` base px, in device px. */
+export const px = (n: number): number => Math.round(n * dpr() * uiScale());
+/**
+ * A physical size, `n` CSS px, in device px, not grown with the interface (a finger's drag
+ * threshold).
+ */
+export const devicePx = (n: number): number => Math.round(n * dpr());
 
 export const COLORS = {
   bg: 0x1d1b26,
@@ -28,7 +51,73 @@ export function textStyle(
   size: number,
   color: string = COLORS.text,
 ): Phaser.Types.GameObjects.Text.TextStyle {
-  return { fontFamily: 'monospace', fontSize: `${px(size)}px`, color };
+  return { fontFamily: FONT, fontSize: `${px(size)}px`, color };
+}
+
+/**
+ * Lowers a text's size, from `size` (CSS px, the one it was made with) down to `min` at most,
+ * until it is no wider than `maxWidth` (device px): long words in some languages, a narrow
+ * phone.
+ */
+export function shrinkToFit(
+  text: Phaser.GameObjects.Text,
+  size: number,
+  maxWidth: number,
+  min = 10,
+): Phaser.GameObjects.Text {
+  while (text.width > maxWidth && size > min) text.setFontSize(`${px(--size)}px`);
+  return text;
+}
+
+/**
+ * Zoom of a 16×16 art drawn 16 base px tall, `scale` device px per base px (dpr × uiScale): the
+ * nearest whole one (crisp pixels), at least 1. The icon keeps the same size beside a text on
+ * every screen, as the text grows with the interface.
+ */
+export const iconZoom = (scale: number): number => Math.max(1, Math.round(scale));
+
+const capHeights = new Map<string, number>();
+/** Height of the capitals of a CSS font (`"28px Silkscreen, monospace"`), px, measured once. */
+function capHeight(font: string): number {
+  let h = capHeights.get(font);
+  if (h === undefined) {
+    const ctx = document.createElement('canvas').getContext('2d');
+    if (ctx) ctx.font = font;
+    const m = ctx?.measureText('K');
+    h = m ? m.actualBoundingBoxAscent : parseInt(font, 10) * 0.7;
+    capHeights.set(font, h);
+  }
+  return h;
+}
+
+/**
+ * A 16×16 art (`key`, a loaded texture) as an icon beside a text of `size` (textStyle's): 16
+ * base px beside the HUD's 14, crisp; smaller with a text shrunk to fit a narrow phone.
+ */
+export function textIcon(scene: Phaser.Scene, key: string, size = 14): Phaser.GameObjects.Image {
+  return scene.add
+    .image(0, 0, key)
+    .setOrigin(0)
+    .setScale(iconZoom((dpr() * uiScale() * size) / 14));
+}
+
+/**
+ * Puts `icon` at `x` and `text` (origin x 0) right after it, the icon vertically centred on the
+ * text's capitals, on whole pixels.
+ */
+export function placeIconBefore(
+  icon: Phaser.GameObjects.Image,
+  text: Phaser.GameObjects.Text,
+  x: number,
+  gap = px(4),
+): void {
+  const left = Math.round(x);
+  icon.setX(left);
+  text.setX(left + icon.displayWidth + gap);
+  const top = text.y - text.displayHeight * text.originY + (text.padding.top ?? 0);
+  const baseline = top + text.getTextMetrics().ascent;
+  const cap = capHeight(`${text.style.fontSize} ${FONT}`);
+  icon.setY(Math.round(baseline - cap / 2 - icon.displayHeight / 2));
 }
 
 /**
@@ -52,7 +141,6 @@ export function makeButton(
   const b = scene.add
     .text(x, y, label, {
       ...textStyle(size),
-      backgroundColor: COLORS.panel,
       padding: { x: px(8), y: px(4) },
     })
     .setOrigin(0.5);
@@ -62,6 +150,7 @@ export function makeButton(
     const padY = px(4) + Math.max(0, Math.ceil((min - b.height) / 2));
     b.setPadding(padX, padY, padX, padY);
   }
+  attachFrame(b);
   b.setInteractive({ useHandCursor: true });
   b.on('pointerover', () => b.setColor(COLORS.accent));
   b.on('pointerout', () => b.setColor(b.getData('focused') ? COLORS.accent : COLORS.text));
@@ -73,7 +162,76 @@ export function makeButton(
 export function setButtonFocus(b: Phaser.GameObjects.Text, on: boolean): void {
   b.setData('focused', on);
   b.setColor(on ? COLORS.accent : COLORS.text);
-  b.setBackgroundColor(on ? COLORS.focus : COLORS.panel);
+  // the frame behind the button (see attachFrame) reads 'focused' on its next sync
+}
+
+/** A CSS colour string as a Phaser number. */
+export const hex = (css: string): number => Phaser.Display.Color.HexStringToColor(css).color;
+const FRAME_DARK = 0x15131c;
+const FRAME_LIGHT_FOCUS = '#6a6084';
+
+/**
+ * Draws a stepped, bevelled button frame of `w×h` at the Graphics' origin. Focus lights the
+ * fill and the top-left edge but keeps the bevel visible.
+ */
+export function paintFrame(
+  g: Phaser.GameObjects.Graphics,
+  w: number,
+  h: number,
+  pressed: boolean,
+  focused = false,
+): void {
+  g.clear();
+  const light = hex(focused ? FRAME_LIGHT_FOCUS : COLORS.focus);
+  const fill = hex(focused ? COLORS.focus : COLORS.panel);
+  for (const r of steppedFrame(w, h, px(2), pressed)) {
+    const color = r.tone === 'dark' ? FRAME_DARK : r.tone === 'light' ? light : fill;
+    g.fillStyle(color, 1).fillRect(r.x, r.y, r.w, r.h);
+  }
+}
+
+/**
+ * The stepped, bevelled frame behind a button's Text: a Graphics that follows the Text (box,
+ * visibility, alpha, depth, scroll factor) on each PRE_RENDER, so that scenes keep moving,
+ * re-padding, hiding and destroying the Text alone. Pressed while the pointer holds it.
+ */
+function attachFrame(b: Phaser.GameObjects.Text): void {
+  const scene = b.scene;
+  const g = scene.add.graphics();
+  let pressed = false;
+  let drawn = '';
+  const sync = () => {
+    const bounds = b.getBounds();
+    const w = Math.round(bounds.width);
+    const h = Math.round(bounds.height);
+    const focused = !!b.getData('focused');
+    g.setPosition(Math.round(bounds.x), Math.round(bounds.y))
+      .setVisible(b.visible)
+      .setAlpha(b.alpha)
+      .setDepth(b.depth - 1)
+      .setScrollFactor(b.scrollFactorX, b.scrollFactorY);
+    const key = `${w}x${h}${pressed}${focused}`;
+    if (key === drawn) return;
+    drawn = key;
+    paintFrame(g, w, h, pressed, focused);
+  };
+  sync();
+  scene.events.on(Phaser.Scenes.Events.PRE_RENDER, sync);
+  b.on('pointerdown', () => (pressed = true));
+  b.on('pointerup', () => (pressed = false));
+  b.on('pointerout', () => (pressed = false));
+  // Gone with the Text: destroyed, taken off the display list (a scene that clears its children
+  // without destroying them), or the scene shutting down.
+  const cleanup = () => {
+    scene.events.off(Phaser.Scenes.Events.PRE_RENDER, sync);
+    scene.events.off(Phaser.Scenes.Events.SHUTDOWN, cleanup);
+    b.off(Phaser.GameObjects.Events.DESTROY, cleanup);
+    b.off(Phaser.GameObjects.Events.REMOVED_FROM_SCENE, cleanup);
+    g.destroy();
+  };
+  b.once(Phaser.GameObjects.Events.DESTROY, cleanup);
+  b.once(Phaser.GameObjects.Events.REMOVED_FROM_SCENE, cleanup);
+  scene.events.once(Phaser.Scenes.Events.SHUTDOWN, cleanup);
 }
 
 export interface Focusable {

@@ -8,3 +8,6 @@
 
 - Sound effects: synthesised in the game by ZzFX — Frank Force, MIT license
   (https://github.com/KilledByAPixel/ZzFX).
+
+- Font: Silkscreen — Jason Kottke, SIL Open Font License 1.1
+  (https://fonts.google.com/specimen/Silkscreen, bundled via @fontsource/silkscreen).

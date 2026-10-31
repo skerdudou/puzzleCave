@@ -125,7 +125,9 @@ test.describe('phone in landscape', () => {
   test('after scrolling, Vibration and Back answer a tap', async ({ page }) => {
     await openOptions(page);
     const f = await Finger.on(page);
-    // two drags (one finger's travel is less than the whole height to scroll)
+    // a few drags (one finger's travel is less than the whole height to scroll)
+    await dragFrom(page, 600, 300, -250);
+    await restingScroll(page);
     await dragFrom(page, 600, 300, -250);
     await restingScroll(page);
     await dragFrom(page, 600, 300, -250);
@@ -218,10 +220,10 @@ test.describe('phone in landscape', () => {
     await page.setViewportSize({ width: 740, height: 400 });
     await expect.poll(async () => (await debug(page)).maxScrollY).toBe(max - 40);
     expect((await debug(page)).scrollY).toBe(max - 40);
-    // portrait: much less to scroll (the sound and progress rows go a little past the screen),
-    // the offset clamped to it; End shows Back
+    // portrait: much less to scroll (a few rows still go past the screen), the offset clamped
+    // to it; End shows Back
     await page.setViewportSize({ width: 360, height: 740 });
-    await expect.poll(async () => (await debug(page)).maxScrollY).toBeLessThan(160);
+    await expect.poll(async () => (await debug(page)).maxScrollY).toBeLessThan(max - 300);
     const portraitMax = (await debug(page)).maxScrollY!;
     expect((await debug(page)).scrollY).toBe(portraitMax);
     expect((await button(page, 'back'))[1]).toBeLessThan(740);

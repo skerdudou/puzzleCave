@@ -98,9 +98,14 @@ export class SelectScene extends Phaser.Scene {
   }
 
   private redraw(): void {
-    this.children.removeAll(true);
+    // destroyed, not just removed: a button's frame and its listeners go with it
+    for (const child of [...this.children.list]) child.destroy();
     this.draw();
-    setDebug({ chapter: chapters[this.ci]?.id, levelId: this.currentId() });
+    setDebug({
+      chapter: chapters[this.ci]?.id,
+      levelId: this.currentId(),
+      prerenderListeners: this.events.listenerCount(Phaser.Scenes.Events.PRE_RENDER),
+    });
   }
 
   private draw(): void {
@@ -255,17 +260,33 @@ export class SelectScene extends Phaser.Scene {
     y += px(40);
     if (this.levelOpen(this.ci, this.li)) {
       const open = master === 'open';
-      makeButton(this, open ? icx - px(80) : icx, y, t('play'), () => this.play('normal'), 16);
-      if (open) makeButton(this, icx + px(80), y, t('master'), () => this.play('master'), 14);
-      else if (master === 'locked') {
+      const row = [
+        makeButton(this, open ? icx - px(80) : icx, y, t('play'), () => this.play('normal'), 16),
+      ];
+      if (open)
+        row.push(makeButton(this, icx + px(80), y, t('master'), () => this.play('master'), 14));
+      const rowY = y;
+      let bottom = row[0]!.getBounds().bottom;
+      if (master === 'locked') {
         y += px(36);
-        this.add
+        const locked = this.add
           .text(icx, y, `🔒 ${t('masterLocked')}`, {
             ...textStyle(11, COLORS.dim),
             align: 'center',
             wordWrap: { width: infoW - px(32) },
           })
           .setOrigin(0.5);
+        bottom = Math.max(bottom, locked.getBounds().bottom);
+      }
+      // a short screen (small phone): Menu would sit on Play or under the master line, it joins
+      // the Play row on the left
+      if (bottom + px(4) > menu.getBounds().top) {
+        const gap = px(12);
+        let x = icx - ([menu, ...row].reduce((w, b) => w + b.width, 0) + gap * row.length) / 2;
+        for (const b of [menu, ...row]) {
+          b.setPosition(x + b.width / 2, rowY);
+          x += b.width + gap;
+        }
       }
     }
     if (authorServerAvailable()) {

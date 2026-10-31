@@ -18,7 +18,9 @@ import { InputController, type Action } from '../input/InputController';
 import { directionLabels } from '../input/keyboardLabels';
 import { hasMaster, levelById } from '../levels';
 import { syncMusic } from '../music';
+import { chapterTint } from '../render/ambience';
 import { AnimClock } from '../render/animTiming';
+import { AmbienceView, HUD_DEPTH } from '../render/AmbienceView';
 import { BoardView } from '../render/BoardView';
 import { boardLayout, fractionalZoom, type BoardLayout } from '../render/layout';
 import { HapticFeed, vibrate } from '../haptics';
@@ -29,13 +31,27 @@ import { RunClock, countdown } from '../runClock';
 import { showNotice } from '../notice';
 import { SfxFeed, playSfx, type Sfx } from '../sfx';
 import { dpadLayout, dpadLayoutSide, isLandscape, isTouchDevice } from '../touch';
-import { COLORS, dpr, makeButton, px, textStyle } from '../ui';
+import { arrowPixels, iconPixels } from '../render/frame';
+import {
+  COLORS,
+  dpr,
+  hex,
+  paintFrame,
+  makeButton,
+  placeIconBefore,
+  px,
+  textIcon,
+  textStyle,
+  uiScale,
+} from '../ui';
 
 /** D-pad buttons on a touch screen, CSS px per side (above the 44 px minimum: the main control). */
 const DPAD = 56;
 /** Master mode colour, and the countdown's warning colour. */
 const MASTER_COLOR = '#9be7ff';
 const WARN_COLOR = '#ff6b5e';
+/** The keys' counter, 3rd in the HUD: the key's art goes before it. */
+const KEYS_COUNTER = 2;
 
 /** The sound button: on while the music or the effects play, off when both are off. */
 function muteIcon(): string {
@@ -53,6 +69,7 @@ export class GameScene extends Phaser.Scene {
   protected mode: Mode = 'normal';
   protected session!: Session;
   protected board!: BoardView;
+  private ambience!: AmbienceView;
   protected hud: Phaser.GameObjects.GameObject[] = [];
   private controls!: InputController;
   /** hold to repeat on the on-screen d-pad */
@@ -111,7 +128,16 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.board = new BoardView(this, this.session.state, this.computeLayout());
+    // the cave first: the board and the HUD go over it
+    const layout = this.computeLayout();
+    this.ambience = new AmbienceView(this, {
+      levelId: this.level.id,
+      hudHeight: this.topReserve(),
+    });
+    this.ambience.layout(layout);
+    this.board = new BoardView(this, this.session.state, layout);
+    this.board.setTerrainTint(chapterTint(this.level.id));
+    this.showLayout(layout);
     this.hold = new HoldRepeat(
       (dir) => this.handle({ type: 'move', dir }),
       () => app.data.settings.repeatRate,
@@ -185,12 +211,18 @@ export class GameScene extends Phaser.Scene {
     this.input.on('pointerup', release);
     this.input.on('pointerupoutside', release);
     const onResize = () => {
-      this.board.setLayout(this.computeLayout());
+      const next = this.computeLayout();
+      this.ambience.layout(next, this.topReserve());
+      this.board.setLayout(next);
+      this.showLayout(next);
       this.buildHud();
       if (this.rulesNote) {
         this.rulesNote.destroy();
         this.showRules();
       }
+      // the failed run's message too: centred, its size following the interface's
+      const failed = this.overlay?.getData('message') as string | undefined;
+      if (failed !== undefined) this.showFailed(failed);
     };
     if (this.mode === 'master') this.showRules();
     this.scale.on('resize', onResize);
@@ -210,6 +242,7 @@ export class GameScene extends Phaser.Scene {
       this.hold.reset();
       this.drags.clear();
       this.zoneHeld = null;
+      this.ambience.destroy();
     });
     syncMusic(this, app.data.settings.sound, 'music-game');
     setDebug({
@@ -220,12 +253,18 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  override update(): void {
+  override update(time: number): void {
+    this.ambience.update(time, this.board.heroCentre());
     if (this.session.state.status !== 'playing' || this.finished || this.timedOut) return;
     if (!this.clock.started) return;
     const now = performance.now();
     if (this.checkTimeLimit(now)) return;
     this.showTime(now);
+  }
+
+  /** For the e2e tests: the board's place and zoom, and the screen it was laid out for. */
+  private showLayout(layout: BoardLayout): void {
+    setDebug({ boardLayout: { ...layout, viewW: this.scale.width, viewH: this.scale.height } });
   }
 
   /** The clock (elapsed time, or master mode's countdown) in the HUD. */
@@ -320,20 +359,7 @@ export class GameScene extends Phaser.Scene {
     ];
     // master mode: no undo, so no button for it
     if (this.session.canUndo) buttons.push([t('undo'), { type: 'undo' }]);
-    let x = w - px(8);
     const hudButtons: Record<string, [number, number]> = {};
-    const buttonBoxes: Box[] = [];
-    for (const [label, action] of buttons) {
-      // a drag (or a press on a tap zone) that ends on a button is not a click on it
-      const click = () => {
-        if (!this.dragMoved && !this.zonePress) this.handle(action);
-      };
-      const b = makeButton(this, x, y, label, click, 13).setOrigin(1, 0.5);
-      hudButtons[action.type] = [(x - b.width / 2) / dpr(), y / dpr()];
-      buttonBoxes.push(css(b.getBounds()));
-      x -= b.width + px(6);
-      this.hud.push(b);
-    }
     // sound on/off, like M: in the header with a keyboard; on a touch screen (no M key) by the
     // d-pad, so that the header keeps its room for the level's name
     const touch = isTouchDevice();
@@ -349,18 +375,9 @@ export class GameScene extends Phaser.Scene {
         16,
       ).setOrigin(originX, 0.5);
       hudButtons.mute = [b.getBounds().centerX / dpr(), my / dpr()];
-      this.hud.push(b);
       this.muteButton = b;
       return b;
     };
-    if (!touch) {
-      const mute = muteAt(x, y, 1);
-      buttonBoxes.push(css(mute.getBounds()));
-      x -= mute.width + px(6);
-    }
-    const buttonsLeft = x + px(6);
-    // counters, one after the other, each wide enough for its longest value (nothing jumps);
-    // a smaller font where the words are too long for the screen (some languages)
     const timeLabel = this.timeLimitMs === undefined ? t('time') : t('timeLeft');
     const counterTexts: [string, string][] = [
       [`${t('moves')} 999`, COLORS.text],
@@ -368,27 +385,104 @@ export class GameScene extends Phaser.Scene {
       [`${t('keys')} -9`, COLORS.text],
     ];
     if (this.mode === 'master' && !narrow) counterTexts.push([t('masterMode'), MASTER_COLOR]);
-    const counterRoom = (narrow ? w : buttonsLeft) - px(12);
-    let counters: Phaser.GameObjects.Text[] = [];
-    for (let size = 14; size >= 9; size--) {
-      for (const c of counters) c.destroy();
-      const gap = px(size);
-      let cx = px(12);
-      counters = counterTexts.map(([text, color]) => {
-        const txt = this.add.text(cx, sy, text, textStyle(size, color)).setOrigin(0, 0.5);
-        cx += txt.width + gap;
-        return txt;
-      });
-      if (cx - gap <= counterRoom) break;
-    }
-    this.hud.push(...counters);
+
+    /**
+     * The header's row with Undo and Restart as words, or (`icons`) as pixel icons; the level's
+     * name whole in the room left, or null (everything made then destroyed). `last`: the name is
+     * cut with "…" rather than not shown.
+     */
+    const headerRow = (icons: boolean, last: boolean) => {
+      const made: Phaser.GameObjects.GameObject[] = [];
+      const buttonBoxes: Box[] = [];
+      let x = w - px(8);
+      let rowH = px(30);
+      for (const [label, action] of buttons) {
+        // a drag (or a press on a tap zone) that ends on a button is not a click on it
+        const click = () => {
+          if (!this.dragMoved && !this.zonePress) this.handle(action);
+        };
+        const icon = icons && (action.type === 'undo' || action.type === 'restart');
+        const b = makeButton(this, x, y, icon ? ' ' : label, click, 13).setOrigin(1, 0.5);
+        made.push(b);
+        if (icon) made.push(this.iconOn(b, action.type as 'undo' | 'restart', label));
+        hudButtons[action.type] = [(x - b.width / 2) / dpr(), y / dpr()];
+        buttonBoxes.push(css(b.getBounds()));
+        rowH = Math.max(rowH, b.height);
+        x -= b.width + px(6);
+      }
+      if (!touch) {
+        const mute = muteAt(x, y, 1);
+        made.push(mute);
+        buttonBoxes.push(css(mute.getBounds()));
+        x -= mute.width + px(6);
+      }
+      const buttonsLeft = x + px(6);
+      // counters, one after the other, each wide enough for its longest value (nothing jumps);
+      // a smaller font where the words are too long for the screen (some languages)
+      const counterRoom = (narrow ? w : buttonsLeft) - px(12);
+      // the keys' counter shows the key's art before its word
+      let counters: Phaser.GameObjects.Text[] = [];
+      let keyIcon: Phaser.GameObjects.Image | undefined;
+      for (let size = 14; size >= 9; size--) {
+        for (const c of counters) c.destroy();
+        keyIcon?.destroy();
+        const gap = px(size);
+        let cx = px(12);
+        counters = [];
+        for (const [i, [text, color]] of counterTexts.entries()) {
+          const txt = this.add.text(cx, sy, text, textStyle(size, color)).setOrigin(0, 0.5);
+          if (i === KEYS_COUNTER) {
+            keyIcon = textIcon(this, 'KEY', size);
+            placeIconBefore(keyIcon, txt, cx);
+          }
+          cx = txt.x + txt.width + gap;
+          counters.push(txt);
+        }
+        if (cx - gap <= counterRoom) break;
+      }
+      made.push(...counters);
+      if (keyIcon) made.push(keyIcon);
+      const end = counters.at(-1)!.x + counters.at(-1)!.width;
+      // the level's name, on the buttons' row in the room they leave: the largest size that
+      // shows it whole, on one line or wrapped on two no taller than the buttons
+      const nameX = narrow ? px(12) : end + px(24);
+      const room = buttonsLeft - px(10) - nameX;
+      let name: Phaser.GameObjects.Text | null = null;
+      for (let size = 13; size >= 10 && !name; size--) {
+        const txt = this.add
+          .text(nameX, y, this.level.name, textStyle(size, COLORS.accent))
+          .setOrigin(0, 0.5);
+        if (txt.width > room && room > 0) txt.setWordWrapWidth(room);
+        const wrapped = txt.getWrappedText().length;
+        if (txt.width <= room && wrapped <= 2 && txt.height <= rowH) name = txt;
+        else txt.destroy();
+      }
+      if (!name && last) {
+        name = this.add.text(nameX, y, '', textStyle(10, COLORS.accent)).setOrigin(0, 0.5);
+        const cut = name;
+        cut.setText(ellipsize(this.level.name, (s) => cut.setText(s).width <= room));
+      }
+      if (!name) {
+        for (const o of made) o.destroy();
+        return null;
+      }
+      made.push(name);
+      const iconWords = icons
+        ? Object.fromEntries(
+            buttons.filter(([, a]) => a.type !== 'menu').map(([label, a]) => [a.type, label]),
+          )
+        : null;
+      return { made, name, counters, keyIcon, buttonBoxes, icons: iconWords };
+    };
+    // the words first; Undo and Restart as icons when the words leave the name too little room
+    const row = headerRow(false, false) ?? headerRow(true, true)!;
+    const { name: nameText, counters, keyIcon, buttonBoxes } = row;
+    this.hud.push(...row.made);
     [this.movesText, this.timeText, this.keysText] = counters as [
       Phaser.GameObjects.Text,
       Phaser.GameObjects.Text,
       Phaser.GameObjects.Text,
     ];
-    const last = counters.at(-1)!;
-    const end = last.x + last.width;
     if (this.mode === 'master' && narrow) {
       // the MASTER label on a 3rd line
       this.hud.push(
@@ -397,25 +491,31 @@ export class GameScene extends Phaser.Scene {
           .setOrigin(0, 0.5),
       );
     }
-    // the level's name: on the buttons' row, in the room they leave (cut with "…" if needed)
-    const nameX = narrow ? px(12) : end + px(24);
-    const nameText = this.add.text(nameX, y, '', textStyle(13, COLORS.accent)).setOrigin(0, 0.5);
-    const room = buttonsLeft - px(10) - nameX;
-    nameText.setText(ellipsize(this.level.name, (s) => nameText.setText(s).width <= room));
-    this.hud.push(nameText);
     setDebug({
       hudName: nameText.text,
+      hudNameLines: nameText.getWrappedText().length,
+      // the size it was made with (textStyle), not its device px
+      hudNameSize: parseInt(String(nameText.style.fontSize), 10) / dpr() / uiScale(),
+      // Undo and Restart drawn as icons: their words, still their names
+      hudIcons: row.icons,
       hudLayout: {
         name: css(nameText.getBounds()),
         buttons: buttonBoxes,
         counters: counters.map((c) => css(c.getBounds())),
+        keyIcon: keyIcon && css(keyIcon.getBounds()),
       },
     });
     this.hold.reset();
     this.releaseZone();
-    // the bottom of the header: everything drawn so far (buttons, counters, name, MASTER)
+    // the bottom of the header: every text drawn so far (buttons, counters, name, MASTER) and
+    // the key's icon
     const header = boundsOf(
-      this.hud.map((o) => css((o as unknown as Phaser.GameObjects.Text).getBounds())),
+      this.hud
+        .filter(
+          (o): o is Phaser.GameObjects.Text | Phaser.GameObjects.Image =>
+            o instanceof Phaser.GameObjects.Text || o instanceof Phaser.GameObjects.Image,
+        )
+        .map((o) => css(o.getBounds())),
     );
     const headerBottom = header.y + header.h;
     const viewW = w / dpr();
@@ -435,13 +535,21 @@ export class GameScene extends Phaser.Scene {
         })),
       );
       this.zoneArea = zoneArea(viewW, viewH, headerBottom, { box: padBox, side });
-      const glyphs: Record<Dir, string> = { up: '▲', down: '▼', left: '◀', right: '▶' };
       for (const dir of ['up', 'down', 'left', 'right'] as const) {
         const r = pad[dir];
         const box = this.add
-          .rectangle(r.x, r.y, r.w, r.h, 0x2c2838, 0.8)
+          .rectangle(r.x, r.y, r.w, r.h, hex(COLORS.panel), 0)
           .setOrigin(0)
           .setInteractive();
+        // the frame is drawn apart: the invisible rectangle stays the hit area
+        const frame = this.add.graphics().setPosition(r.x, r.y);
+        let held = false;
+        const paint = () => paintFrame(frame, Math.round(r.w), Math.round(r.h), held);
+        paint();
+        box.on('pointerdown', () => ((held = true), paint()));
+        box.on('pointerout', () => ((held = false), paint()));
+        box.on('pointerup', () => ((held = false), paint()));
+        box.on('pointerupoutside', () => ((held = false), paint()));
         // hold to repeat; stops on release, when the finger slides off or the touch is cancelled
         const onBox = (p: Phaser.Input.Pointer) =>
           p.isDown && box.active && p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h;
@@ -450,15 +558,20 @@ export class GameScene extends Phaser.Scene {
         );
         box.on('pointerout', (p: Phaser.Input.Pointer) => this.hold.release(p.id));
         box.on('pointerup', (p: Phaser.Input.Pointer) => this.hold.release(p.id));
-        const label = this.add
-          .text(r.x + r.w / 2, r.y + r.h / 2, glyphs[dir], textStyle(20))
-          .setOrigin(0.5);
-        this.hud.push(box, label);
+        // a pixel arrow on a 7×7 grid, about 42 % of the button, centred
+        const cell = Math.max(1, Math.round((0.42 * Math.min(r.w, r.h)) / 7 / px(2))) * px(2);
+        const gx = r.x + (r.w - 7 * cell) / 2;
+        const gy = r.y + (r.h - 7 * cell) / 2;
+        const arrow = this.add.graphics().fillStyle(hex(COLORS.text), 1);
+        for (const [c, row] of arrowPixels(dir))
+          arrow.fillRect(Math.round(gx + c * cell), Math.round(gy + row * cell), cell, cell);
+        this.hud.push(box, frame, arrow);
       }
       // the sound button: under the d-pad column (landscape), or at the left edge on the
       // d-pad's bottom row (portrait)
-      if (side) muteAt(pad.up.x + pad.up.w / 2, this.scale.height - px(16) - px(22), 0.5);
-      else muteAt(px(12), pad.down.y + pad.down.h / 2, 0);
+      if (side)
+        this.hud.push(muteAt(pad.up.x + pad.up.w / 2, this.scale.height - px(16) - px(22), 0.5));
+      else this.hud.push(muteAt(px(12), pad.down.y + pad.down.h / 2, 0));
       // for the e2e tests: button centres in CSS pixels, once drawn (Phaser hit-tests a new
       // interactive object only from its next pre-update on)
       const dpad = Object.fromEntries(
@@ -483,12 +596,43 @@ export class GameScene extends Phaser.Scene {
         if (help.active) help.setText(t(this.session.canUndo ? 'help' : 'helpMaster', { dirs }));
       });
     }
+    // above the cave's darkness, vignette and HUD band (a button's frame follows it, 1 below)
+    for (const o of this.hud) (o as Phaser.GameObjects.Text).setDepth(HUD_DEPTH);
     setDebug({
       touchControl: app.data.settings.touchControl,
       zoneArea: this.zoneArea,
       zoneCentre: this.zoneArea && centreOf(this.zoneArea),
     });
     this.updateHud();
+  }
+
+  /**
+   * Turns a HUD button with a blank label into a square one showing a pixel icon, drawn like the
+   * d-pad's arrows (lit under the pointer like a word); the word stays the button's name.
+   */
+  private iconOn(
+    b: Phaser.GameObjects.Text,
+    icon: 'undo' | 'restart',
+    word: string,
+  ): Phaser.GameObjects.Graphics {
+    const extra = Math.max(0, Math.ceil((b.height - b.width) / 2));
+    const p = b.padding;
+    b.setPadding(p.left! + extra, p.top!, p.right! + extra, p.bottom!).setName(word);
+    const g = this.add.graphics();
+    const paint = (color: string) => {
+      const r = b.getBounds();
+      const cell =
+        Math.max(1, Math.round((0.42 * Math.min(r.width, r.height)) / 7 / px(2))) * px(2);
+      const gx = r.x + (r.width - 7 * cell) / 2;
+      const gy = r.y + (r.height - 7 * cell) / 2;
+      g.clear().fillStyle(hex(color), 1);
+      for (const [c, row] of iconPixels(icon))
+        g.fillRect(Math.round(gx + c * cell), Math.round(gy + row * cell), cell, cell);
+    };
+    paint(COLORS.text);
+    b.on('pointerover', () => paint(COLORS.accent));
+    b.on('pointerout', () => paint(COLORS.text));
+    return g;
   }
 
   private updateHud(): void {
@@ -622,7 +766,7 @@ export class GameScene extends Phaser.Scene {
     this.zoneFlash = undefined;
     if (!this.zoneArea) return;
     const points = zonePolygon(dir, this.zoneArea);
-    const g = this.add.graphics().setDepth(5);
+    const g = this.add.graphics().setDepth(HUD_DEPTH - 1);
     g.fillStyle(0xffffff, 0.09).fillPoints(
       points.map(([x, y]) => new Phaser.Math.Vector2(x * dpr(), y * dpr())),
       true,
@@ -686,10 +830,13 @@ export class GameScene extends Phaser.Scene {
           align: 'center',
           backgroundColor: '#000000aa',
           padding: { x: px(16), y: px(12) },
+          // long words on a narrow phone (Silkscreen is wide): on two lines
+          wordWrap: { width: this.scale.width - px(64) },
         },
       )
       .setOrigin(0.5)
-      .setDepth(10);
+      .setDepth(10)
+      .setData('message', message);
     if (touch) {
       this.overlay.setInteractive();
       this.overlay.on('pointerup', () => {

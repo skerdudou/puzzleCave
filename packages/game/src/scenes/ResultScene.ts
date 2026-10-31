@@ -24,7 +24,15 @@ import {
 } from '../medalInfo';
 import { planReveal, prefersReducedMotion, type RevealSlot } from '../medalReveal';
 import { MedalReveal, type MedalSpot } from '../render/MedalReveal';
-import { COLORS, drawMedal, drawThresholdLine, makeButton, px, textStyle } from '../ui';
+import {
+  COLORS,
+  drawMedal,
+  drawThresholdLine,
+  makeButton,
+  px,
+  shrinkToFit,
+  textStyle,
+} from '../ui';
 import {
   authorServerAvailable,
   fetchJob,
@@ -41,6 +49,8 @@ export interface ResultSceneData {
   award: Award;
   previous?: LevelRecord;
   moveLog: Dir[];
+  /** laid out again (a resize): the medals shown at once, not revealed a second time */
+  instant?: boolean;
 }
 
 export class ResultScene extends Phaser.Scene {
@@ -50,6 +60,8 @@ export class ResultScene extends Phaser.Scene {
   private detail?: Phaser.GameObjects.Text;
   private extra: Phaser.GameObjects.GameObject[] = [];
   private alive = false;
+  /** this run of the scene (a resize restarts it): an older run's request is dropped */
+  private run = 0;
   private tick = 0;
   private reveal?: MedalReveal;
   constructor() {
@@ -59,6 +71,12 @@ export class ResultScene extends Phaser.Scene {
     this.info = data;
     this.extra = [];
     this.alive = true;
+    this.run++;
+  }
+
+  /** The scene still shows the run `run` started a request in. */
+  private current(run: number): boolean {
+    return this.alive && this.run === run;
   }
   create(): void {
     const { levelId, mode, result, award, previous, moveLog } = this.info;
@@ -66,10 +84,16 @@ export class ResultScene extends Phaser.Scene {
     // a low screen (phone in landscape): the results on the left, the buttons on the right
     const low = this.scale.width > this.scale.height && this.scale.height < px(600);
     const cx = low ? Math.max(px(170), this.scale.width * 0.4) : this.scale.width / 2;
+    // the width centred on cx that is clear of the screen's edges and of the buttons' column
+    const lineWidth =
+      (low ? 2 * Math.min(cx, this.scale.width - px(170) - cx) : this.scale.width) - px(16);
+    // the right end of the records' column
+    const right = low ? this.scale.width - px(170) : this.scale.width - px(8);
     let y = low ? px(36) : px(60);
-    this.add.text(cx, y, t('won'), textStyle(26, COLORS.accent)).setOrigin(0.5);
+    const title = this.add.text(cx, y, t('won'), textStyle(26, COLORS.accent)).setOrigin(0.5);
+    shrinkToFit(title, 26, lineWidth, 16);
     y += px(36);
-    this.add.text(cx, y, level.name, textStyle(16)).setOrigin(0.5);
+    shrinkToFit(this.add.text(cx, y, level.name, textStyle(16)).setOrigin(0.5), 16, lineWidth);
     // the mode, "Master mode" (not "MASTER", the name of a medal too, above the medal won)
     if (mode === 'master')
       this.add.text(cx, y + px(22), t('masterModeName'), textStyle(12, '#9be7ff')).setOrigin(0.5);
@@ -79,9 +103,7 @@ export class ResultScene extends Phaser.Scene {
     const th = resolveThresholds(level.thresholds);
     const master = hasMaster(levelId);
     const rows = thresholdRows(th, master);
-    // the threshold lines, centred on cx: clear of the screen's edges and of the buttons' column
-    const lineWidth =
-      (low ? 2 * Math.min(cx, this.scale.width - px(170) - cx) : this.scale.width) - px(16);
+    // the threshold lines: centred on cx, in lineWidth
     // earned medals are drawn by the reveal animation, unearned ones (outlines) here
     const spots: Partial<Record<RevealSlot, MedalSpot>> = {};
     const medalAt = (slot: RevealSlot, earned: boolean) => {
@@ -103,14 +125,13 @@ export class ResultScene extends Phaser.Scene {
       this.add
         .text(cx - px(110), y, t('labelValue', { label, value }), textStyle(16))
         .setOrigin(0, 0.5);
-      if (best)
-        this.add
-          .text(cx + px(60), y, `${t('record')} ${best}`, textStyle(12, COLORS.dim))
-          .setOrigin(0, 0.5);
-      if (isRecord)
-        this.add
-          .text(cx + px(60), y + px(16), t('newRecord'), textStyle(11, COLORS.accent))
-          .setOrigin(0, 0.5);
+      // the record and "New record!" on the right, moved left on a narrow phone to stay on it
+      const onRight = (ty: number, text: string, size: number, color: string) => {
+        const txt = this.add.text(cx + px(60), ty, text, textStyle(size, color)).setOrigin(0, 0.5);
+        txt.setX(Math.min(txt.x, right - txt.width));
+      };
+      if (best) onRight(y, `${t('record')} ${best}`, 12, COLORS.dim);
+      if (isRecord) onRight(y + px(16), t('newRecord'), 10, COLORS.accent);
       const row = rows.find((r) => r.kind === kind);
       if (row) {
         drawThresholdLine(this, g, cx, y + px(32), '', row.tiers, { maxWidth: lineWidth });
@@ -246,7 +267,8 @@ export class ResultScene extends Phaser.Scene {
       resultAnimDone: false,
       resultReveal: plan.steps.map((s) => `${s.slot}:${s.medal}:${s.emphasis}`),
     });
-    this.reveal = new MedalReveal(this, plan, spots, !prefersReducedMotion(), (r) =>
+    const animate = !prefersReducedMotion() && !this.info.instant;
+    this.reveal = new MedalReveal(this, plan, spots, animate, (r) =>
       setDebug({ resultAnimDone: true, resultMedalScales: r.scales() }),
     );
     // any key or click shows the final state at once; buttons and keys still work right away
@@ -258,6 +280,10 @@ export class ResultScene extends Phaser.Scene {
       else if (e.key.toLowerCase() === 'r') this.scene.start('Game', { levelId, mode });
       else if (e.key === 'Escape') this.scene.start('Select', { levelId });
     });
+    // the layout (and the interface's size) follows the screen
+    const onResize = () => this.scene.restart({ ...this.info, instant: true });
+    this.scale.on('resize', onResize);
+    this.events.once('shutdown', () => this.scale.off('resize', onResize));
     setDebug({ scene: 'Result' });
   }
 
@@ -297,11 +323,12 @@ export class ResultScene extends Phaser.Scene {
 
   private async save(button: Phaser.GameObjects.Text, force: boolean): Promise<void> {
     const { levelId, moveLog } = this.info;
+    const run = this.run;
     this.clearExtra();
     button.disableInteractive();
     this.setStatus(t('optimizing', { dots: '' }), '', COLORS.dim);
     const outcome = await saveSolution(levelId, formatMoves(moveLog), force);
-    if (!this.alive) return;
+    if (!this.current(run)) return;
     button.setInteractive({ useHandCursor: true });
     this.afterSave(outcome, button);
   }
@@ -338,6 +365,7 @@ export class ResultScene extends Phaser.Scene {
 
   /** Polls the job every second; the dots and the timer animate between two polls. */
   private async poll(jobId: string, savedMoves: number): Promise<void> {
+    const run = this.run;
     const head = t('solutionSaved', { n: savedMoves });
     let last: JobInfo | null = null;
     let lastAt = performance.now();
@@ -363,7 +391,7 @@ ${d.headline}`,
     let failures = 0;
     do {
       const j = await fetchJob(jobId);
-      if (!this.alive) return;
+      if (!this.current(run)) return;
       if (j) {
         last = j;
         lastAt = performance.now();
@@ -375,7 +403,7 @@ ${d.headline}`,
       }
       show();
       if (last?.state === 'running' || !last) await new Promise((r) => setTimeout(r, 1000));
-      if (!this.alive) return;
+      if (!this.current(run)) return;
     } while (!last || last.state === 'running');
     anim.remove(false);
     const d = describeJob(last, 0);
@@ -395,7 +423,7 @@ ${d.headline}`,
       if (sol)
         buttons.push([t('replayOptimized'), () => this.replay(sol.moves, t('labelOptimized'))]);
     }
-    if (this.alive) this.addButtons(y, buttons);
+    if (this.current(run)) this.addButtons(y, buttons);
   }
 
   private nextLevel(id: string): string | undefined {
