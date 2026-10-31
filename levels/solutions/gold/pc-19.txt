@@ -1,4 +1,2 @@
-# gold reference — natural solution (110 moves): fills the left water (2,2) first, then the right-hand water and key
-URRDRRURRRRRRDRUUUURULLLLLLLLLDLURRRRRRRRRDDDDDLLL
-LLLLLLURRRRRRRRDRUURULLLRRUULLLLLLLLLUULURRRRDRRUR
-LDLLURRRRR
+# gold reference — the optimal route (88 moves) with two harmless back-and-forth steps at the start, 92 moves
+RLRLRRRURRRRRRRDRUURULLLRRDDDLLLLLLLLLLURRRRRRRRRDRUUUURULLLLLLLLLDLUUULURRRRDRRURLDLLURRRRR
