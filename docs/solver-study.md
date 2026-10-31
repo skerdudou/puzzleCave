@@ -236,7 +236,7 @@ Measurements (one process, ≤ 1.5–1.8 GB):
 
 Finding: on the real levels the dead test never fires within the depths the global searches reach (0 dead states on pc-11, pc-03, pc-06, pc-12) and costs 1.4–2.5× the time per state. The relaxation is too loose for the 36-block grids: crossing unfilled water as if filled lets almost every block reach almost every water (pc-11: 23–27 candidate blocks per water), and the exit of pc-11 is reachable through doors with no water at all, so the binding constraint (keys, behind waters) is not seen. Key dominance prunes little on pc-11 (4 keys). Both options stay off by default; the analysis is reused by the step B planner, on states where blocks are frozen.
 
-Also found: the BFWS guide (`improve/guide.ts`) declares a solvable random level dead (`vrnd-94`, seed 5: `solve` finds 17 moves, `findSolution` fails at once, with or without the new options).
+Also found: the BFWS guide (`improve/guide.ts`) declares a solvable random level dead (`vrnd-94`, seed 5: `solve` finds 17 moves, `findSolution` fails at once, with or without the new options). Fixed in `122f3cd` (2026-10-11): a block standing on gravel may start a relaxed push, gravel is never a step; regression tests in `guide.test.ts` and `findSolution.test.ts` (checked again 2026-10-31: they fail with the old guide).
 
 ## Event planner study, step B — sub-goal planner (2026-10-11)
 
@@ -555,3 +555,22 @@ Campaign (`--apply`, 14 threads, one level at a time, 2026-10-15): wave 1 with t
 Findings:
 - The pass is no longer the limit on these levels: with the default limits it now goes through all its candidates, and found nothing more on pc-18, pc-09, pc-08 or pc-14. The only gain came from larger searches (8 M macro-states, 240 s), the same kind of merge of fills as the earlier gains: further gains here need larger wide searches rather than more candidates.
 - pc-14's gold (610) stays within [ceil(1.1 × 538), floor(1.25 × 538)] = [592, 672].
+
+## Campaign on pc-44 … pc-50 (2026-10-31)
+
+The seven newest levels (Hard pc-44 … pc-49, Expert pc-50) had only been optimised by the agents that made them. One level at a time: wave 1 = `explore --pass 0.95 --workers 14 --apply`; wave 2 = 4× the merge limits (`--merge-states 8000000 --merge-timeout 240 --merge-window 8 --merge-neighbours 4 --merge-widen 2`); then `improve --timeout 600 --jobs 7 --gpu auto --apply`; then the random-mutation screening (`explore --pass 0`, 7 levels in parallel, seed 1 for 25 min, seed 2 for 20 min).
+
+| level | before | after | proven lower bound | result |
+|---|---|---|---|---|
+| pc-44 | 287 | **271** | 55 | screening seed 1: 275, `improve` 273; seed 2 from 273: 271; the structural pass found nothing, before or after |
+| pc-45 | 293 | 293 | 51 → 55 | nothing (both waves exhausted) |
+| pc-46 | 307 | 307 | 87 → 91 | nothing (both waves exhausted) |
+| pc-47 | 209 | 209 | 117 | nothing (both waves exhausted; `improve`'s proof reached 113, the saved 117 kept) |
+| pc-48 | 304 | 304 | 98 → 144 | nothing (wave 2 stopped by time at level 2 of 3) |
+| pc-49 | 250 | 250 | 76 → 82 | nothing (both waves exhausted) |
+| pc-50 | 359 | 359 | 211 → 213 | nothing (both waves exhausted) |
+
+Findings:
+- On these levels only the random-mutation screening (reordered variants) found something; the structural pass and `improve`'s windows, spare keys and frozen blocks found nothing. Their makers' solutions were already close to what these tools reach.
+- The bounds rose from `improve`'s 10-minute proofs (GPU). Every gap is still ≥ 92 moves (pc-47: 209 vs 117, the smallest), far beyond what the 2026-10-13 proof triage showed reachable: no proof run was started.
+- Gold unchanged: pc-44's 321 stays within [ceil(1.1 × 271), floor(1.25 × 271)] = [299, 338]; its silver time (~81 s) stays above the estimated time of the 271-move route (~60 s).

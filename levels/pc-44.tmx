@@ -4,7 +4,7 @@
   <property name="name" value="Filter Feeder"/>
   <property name="author" value="moineau"/>
   <property name="goldMoves" type="int" value="321"/>
-  <property name="platinumMoves" type="int" value="287"/>
+  <property name="platinumMoves" type="int" value="271"/>
   <property name="goldTime" type="int" value="65"/>
  </properties>
  <tileset firstgid="1" source="tileset.tsx"/>
