@@ -1,3 +1,3 @@
-# gold reference — natural solution (90 moves): leaves the start island to the south (4,5) before the east (7,2)
-RRDLULDDDRRDDLLUUUULLUURRRRDDLLUDLLUURRRRRRRURDDDD
+# gold reference — natural solution (90 moves) plus a back-and-forth at the start (94 moves, Steven's gold): leaves the start island to the south (4,5) before the east (7,2)
+RLRLRRDLULDDDRRDDLLUUUULLUURRRRDDLLUDLLUURRRRRRRURDDDD
 DULLDLLLRDDLLUUUUUDLLUURRRRRRRURDDDDDDDL
