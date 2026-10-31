@@ -18,10 +18,22 @@ const chapters: Chapter[] = [
 const done = (...ids: string[]): Records =>
   Object.fromEntries(ids.map((id) => [id, { completed: true, medals: {} }]));
 
-test('first level of the first chapter is open, the next one after completion', () => {
+test('the first two levels of a chapter are open', () => {
   expect(isLevelUnlocked(chapters, 0, 0, {})).toBe(true);
-  expect(isLevelUnlocked(chapters, 0, 1, {})).toBe(false);
-  expect(isLevelUnlocked(chapters, 0, 1, done('a'))).toBe(true);
+  expect(isLevelUnlocked(chapters, 0, 1, {})).toBe(true);
+  expect(isLevelUnlocked(chapters, 0, 2, {})).toBe(false);
+});
+
+test('a level opens when the previous one or the one before it is completed', () => {
+  expect(isLevelUnlocked(chapters, 0, 2, done('b'))).toBe(true);
+  expect(isLevelUnlocked(chapters, 0, 2, done('a'))).toBe(true);
+  const long: Chapter[] = [{ ...chapters[0]!, levels: ['a', 'b', 'c', 'd', 'e'] }];
+  expect(isLevelUnlocked(long, 0, 3, done('b'))).toBe(true);
+  expect(isLevelUnlocked(long, 0, 3, done('c'))).toBe(true);
+  // two unfinished levels in a row stop the way
+  expect(isLevelUnlocked(long, 0, 3, done('a'))).toBe(false);
+  expect(isLevelUnlocked(long, 0, 4, done('a', 'b'))).toBe(false);
+  expect(isLevelUnlocked(long, 0, 4, done('a', 'b', 'd'))).toBe(true);
 });
 
 test('a completed level stays open when a new level is inserted before it', () => {
@@ -33,6 +45,8 @@ test('a completed level stays open when a new level is inserted before it', () =
   expect(isLevelUnlocked(replaced, 0, 3, records)).toBe(true);
   // but not in a locked chapter
   expect(isLevelUnlocked(chapters, 1, 1, done('e'))).toBe(false);
+  expect(isLevelUnlocked(chapters, 1, 0, {})).toBe(false);
+  expect(isLevelUnlocked(chapters, 1, 1, {})).toBe(false);
 });
 
 test('a chapter opens after unlockAfter levels of the previous one', () => {

@@ -66,8 +66,8 @@ The Easy chapter has no master mode.
 
 ## Chapters
 
-The levels are grouped into chapters — **Easy**, **Medium**, **Hard** and **Expert**. Finish a level to unlock the
-next one; finish a few levels of a chapter to open the next chapter.
+The levels are grouped into chapters — **Easy**, **Medium**, **Hard** and **Expert**. Two levels are open at a time: finish a
+level to unlock the one after next (a level you are stuck on can be skipped); finish a few levels of a chapter to open the next chapter.
 
 ## Controls
 

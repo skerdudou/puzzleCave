@@ -165,6 +165,10 @@ export class SelectScene extends Phaser.Scene {
     const side = this.side();
     const x0 = (this.gridAreaW() - gridW) / 2;
     const y0 = px(64);
+    // by the progression rule alone (author mode opens every tile): read by the e2e tests
+    setDebug({
+      unlocked: ch.levels.map((_, i) => isLevelUnlocked(chapters, this.ci, i, app.data.levels)),
+    });
     const g = this.add.graphics();
     ch.levels.forEach((id, i) => {
       const level = levelById(id);

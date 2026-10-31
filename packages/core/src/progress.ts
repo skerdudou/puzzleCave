@@ -69,10 +69,15 @@ export function isLevelUnlocked(
   const ch = chapters[ci];
   if (!ch || li < 0 || li >= ch.levels.length) return false;
   if (!isChapterUnlocked(chapters, ci, records)) return false;
-  if (li === 0) return true;
+  // two levels are open at a time: a player stuck on one can go on to the next
+  if (li <= 1) return true;
   // a level already completed stays open (a level inserted before it, e.g. a replaced one,
   // does not lock it again)
-  return Boolean(records[ch.levels[li - 1]!]?.completed || records[ch.levels[li]!]?.completed);
+  return Boolean(
+    records[ch.levels[li - 1]!]?.completed ||
+      records[ch.levels[li - 2]!]?.completed ||
+      records[ch.levels[li]!]?.completed,
+  );
 }
 
 export function recordRun(prev: LevelRecord | undefined, r: RunResult, a: Award): LevelRecord {
