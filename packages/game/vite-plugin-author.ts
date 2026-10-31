@@ -1,8 +1,8 @@
 import type { IncomingMessage } from 'node:http';
 import type { Plugin } from 'vite';
-import { loadPack } from '@puzzlecave/tiled';
 import { createAuthorApi, DEFAULT_TIMEOUT_S, MAX_BODY_BYTES } from './src/server/authorApi';
 import { launchImprove } from './src/server/launcher';
+import { createPackCache } from './src/server/packCache';
 
 export interface AuthorPluginState {
   /** true while an optimization is running (the levels plugin does not reload the page) */
@@ -16,9 +16,10 @@ export function authorPlugin(levelsDir: string, state?: { api?: AuthorPluginStat
     name: 'puzzlecave-author',
     apply: 'serve',
     configureServer(server) {
+      const pack = createPackCache(levelsDir);
       const api = createAuthorApi({
         levelsDir,
-        getLevel: (id) => loadPack(levelsDir).levels.find((l) => l.id === id),
+        getLevel: (id) => pack.get().levels.find((l) => l.id === id),
         launch: launchImprove,
         timeoutS,
         onJobEnd: () => {
