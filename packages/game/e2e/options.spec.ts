@@ -78,18 +78,20 @@ test('graphics toggles persist', async ({ page }) => {
     page.evaluate(
       () => JSON.parse(localStorage.getItem('puzzlecave.save.v1') ?? '{}').settings ?? {},
     );
-  expect((await debug(page)).settings).toMatchObject({ torchlight: true, dust: true });
+  expect((await debug(page)).settings).toMatchObject({ torchlight: true, dust: true, vignette: true });
 
   await clickScrolled(page, 'torchlight');
   await expect.poll(async () => (await settings()).torchlight).toBe(false);
   await expect.poll(async () => (await debug(page)).scene).toBe('Options');
   await clickScrolled(page, 'dust');
   await expect.poll(async () => (await settings()).dust).toBe(false);
+  await clickScrolled(page, 'vignette');
+  await expect.poll(async () => (await settings()).vignette).toBe(false);
 
   await page.reload();
   await expect.poll(async () => (await debug(page)).scene).toBe('Menu');
   await page.mouse.click(640, 360 + 56);
   await expect.poll(async () => (await debug(page)).scene).toBe('Options');
-  expect((await debug(page)).settings).toMatchObject({ torchlight: false, dust: false });
-  expect(await settings()).toMatchObject({ torchlight: false, dust: false });
+  expect((await debug(page)).settings).toMatchObject({ torchlight: false, dust: false, vignette: false });
+  expect(await settings()).toMatchObject({ torchlight: false, dust: false, vignette: false });
 });

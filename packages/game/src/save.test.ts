@@ -99,6 +99,7 @@ test('invalid settings replaced by defaults', () => {
     touchControl: 'drag',
     torchlight: true,
     dust: true,
+    vignette: true,
   });
 });
 
@@ -121,6 +122,7 @@ test('a save from before the drag, vibration and touch control options: defaults
     touchControl: 'drag',
     torchlight: true,
     dust: true,
+    vignette: true,
   });
 });
 
@@ -463,12 +465,13 @@ test('version 2: an invalid master medal is dropped', () => {
 test('graphics switches: on by default, a saved value is kept, an invalid one falls back', () => {
   expect(defaultSave().settings.torchlight).toBe(true);
   expect(defaultSave().settings.dust).toBe(true);
+  expect(defaultSave().settings.vignette).toBe(true);
   const load = (settings: object) =>
     parseSave(JSON.stringify({ version: 2, settings, levels: {} })).settings;
   const missing = load({});
-  expect([missing.torchlight, missing.dust]).toEqual([true, true]);
-  const off = load({ torchlight: false, dust: false });
-  expect([off.torchlight, off.dust]).toEqual([false, false]);
-  const bad = load({ torchlight: 'x', dust: 0 });
-  expect([bad.torchlight, bad.dust]).toEqual([true, true]);
+  expect([missing.torchlight, missing.dust, missing.vignette]).toEqual([true, true, true]);
+  const off = load({ torchlight: false, dust: false, vignette: false });
+  expect([off.torchlight, off.dust, off.vignette]).toEqual([false, false, false]);
+  const bad = load({ torchlight: 'x', dust: 0, vignette: 'no' });
+  expect([bad.torchlight, bad.dust, bad.vignette]).toEqual([true, true, true]);
 });

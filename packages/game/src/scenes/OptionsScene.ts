@@ -207,7 +207,7 @@ export class OptionsScene extends Phaser.Scene {
 
     // the music and the sound effects, side by side (one under the other on a narrow screen)
     label(t('sound'));
-    const onOff = (key: 'music' | 'effects' | 'torchlight' | 'dust', on: boolean) =>
+    const onOff = (key: 'music' | 'effects' | 'torchlight' | 'dust' | 'vignette', on: boolean) =>
       t('labelValue', { label: t(key), value: on ? t('on') : t('off') });
     row([
       [
@@ -272,12 +272,12 @@ export class OptionsScene extends Phaser.Scene {
 
     // graphics: the cave ambience, one switch each, laid out like music and effects
     label(t('graphics'));
-    const graphic = (key: 'torchlight' | 'dust'): [string, string, () => void] => [
+    const graphic = (key: 'torchlight' | 'dust' | 'vignette'): [string, string, () => void] => [
       key,
       onOff(key, s[key]),
       () => change(() => (s[key] = !s[key])),
     ];
-    row([graphic('torchlight'), graphic('dust')]);
+    row([graphic('torchlight'), graphic('dust'), graphic('vignette')]);
 
     // the progress: kept in a file, brought back from one (it replaces the progress) or erased;
     // both of those ask first

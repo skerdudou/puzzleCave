@@ -8,7 +8,7 @@ import { goToLevel } from './select';
 const levelsDir = fileURLToPath(new URL('../../../levels', import.meta.url));
 const levels = loadPack(levelsDir).levels;
 
-type Ambience = { rock: number; torchlight: boolean; dust: boolean; tint: string | null };
+type Ambience = { rock: number; torchlight: boolean; dust: boolean; vignette: boolean; tint: string | null };
 type Layout = { scale: number; x: number; y: number; width: number; height: number };
 type Pc = {
   scene?: string;
@@ -32,12 +32,12 @@ async function openLevel(page: Page, id: string): Promise<void> {
   await sceneIs(page, 'Game');
 }
 
-/** From the menu: both graphics switches flipped, back to the menu. */
+/** From the menu: the three graphics switches flipped, back to the menu. */
 async function flipGraphics(page: Page, on: boolean): Promise<void> {
   const [ox, oy] = await buttonAt(page, 'options');
   await page.mouse.click(ox, oy);
   await sceneIs(page, 'Options');
-  for (const id of ['torchlight', 'dust'] as const) {
+  for (const id of ['torchlight', 'dust', 'vignette'] as const) {
     await clickScrolled(page, id);
     await expect
       .poll(
@@ -103,16 +103,16 @@ test('the ambience follows a resize', async ({ page }) => {
   expect(board).toEqual(boardLayout(900, 560, level.width, level.height, 16, 52, 24, false));
 });
 
-test('torchlight and dust switched off in Options, then back on', async ({ page }) => {
+test('torchlight, dust and vignette switched off in Options, then back on', async ({ page }) => {
   await page.goto('/');
   await sceneIs(page, 'Menu');
   await flipGraphics(page, false);
   for (const a of await ambienceInGameAndReplay(page, 'pc-21'))
-    expect(a).toMatchObject({ torchlight: false, dust: false });
+    expect(a).toMatchObject({ torchlight: false, dust: false, vignette: false });
   // back on: no reload needed
   await flipGraphics(page, true);
   for (const a of await ambienceInGameAndReplay(page, 'pc-21'))
-    expect(a).toMatchObject({ torchlight: true, dust: true });
+    expect(a).toMatchObject({ torchlight: true, dust: true, vignette: true });
 });
 
 test('pc-47 opens with its rock and no console error', async ({ page }) => {

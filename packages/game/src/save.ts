@@ -31,6 +31,8 @@ export interface Settings {
   torchlight: boolean;
   /** cave ambience: drifting dust motes */
   dust: boolean;
+  /** cave ambience: the screen's edges darkened */
+  vignette: boolean;
 }
 export interface SaveData {
   version: 2;
@@ -201,6 +203,7 @@ export function defaultSave(): SaveData {
       touchControl: 'drag',
       torchlight: true,
       dust: true,
+      vignette: true,
     },
     levels: {},
   };
@@ -245,6 +248,7 @@ function sanitiseSettings(raw: unknown): Settings {
     touchControl: touchControlOf(s),
     torchlight: typeof s.torchlight === 'boolean' ? s.torchlight : d.torchlight,
     dust: typeof s.dust === 'boolean' ? s.dust : d.dust,
+    vignette: typeof s.vignette === 'boolean' ? s.vignette : d.vignette,
   };
 }
 

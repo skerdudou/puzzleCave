@@ -71,10 +71,10 @@ export class AmbienceView {
   private board: Rect = { x: 0, y: 0, w: 0, h: 0 };
   private stoneCount = 0;
   private motes: Mote[] = [];
-  /** settings last reported to the debug state */
   /** the overlay texture is known to be empty (light and dust both off) */
   private overlayBlank = false;
-  private shown: { torchlight: boolean; dust: boolean } | null = null;
+  /** settings last reported to the debug state */
+  private shown: { torchlight: boolean; dust: boolean; vignette: boolean } | null = null;
 
   constructor(scene: Phaser.Scene, opts: { levelId: string; hudHeight: number }) {
     this.scene = scene;
@@ -132,8 +132,9 @@ export class AmbienceView {
   update(timeMs: number, hero: [number, number]): void {
     const tex = this.overlayTex;
     if (!tex || !this.glow) return;
-    const { torchlight, dust } = app.data.settings;
+    const { torchlight, dust, vignette } = app.data.settings;
     this.report();
+    this.vignette?.setVisible(vignette);
     const t = timeMs / 1000;
     const s = this.scale;
     const W = this.artW;
@@ -321,14 +322,16 @@ export class AmbienceView {
 
   /** Publishes the ambience state for the e2e tests, once per layout and per settings change. */
   private report(): void {
-    const { torchlight, dust } = app.data.settings;
-    if (this.shown && this.shown.torchlight === torchlight && this.shown.dust === dust) return;
-    this.shown = { torchlight, dust };
+    const { torchlight, dust, vignette } = app.data.settings;
+    const s = this.shown;
+    if (s && s.torchlight === torchlight && s.dust === dust && s.vignette === vignette) return;
+    this.shown = { torchlight, dust, vignette };
     setDebug({
       ambience: {
         rock: this.stoneCount,
         torchlight,
         dust,
+        vignette,
         tint: this.tint === null ? null : css(this.tint),
       },
     });
