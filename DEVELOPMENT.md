@@ -53,6 +53,13 @@ the typecheck, `validate` and the tests on the code pushed, then `.github/script
 builds both: the release from a `git worktree` of its tag (with its own `npm ci`), the preview
 from the commit pushed to `main` (for a tag, a release or a manual run: `main` as it is then).
 
+GitHub Pages identifies a deployment by its commit (`GITHUB_SHA`) and keeps the site already
+deployed for that commit: a second deployment of the same commit reports success but changes
+nothing. A tag put on the commit `main` is already deployed at (the usual case) is therefore not
+published by its own run (seen with v0.3.0); the next commit pushed to `main` publishes it. The
+`github-pages` environment only accepts `main` and `v*` tags, so a manual run from another branch
+is refused.
+
 ### Preview of `main`
 
 The current `main` can be played before it is released, at
