@@ -4,6 +4,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { parseMoves, type Dir } from '@puzzlecave/core';
 import { loadPack } from '@puzzlecave/tiled';
 import { goToLevel } from './select';
+import { encodedSave } from './storedSave';
 
 // Silkscreen is wide: every screen, in every language, on a small phone, a phone and a phone in
 // landscape, keeps its texts on the screen and its buttons apart.
@@ -53,7 +54,7 @@ function save(lang: string): string {
     masterBestTimeMs: 599_990,
     medals: { ...gold.medals, master: 'master' },
   };
-  return JSON.stringify({ version: 1, settings: { lang }, levels });
+  return encodedSave({ version: 1, settings: { lang }, levels });
 }
 
 const LANGS = ['en', 'fr', 'de', 'es', 'it'] as const;

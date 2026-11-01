@@ -1,4 +1,5 @@
 import { expect, test, type CDPSession, type Page } from '@playwright/test';
+import { storedSave } from './storedSave';
 
 // A phone: touch screen, portrait, 2 device pixels per CSS pixel (the drag is measured in CSS px).
 test.use({ viewport: { width: 390, height: 740 }, hasTouch: true, deviceScaleFactor: 2 });
@@ -211,14 +212,7 @@ test('options: drag distance and vibrations are saved and used', async ({ page }
     const [x, y] = await button(id);
     await page.touchscreen.tap(x, y);
   };
-  const saved = () =>
-    page.evaluate(
-      () =>
-        JSON.parse(localStorage.getItem('puzzlecave.save.v1') ?? '{}').settings as {
-          dragStep: number;
-          vibration: boolean;
-        },
-    );
+  const saved = async () => (await storedSave(page))!.settings;
   // 40 → 48 → 56 → 64 px per move
   for (let i = 0; i < 3; i++) {
     await tap('drag-plus');

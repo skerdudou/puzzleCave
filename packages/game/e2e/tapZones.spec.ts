@@ -1,5 +1,7 @@
 import { expect, test, type CDPSession, type Page } from '@playwright/test';
 import { zoneAt, zoneDir, type Box, type TouchControl } from '../src/input/tapZones';
+import type { Settings } from '../src/save';
+import { encodedSave, storedSave } from './storedSave';
 
 // A phone: touch screen, portrait, 2 device pixels per CSS pixel.
 test.use({ viewport: { width: 390, height: 740 }, hasTouch: true, deviceScaleFactor: 2 });
@@ -25,15 +27,8 @@ const debug = (page: Page): Promise<Pc> =>
   page.evaluate(() => (window as unknown as { __pc?: Pc }).__pc ?? {});
 const vibrations = (page: Page) =>
   page.evaluate(() => (window as unknown as { __vib: number[][] }).__vib);
-const savedSettings = (page: Page) =>
-  page.evaluate(
-    () =>
-      (
-        JSON.parse(localStorage.getItem('puzzlecave.save.v1') ?? '{}') as {
-          settings?: Record<string, unknown>;
-        }
-      ).settings ?? {},
-  );
+const savedSettings = async (page: Page): Promise<Partial<Settings>> =>
+  (await storedSave(page))?.settings ?? {};
 
 /** navigator.vibrate replaced by a recorder (window.__vib) */
 async function recordVibrations(page: Page): Promise<void> {
@@ -49,12 +44,10 @@ async function recordVibrations(page: Page): Promise<void> {
 
 /** a save with these settings (before the game loads) */
 async function withSettings(page: Page, settings: Record<string, unknown>): Promise<void> {
-  await page.addInitScript((s) => {
-    localStorage.setItem(
-      'puzzlecave.save.v1',
-      JSON.stringify({ version: 1, settings: s, levels: {} }),
-    );
-  }, settings);
+  await page.addInitScript(
+    (save) => localStorage.setItem('puzzlecave.save.v1', save),
+    encodedSave({ version: 1, settings, levels: {} }),
+  );
 }
 const tapMode = (page: Page) => withSettings(page, { touchControl: 'tap' });
 

@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { clickScrolled } from './options';
+import type { Settings } from '../src/save';
+import { storedSave } from './storedSave';
 
 const debug = (page: Page) =>
   page.evaluate(() => (window as unknown as { __pc?: Record<string, unknown> }).__pc ?? {});
@@ -74,11 +76,12 @@ test('graphics toggles persist', async ({ page }) => {
   await expect.poll(async () => (await debug(page)).scene).toBe('Menu');
   await page.mouse.click(640, 360 + 56);
   await expect.poll(async () => (await debug(page)).scene).toBe('Options');
-  const settings = () =>
-    page.evaluate(
-      () => JSON.parse(localStorage.getItem('puzzlecave.save.v1') ?? '{}').settings ?? {},
-    );
-  expect((await debug(page)).settings).toMatchObject({ torchlight: true, dust: true, vignette: true });
+  const settings = async (): Promise<Partial<Settings>> => (await storedSave(page))?.settings ?? {};
+  expect((await debug(page)).settings).toMatchObject({
+    torchlight: true,
+    dust: true,
+    vignette: true,
+  });
 
   await clickScrolled(page, 'torchlight');
   await expect.poll(async () => (await settings()).torchlight).toBe(false);
@@ -92,6 +95,10 @@ test('graphics toggles persist', async ({ page }) => {
   await expect.poll(async () => (await debug(page)).scene).toBe('Menu');
   await page.mouse.click(640, 360 + 56);
   await expect.poll(async () => (await debug(page)).scene).toBe('Options');
-  expect((await debug(page)).settings).toMatchObject({ torchlight: false, dust: false, vignette: false });
+  expect((await debug(page)).settings).toMatchObject({
+    torchlight: false,
+    dust: false,
+    vignette: false,
+  });
   expect(await settings()).toMatchObject({ torchlight: false, dust: false, vignette: false });
 });

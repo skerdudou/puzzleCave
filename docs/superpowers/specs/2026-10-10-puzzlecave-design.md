@@ -203,6 +203,10 @@ without extension (stable). Every read/write is guarded (`try/catch`): if storag
 the game works without persistence; if the save is unreadable, it is copied to
 `puzzlecave.save.corrupt` and the game starts over with a blank save.
 
+Since 2026-11 the entry holds that JSON in the export format (Options › Export: scrambled, with a
+hash; `exportSave` in `packages/game/src/save.ts`), so that it cannot be edited by hand from the
+browser's console; a save still stored as plain JSON is unreadable (set aside, as above).
+
 ## 10. Progress
 
 `chapters.json`: `[{ id, name: {fr, en}, unlockAfter, levels: [ids…] }]`. The first level of the first
