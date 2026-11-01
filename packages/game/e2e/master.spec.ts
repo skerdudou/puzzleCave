@@ -5,6 +5,7 @@ import { initialState, parseMoves, replay, step, type Dir } from '@puzzlecave/co
 import { parseTmx } from '@puzzlecave/tiled';
 import { FRAME_MS } from './fps';
 import { goToLevel } from './select';
+import { encodedSave } from './storedSave';
 
 // pc-31, a level of the Medium chapter (master mode exists there, not on Easy)
 const ID = 'pc-31';
@@ -195,7 +196,7 @@ async function withMasterOpen(page: Page): Promise<void> {
       if (!localStorage.getItem('puzzlecave.save.v1'))
         localStorage.setItem('puzzlecave.save.v1', save);
     },
-    JSON.stringify({ version: 1, settings: {}, levels }),
+    encodedSave({ version: 1, settings: {}, levels }),
   );
 }
 
@@ -431,7 +432,7 @@ test('a save of version 1: a platinum becomes grand master, a master run within 
   };
   await page.addInitScript(
     (save) => localStorage.setItem('puzzlecave.save.v1', save),
-    JSON.stringify({ version: 1, settings: {}, levels }),
+    encodedSave({ version: 1, settings: {}, levels }),
   );
   await selectLevel(page);
   expect(await field(page, 'masterMedal')).toBe('master');

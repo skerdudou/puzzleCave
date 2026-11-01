@@ -5,6 +5,7 @@ import { initialState, parseMoves, replay, step, type Dir } from '@puzzlecave/co
 import { parseTmx } from '@puzzlecave/tiled';
 import { exportSave, importSave } from '../src/save';
 import { goToLevel } from './select';
+import { encodedSave, storedSave } from './storedSave';
 
 const SAVE_KEY = 'puzzlecave.save.v1';
 const debug = (page: Page) =>
@@ -12,8 +13,8 @@ const debug = (page: Page) =>
 const field = async (page: Page, k: string) => (await debug(page))[k];
 const button = async (page: Page, id: string) =>
   ((await field(page, 'buttons')) as Record<string, [number, number]>)[id]!;
-const stored = (page: Page) =>
-  page.evaluate((k) => JSON.parse(localStorage.getItem(k) ?? 'null'), SAVE_KEY);
+// typed loosely, like the JSON the storage held before
+const stored = async (page: Page): Promise<any> => storedSave(page);
 const press = async (page: Page, ...keys: string[]) => {
   for (const k of keys) await page.keyboard.press(k);
 };
@@ -26,7 +27,7 @@ async function withProgress(page: Page): Promise<void> {
     },
     {
       key: SAVE_KEY,
-      save: JSON.stringify({
+      save: encodedSave({
         version: 1,
         settings: {},
         levels: { 'pc-01': { completed: true, bestMoves: 26, medals: { moves: 'gold' } } },
@@ -219,7 +220,7 @@ test.describe('touch screen', () => {
       ({ key, save }) => {
         if (!localStorage.getItem(key)) localStorage.setItem(key, save);
       },
-      { key: SAVE_KEY, save: JSON.stringify({ version: 1, settings: {}, levels }) },
+      { key: SAVE_KEY, save: encodedSave({ version: 1, settings: {}, levels }) },
     );
     await page.goto('/');
     await expect.poll(() => field(page, 'scene')).toBe('Menu');

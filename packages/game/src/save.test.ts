@@ -6,6 +6,7 @@ import {
   SAVE_VERSION,
   SaveStore,
   defaultSave,
+  encodeSave,
   exportSave,
   importSave,
   migrate,
@@ -21,6 +22,8 @@ const mem = (init: Record<string, string> = {}): KV & { data: Record<string, str
   const data = { ...init };
   return { data, getItem: (k) => data[k] ?? null, setItem: (k, v) => void (data[k] = v) };
 };
+/** a save (maybe of an older version, or partial) as the storage holds it */
+const stored = (save: unknown) => encodeSave(JSON.stringify(save));
 
 test('no storage: default save, save returns false', () => {
   const s = new SaveStore(null);
@@ -37,6 +40,35 @@ test('round trip', () => {
   expect(new SaveStore(kv).load()).toEqual(d);
 });
 
+test('the storage holds the save in the export format, not as readable JSON', () => {
+  const kv = mem();
+  const d = defaultSave();
+  d.levels['pc-01'] = { completed: true, bestMoves: 12, medals: { moves: 'gold' } };
+  new SaveStore(kv).save(d);
+  const raw = kv.data[SAVE_KEY]!;
+  expect(raw.startsWith(`${EXPORT_HEADER}\n`)).toBe(true);
+  expect(raw).not.toContain('pc-01');
+  expect(importSave(raw)).toEqual(d);
+});
+
+test('a save stored as JSON (older versions, or written by hand): set aside, start from scratch', () => {
+  const json = JSON.stringify(defaultSave());
+  const kv = mem({ [SAVE_KEY]: json });
+  expect(new SaveStore(kv).load()).toEqual(defaultSave());
+  expect(kv.data[CORRUPT_KEY]).toBe(json);
+});
+
+test('a stored save changed by hand: set aside, start from scratch', () => {
+  const kv = mem();
+  new SaveStore(kv).save(defaultSave());
+  const raw = kv.data[SAVE_KEY]!;
+  const [head, body] = raw.split('\n');
+  const altered = `${head}\n${body!.slice(0, 10)}${body![10] === 'A' ? 'B' : 'A'}${body!.slice(11)}\n`;
+  kv.data[SAVE_KEY] = altered;
+  expect(new SaveStore(kv).load()).toEqual(defaultSave());
+  expect(kv.data[CORRUPT_KEY]).toBe(altered);
+});
+
 test('corrupted content: set aside, start from scratch', () => {
   const kv = mem({ [SAVE_KEY]: '{oups' });
   expect(new SaveStore(kv).load()).toEqual(defaultSave());
@@ -46,13 +78,13 @@ test('corrupted content: set aside, start from scratch', () => {
 test('the preview never reads nor writes the release save', () => {
   const release = defaultSave();
   release.levels['pc-01'] = { completed: true, bestMoves: 12, medals: { moves: 'gold' } };
-  const kv = mem({ [SAVE_KEY]: JSON.stringify(release) });
+  const kv = mem({ [SAVE_KEY]: stored(release) });
   const preview = new SaveStore(kv, undefined, PREVIEW_KEYS);
   expect(preview.load()).toEqual(defaultSave());
   const d = defaultSave();
   d.settings.sound = false;
   expect(preview.save(d)).toBe(true);
-  expect(JSON.parse(kv.data[SAVE_KEY]!)).toEqual(release);
+  expect(importSave(kv.data[SAVE_KEY]!)).toEqual(release);
   expect(new SaveStore(kv).load()).toEqual(release);
   expect(new SaveStore(kv, undefined, PREVIEW_KEYS).load()).toEqual(d);
   // an unreadable preview save is set aside under the preview's key
@@ -63,14 +95,14 @@ test('the preview never reads nor writes the release save', () => {
 });
 
 test('wrong version: set aside', () => {
-  const kv = mem({ [SAVE_KEY]: JSON.stringify({ version: 99 }) });
+  const kv = mem({ [SAVE_KEY]: stored({ version: 99 }) });
   expect(new SaveStore(kv).load()).toEqual(defaultSave());
   expect(kv.data[CORRUPT_KEY]).toBeDefined();
 });
 
 test('missing settings filled with defaults', () => {
   const kv = mem({
-    [SAVE_KEY]: JSON.stringify({ version: 1, settings: { sound: false }, levels: {} }),
+    [SAVE_KEY]: stored({ version: 1, settings: { sound: false }, levels: {} }),
   });
   expect(new SaveStore(kv).load().settings).toEqual({ ...defaultSave().settings, sound: false });
 });
@@ -95,14 +127,14 @@ test.each([
   [999, 20],
 ])('repeatRate %j → %i (clamped, default if non-numeric)', (raw, expected) => {
   const kv = mem({
-    [SAVE_KEY]: JSON.stringify({ version: 1, settings: { repeatRate: raw }, levels: {} }),
+    [SAVE_KEY]: stored({ version: 1, settings: { repeatRate: raw }, levels: {} }),
   });
   expect(new SaveStore(kv).load().settings.repeatRate).toBe(expected);
 });
 
 test('invalid settings replaced by defaults', () => {
   const kv = mem({
-    [SAVE_KEY]: JSON.stringify({
+    [SAVE_KEY]: stored({
       version: 1,
       settings: { sound: 'yes', lang: 'xx', dragStep: 'far', vibration: 0, touchControl: 'x' },
       levels: {},
@@ -125,7 +157,7 @@ test('invalid settings replaced by defaults', () => {
 
 test('a save from before the drag, vibration and touch control options: defaults (40 px, on, drag)', () => {
   const kv = mem({
-    [SAVE_KEY]: JSON.stringify({
+    [SAVE_KEY]: stored({
       version: 1,
       settings: { sound: false, lang: 'fr', swipeThreshold: 45, repeatRate: 12 },
       levels: {},
@@ -153,15 +185,15 @@ test.each([
   [-5, 16],
 ])('dragStep %j → %i (snapped to an offered distance)', (raw, expected) => {
   const kv = mem({
-    [SAVE_KEY]: JSON.stringify({ version: 1, settings: { dragStep: raw }, levels: {} }),
+    [SAVE_KEY]: stored({ version: 1, settings: { dragStep: raw }, levels: {} }),
   });
   expect(new SaveStore(kv).load().settings.dragStep).toBe(expected);
 });
 
 test('a drag distance left at the old default (24 px) follows the new one; a chosen one stays', () => {
   const load = (settings: object) =>
-    new SaveStore(mem({ [SAVE_KEY]: JSON.stringify({ version: 1, settings, levels: {} }) })).load()
-      .settings.dragStep;
+    new SaveStore(mem({ [SAVE_KEY]: stored({ version: 1, settings, levels: {} }) })).load().settings
+      .dragStep;
   // saves from before the field: their default was 24 px
   expect(load({ dragStep: 24 })).toBe(40);
   expect(load({ dragStep: 20 })).toBe(20);
@@ -174,7 +206,7 @@ test('a drag distance left at the old default (24 px) follows the new one; a cho
   expect(load({ dragStep: 48, dragStepDefault: 48 })).toBe(40);
   // round trip: the migrated save keeps its value
   const kv = mem({
-    [SAVE_KEY]: JSON.stringify({ version: 1, settings: { dragStep: 24 }, levels: {} }),
+    [SAVE_KEY]: stored({ version: 1, settings: { dragStep: 24 }, levels: {} }),
   });
   const d = new SaveStore(kv).load();
   d.settings.dragStep = 24; // chosen again by the player
@@ -185,7 +217,7 @@ test('a drag distance left at the old default (24 px) follows the new one; a cho
 test('master records are kept', () => {
   const rec = { completed: true, medals: {}, masterBestMoves: 31, masterBestTimeMs: 9000 };
   const kv = mem({
-    [SAVE_KEY]: JSON.stringify({
+    [SAVE_KEY]: stored({
       version: 1,
       settings: {},
       levels: { a: rec, b: { ...rec, masterBestMoves: 'x' } },
@@ -198,7 +230,7 @@ test('master records are kept', () => {
 
 test.each(['drag', 'tap'])('touch control %s is kept', (touchControl) => {
   const kv = mem({
-    [SAVE_KEY]: JSON.stringify({ version: 1, settings: { touchControl }, levels: {} }),
+    [SAVE_KEY]: stored({ version: 1, settings: { touchControl }, levels: {} }),
   });
   expect(new SaveStore(kv).load().settings.touchControl).toBe(touchControl);
 });
@@ -212,7 +244,7 @@ test.each([
   [3, 'drag'],
 ])('old tap zones %j → touch control %s', (tapZones, expected) => {
   const kv = mem({
-    [SAVE_KEY]: JSON.stringify({ version: 1, settings: { tapZones }, levels: {} }),
+    [SAVE_KEY]: stored({ version: 1, settings: { tapZones }, levels: {} }),
   });
   const { settings } = new SaveStore(kv).load();
   expect(settings.touchControl).toBe(expected);
@@ -221,7 +253,7 @@ test.each([
 
 test('a touch control already saved wins over old tap zones', () => {
   const kv = mem({
-    [SAVE_KEY]: JSON.stringify({
+    [SAVE_KEY]: stored({
       version: 1,
       settings: { tapZones: 'screen', touchControl: 'drag' },
       levels: {},
@@ -232,25 +264,24 @@ test('a touch control already saved wins over old tap zones', () => {
 
 test('vibration off is kept', () => {
   const kv = mem({
-    [SAVE_KEY]: JSON.stringify({ version: 1, settings: { vibration: false }, levels: {} }),
+    [SAVE_KEY]: stored({ version: 1, settings: { vibration: false }, levels: {} }),
   });
   expect(new SaveStore(kv).load().settings.vibration).toBe(false);
 });
 
 test.each(['en', 'fr', 'de', 'es', 'it'])('language %s is kept', (lang) => {
-  const kv = mem({ [SAVE_KEY]: JSON.stringify({ version: 1, settings: { lang }, levels: {} }) });
+  const kv = mem({ [SAVE_KEY]: stored({ version: 1, settings: { lang }, levels: {} }) });
   expect(new SaveStore(kv).load().settings.lang).toBe(lang);
 });
 
 test('levels that is not an object: set aside', () => {
-  const kv = mem({ [SAVE_KEY]: JSON.stringify({ version: 1, settings: {}, levels: [] }) });
+  const kv = mem({ [SAVE_KEY]: stored({ version: 1, settings: {}, levels: [] }) });
   expect(new SaveStore(kv).load()).toEqual(defaultSave());
   expect(kv.data[CORRUPT_KEY]).toBeDefined();
 });
 
 const loadLevels = (levels: unknown) =>
-  new SaveStore(mem({ [SAVE_KEY]: JSON.stringify({ version: 1, settings: {}, levels }) })).load()
-    .levels;
+  new SaveStore(mem({ [SAVE_KEY]: stored({ version: 1, settings: {}, levels }) })).load().levels;
 
 test('level record without medals: medals {} by default', () => {
   expect(loadLevels({ 'pc-01': { completed: true } })).toEqual({
@@ -444,13 +475,13 @@ test('version 1: nothing derived for a level without master mode, unknown, or wi
 
 test('version 1 through the store: migrated on load, written back as version 2', () => {
   const kv = mem({
-    [SAVE_KEY]: v1({ 'pc-14': { completed: true, masterBestMoves: 600, medals: {} } }),
+    [SAVE_KEY]: encodeSave(v1({ 'pc-14': { completed: true, masterBestMoves: 600, medals: {} } })),
   });
   const store = new SaveStore(kv, ctx);
   const d = store.load();
   expect(d.levels['pc-14']!.medals).toEqual({ master: 'master' });
   store.save(d);
-  expect(JSON.parse(kv.data[SAVE_KEY]!)).toMatchObject({
+  expect(importSave(kv.data[SAVE_KEY]!)).toMatchObject({
     version: 2,
     levels: { 'pc-14': { medals: { master: 'master' } } },
   });

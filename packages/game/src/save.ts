@@ -149,12 +149,18 @@ export function parseSave(raw: string, ctx: SaveContext = NO_LEVELS): SaveData {
 export const EXPORT_HEADER = 'puzzlecave-save-1';
 
 /**
- * The save as a file for the player to keep (Options › Export): not readable as it is, and with a
- * hash that importSave checks. It stops a quick edit by hand, nothing more: the key is in the
+ * The save as a file for the player to keep (Options › Export), and as the browser's storage holds
+ * it: not readable as it is, and with a hash that importSave checks. It stops a quick edit by hand
+ * (of the file, or of the storage from the browser's console), nothing more: the key is in the
  * game's code.
  */
 export function exportSave(d: SaveData): string {
-  const json = new TextEncoder().encode(JSON.stringify(d));
+  return encodeSave(JSON.stringify(d));
+}
+
+/** A save's JSON text in the export format (exportSave; the tests encode older saves with it). */
+export function encodeSave(text: string): string {
+  const json = new TextEncoder().encode(text);
   const bytes = new Uint8Array(4 + json.length);
   new DataView(bytes.buffer).setUint32(0, fnv1a(json));
   bytes.set(json, 4);
@@ -321,7 +327,9 @@ export class SaveStore {
     try {
       raw = this.storage.getItem(this.keys.save);
       if (raw === null) return defaultSave();
-      return parseSave(raw, this.ctx);
+      // the export format only: a save stored as JSON (before 2026-11) is set aside like any
+      // unreadable one
+      return importSave(raw, this.ctx);
     } catch {
       try {
         if (raw !== null) this.storage.setItem(this.keys.corrupt, raw);
@@ -335,7 +343,7 @@ export class SaveStore {
   save(d: SaveData): boolean {
     if (!this.storage) return false;
     try {
-      this.storage.setItem(this.keys.save, JSON.stringify(d));
+      this.storage.setItem(this.keys.save, exportSave(d));
       return true;
     } catch {
       return false;

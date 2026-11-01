@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
 import { parseMoves, type Dir } from '@puzzlecave/core';
+import { encodedSave } from './storedSave';
 
 const levelsDir = new URL('../../../levels/', import.meta.url);
 const solutionOf = (id: string) =>
@@ -103,7 +104,7 @@ async function withAllGold(page: Page): Promise<void> {
   };
   await page.addInitScript(
     (save) => localStorage.setItem('puzzlecave.save.v1', save),
-    JSON.stringify({ version: 2, settings: {}, levels }),
+    encodedSave({ version: 2, settings: {}, levels }),
   );
 }
 
