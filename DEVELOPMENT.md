@@ -119,7 +119,9 @@ very first launch after a deploy; it arrives this way:
 3. **Switch** (`UpdateGate`, `packages/game/src/updateGate.ts`): if the player is on the main
    menu, the level list, the options or a result screen, the game lets the new worker take over
    and reloads at once (nothing is lost: progress and settings are saved in `localStorage` as soon
-   as they change). During a level (or a replay), nothing is interrupted: a short notice ("Update
+   as they change; since v0.3.1 in the export format, scrambled and with a hash, so that the
+   console cannot edit them, and a save stored as plain JSON by an older version is set aside as
+   unreadable: export from the old version, import into the new one). During a level (or a replay), nothing is interrupted: a short notice ("Update
    available — it will be applied on the next menu") shows for a few seconds, and the reload
    happens when the player next opens the main menu, the level list or the options (not the
    result screen of that level, nor a level chained with Next).
