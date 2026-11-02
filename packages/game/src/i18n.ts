@@ -153,6 +153,11 @@ const fr = {
   achDescCompletionist: 'Or partout, et grand maître partout où le mode maître existe',
   achDescDeepThought: 'Réfléchis une minute sans bouger en plein niveau',
   achDescKonami: '↑ ↑ ↓ ↓ ← → ← → B A : tous les chapitres s’ouvrent',
+  achTimeEasy: 'Pas pressés',
+  achTimeMedium: 'Heure de pointe',
+  achTimeHard: 'Pierre qui roule',
+  achTimeExpert: 'Sprinteur des cavernes',
+  achDescTimeGold: 'Or en temps sur tous les niveaux du chapitre {chapter}',
 } as const;
 
 export type MessageKey = keyof typeof fr;
@@ -308,6 +313,11 @@ const en: Record<MessageKey, string> = {
   achDescCompletionist: 'Gold everywhere, and grand master wherever master mode exists',
   achDescDeepThought: 'Think for a minute without moving in the middle of a level',
   achDescKonami: '↑ ↑ ↓ ↓ ← → ← → B A: every chapter opens',
+  achTimeEasy: 'Quick Steps',
+  achTimeMedium: 'Rush Hour',
+  achTimeHard: 'Rolling Stone',
+  achTimeExpert: 'Cave Sprinter',
+  achDescTimeGold: 'Gold in time on every level of the {chapter} chapter',
 };
 
 const de: Record<MessageKey, string> = {
@@ -464,6 +474,11 @@ const de: Record<MessageKey, string> = {
   achDescCompletionist: 'Überall Gold, und Großmeister überall, wo es den Meistermodus gibt',
   achDescDeepThought: 'Denk mitten im Level eine Minute lang nach, ohne dich zu bewegen',
   achDescKonami: '↑ ↑ ↓ ↓ ← → ← → B A: alle Kapitel öffnen sich',
+  achTimeEasy: 'Flinke Füße',
+  achTimeMedium: 'Rushhour',
+  achTimeHard: 'Rollender Stein',
+  achTimeExpert: 'Höhlensprinter',
+  achDescTimeGold: 'Gold nach Zeit in allen Leveln des Kapitels {chapter}',
 };
 
 const es: Record<MessageKey, string> = {
@@ -619,6 +634,11 @@ const es: Record<MessageKey, string> = {
   achDescCompletionist: 'Oro en todas partes, y gran maestro donde exista el modo maestro',
   achDescDeepThought: 'Piensa un minuto sin moverte en mitad de un nivel',
   achDescKonami: '↑ ↑ ↓ ↓ ← → ← → B A: se abren todos los capítulos',
+  achTimeEasy: 'Pies ligeros',
+  achTimeMedium: 'Hora punta',
+  achTimeHard: 'Piedra rodante',
+  achTimeExpert: 'Velocista de la cueva',
+  achDescTimeGold: 'Oro en tiempo en todos los niveles del capítulo {chapter}',
 };
 
 const it: Record<MessageKey, string> = {
@@ -774,6 +794,11 @@ const it: Record<MessageKey, string> = {
   achDescCompletionist: 'Oro ovunque, e gran maestro ovunque esista la modalità maestro',
   achDescDeepThought: 'Rifletti un minuto senza muoverti nel mezzo di un livello',
   achDescKonami: '↑ ↑ ↓ ↓ ← → ← → B A: si aprono tutti i capitoli',
+  achTimeEasy: 'Passo svelto',
+  achTimeMedium: 'Ora di punta',
+  achTimeHard: 'Pietra rotolante',
+  achTimeExpert: 'Velocista delle caverne',
+  achDescTimeGold: 'Oro nel tempo in tutti i livelli del capitolo {chapter}',
 };
 
 /** Languages offered in Options, in that order. */

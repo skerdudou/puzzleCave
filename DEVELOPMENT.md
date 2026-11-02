@@ -228,8 +228,8 @@ lets you copy `goldMoves`/`goldTime` and the solution you played.
 
 `packages/game/src/achievements.ts` lists them (menu › Achievements shows them):
 
-- Per chapter: finish every level, gold (moves) on every level, and grand master on every level
-  for a chapter with master mode. Only the chapters named in `CHAPTER_NAMES` get them (`easy`,
+- Per chapter: finish every level, gold (moves) on every level, gold (time) on every level that
+  has time medals, and grand master on every level for a chapter with master mode. Only the chapters named in `CHAPTER_NAMES` get them (`easy`,
   `medium`, `hard`, `expert`): a new chapter needs its names there and in `i18n.ts`.
 - Over the whole game: a first gold, 10 and 25 golds (only when there are that many levels),
   gold everywhere, a first master medal, a first grand master, and gold plus grand master

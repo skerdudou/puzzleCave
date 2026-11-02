@@ -45,4 +45,8 @@ export const saveContext: SaveContext = {
 };
 
 /** The game's achievements (achievements.ts), for its levels. */
-export const achievements = achievementList({ chapters, hasMaster });
+export const achievements = achievementList({
+  chapters,
+  hasMaster,
+  hasTime: (id) => resolveThresholds(levelById(id).thresholds).time !== undefined,
+});
