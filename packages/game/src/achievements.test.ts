@@ -26,6 +26,8 @@ const chapters = [
 const lv: AchievementLevels = {
   chapters,
   hasMaster: (id) => !id.startsWith('e'),
+  // m2 has no time medals
+  hasTime: (id) => id !== 'm2',
 };
 const rec = (medals: LevelRecord['medals'] = {}): LevelRecord => ({ completed: true, medals });
 const ids = () => achievementList(lv).map((a) => a.id);
@@ -34,8 +36,10 @@ test('the list: per known chapter, then global medals, then the secrets', () => 
   expect(ids()).toEqual([
     'done:easy',
     'gold:easy',
+    'timeGold:easy',
     'done:medium',
     'gold:medium',
+    'timeGold:medium',
     'grandMaster:medium',
     'gold1',
     'goldAll',
@@ -47,7 +51,11 @@ test('the list: per known chapter, then global medals, then the secrets', () => 
   ]);
   // 10 and 25 golds: only with that many levels
   const many = Array.from({ length: 25 }, (_, i) => `m${i}`);
-  const big = achievementList({ chapters: [chapter('medium', many)], hasMaster: () => true });
+  const big = achievementList({
+    chapters: [chapter('medium', many)],
+    hasMaster: () => true,
+    hasTime: () => true,
+  });
   expect(big.map((a) => a.id)).toContain('gold25');
   expect(big.find((a) => a.id === 'gold10')?.n).toBe(10);
 });
@@ -153,4 +161,24 @@ test('the view: earned, secret until earned, progress of the multi-step ones', (
   expect(viewOf(byId.get('gold1')!, {}, {})).toEqual({ earned: false, secret: false });
   expect(viewOf(byId.get('konami')!, {}, {})).toEqual({ earned: false, secret: true });
   expect(viewOf(byId.get('konami')!, {}, { konami: 1 })).toEqual({ earned: true, secret: false });
+});
+
+test('time gold per chapter: the levels with time medals only', () => {
+  const list = achievementList(lv);
+  const byId = new Map(list.map((a) => [a.id, a]));
+  expect(byId.get('timeGold:medium')!.desc).toBe('achDescTimeGold');
+  // m2 has no time medals: m1 alone counts
+  expect(byId.get('timeGold:medium')!.progress!({})).toEqual({ got: 0, goal: 1 });
+  const r: Records = {
+    m1: rec({ time: 'gold' }),
+    e1: rec({ time: 'gold' }),
+    e2: rec({ time: 'silver' }),
+  };
+  expect(newlyEarned(list, r, {})).toContain('timeGold:medium');
+  expect(newlyEarned(list, r, {})).not.toContain('timeGold:easy');
+  // gold in time is not gold in moves
+  expect(newlyEarned(list, r, {})).not.toContain('gold:medium');
+  // a chapter without any time medals has no time gold achievement
+  const untimed = achievementList({ ...lv, hasTime: () => false }).map((a) => a.id);
+  expect(untimed.some((id) => id.startsWith('timeGold:'))).toBe(false);
 });

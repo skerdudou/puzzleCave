@@ -7,6 +7,8 @@ export interface AchievementLevels {
   chapters: readonly Chapter[];
   /** master mode (and its medals) exists on this level */
   hasMaster(levelId: string): boolean;
+  /** this level has time medals (a goldTime) */
+  hasTime(levelId: string): boolean;
 }
 
 export interface Progress {
@@ -37,12 +39,30 @@ export const KONAMI = 'konami';
 
 /** The chapters that have achievements, by their id, and the names of these. */
 const CHAPTER_NAMES: Readonly<
-  Record<string, { done: MessageKey; gold: MessageKey; grandMaster?: MessageKey }>
+  Record<
+    string,
+    { done: MessageKey; gold: MessageKey; timeGold: MessageKey; grandMaster?: MessageKey }
+  >
 > = {
-  easy: { done: 'achDoneEasy', gold: 'achGoldEasy' },
-  medium: { done: 'achDoneMedium', gold: 'achGoldMedium', grandMaster: 'achGmMedium' },
-  hard: { done: 'achDoneHard', gold: 'achGoldHard', grandMaster: 'achGmHard' },
-  expert: { done: 'achDoneExpert', gold: 'achGoldExpert', grandMaster: 'achGmExpert' },
+  easy: { done: 'achDoneEasy', gold: 'achGoldEasy', timeGold: 'achTimeEasy' },
+  medium: {
+    done: 'achDoneMedium',
+    gold: 'achGoldMedium',
+    timeGold: 'achTimeMedium',
+    grandMaster: 'achGmMedium',
+  },
+  hard: {
+    done: 'achDoneHard',
+    gold: 'achGoldHard',
+    timeGold: 'achTimeHard',
+    grandMaster: 'achGmHard',
+  },
+  expert: {
+    done: 'achDoneExpert',
+    gold: 'achGoldExpert',
+    timeGold: 'achTimeExpert',
+    grandMaster: 'achGmExpert',
+  },
 };
 
 const count = (
@@ -54,13 +74,14 @@ const count = (
   goal: ids.length,
 });
 const isGold = (records: Records) => (id: string) => records[id]?.medals.moves === 'gold';
+const isTimeGold = (records: Records) => (id: string) => records[id]?.medals.time === 'gold';
 const isGrandMaster = (records: Records) => (id: string) =>
   records[id]?.medals.master === 'grandMaster';
 
 /**
  * Every achievement, in the order of the achievements screen: for each chapter, finish it, gold
- * on all its levels, grand master on all of them (when it has master mode); then the medals over
- * the whole game; then the secrets.
+ * in moves on all its levels, gold in time on all those with time medals, grand master on all of
+ * them (when it has master mode); then the medals over the whole game; then the secrets.
  */
 export function achievementList(lv: AchievementLevels): Achievement[] {
   const list: Achievement[] = [];
@@ -70,6 +91,7 @@ export function achievementList(lv: AchievementLevels): Achievement[] {
     const names = CHAPTER_NAMES[chapter.id];
     if (!names) continue;
     const ids = chapter.levels;
+    const timed = ids.filter((id) => lv.hasTime(id));
     list.push(
       {
         id: `done:${chapter.id}`,
@@ -84,6 +106,14 @@ export function achievementList(lv: AchievementLevels): Achievement[] {
         desc: 'achDescGold',
         chapter,
         progress: (r) => count(ids, r, isGold(r)),
+      },
+      {
+        id: `timeGold:${chapter.id}`,
+        name: names.timeGold,
+        desc: 'achDescTimeGold',
+        chapter,
+        // a level without time medals has no time gold to earn: it is left out
+        progress: (r) => count(timed, r, isTimeGold(r)),
       },
     );
     if (names.grandMaster && ids.length > 0 && ids.every((id) => lv.hasMaster(id)))
