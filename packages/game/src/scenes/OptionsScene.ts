@@ -513,6 +513,8 @@ export class OptionsScene extends Phaser.Scene {
     app.data = data;
     setLang(data.settings.lang ?? detectLang(navigator.languages ?? []));
     app.persist();
+    // a file from before the achievements: what its records earn
+    app.checkRecords(true);
     syncMusic(this, data.settings.sound, 'music-menu');
     showNotice(t('importDone'));
     this.rebuild();
@@ -521,6 +523,7 @@ export class OptionsScene extends Phaser.Scene {
   /** Options › Erase (once confirmed). */
   private eraseProgress(): void {
     app.data.levels = {};
+    app.data.achievements = {};
     app.persist();
     showNotice(t('progressReset'));
     this.rebuild();

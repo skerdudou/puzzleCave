@@ -1,5 +1,6 @@
 import '@fontsource/silkscreen/400.css';
 import Phaser from 'phaser';
+import { AchievementsScene } from './scenes/AchievementsScene';
 import { BootScene } from './scenes/BootScene';
 import { GameScene } from './scenes/GameScene';
 import { MenuScene } from './scenes/MenuScene';
@@ -40,7 +41,16 @@ const game = new Phaser.Game({
     height: Math.round(window.innerHeight * ratio()),
     zoom: 1 / ratio(),
   },
-  scene: [BootScene, MenuScene, OptionsScene, SelectScene, GameScene, ResultScene, ReplayScene],
+  scene: [
+    BootScene,
+    MenuScene,
+    AchievementsScene,
+    OptionsScene,
+    SelectScene,
+    GameScene,
+    ResultScene,
+    ReplayScene,
+  ],
 });
 startUpdates(game);
 initSfx(game);

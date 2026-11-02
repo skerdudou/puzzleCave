@@ -118,6 +118,16 @@ for (const { width, height, touch, langs } of VIEWS) {
         await page.keyboard.press('Escape');
         await sceneIs(page, 'Menu');
 
+        // Achievements, the menu's third button
+        for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowDown');
+        await page.keyboard.press('Enter');
+        await sceneIs(page, 'Achievements');
+        await check('achievements top');
+        await page.keyboard.press('End');
+        await check('achievements bottom');
+        await page.keyboard.press('Escape');
+        await sceneIs(page, 'Menu');
+
         await page.keyboard.press('Enter');
         for (const c of chapters) {
           await goToLevel(page, c.levels[0]!);

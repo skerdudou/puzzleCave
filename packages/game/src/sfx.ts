@@ -19,6 +19,7 @@ export const SOUNDS = {
   drown: [0.7, 0.1, 500, 0.02, 0.2, 0.4, 0, 1, -12, 0, 0, 0, 0, 0.2],
   fail: [0.6, 0, 220, 0.02, 0.3, 0.4, 2, 1, -2, 0, 0, 0, 0, 0, 10],
   win: [0.8, 0, 523, 0.02, 0.25, 0.35, 1, 1, 0, 0, 262, 0.08, 0.16],
+  achievement: [0.6, 0, 784, 0.01, 0.12, 0.3, 1, 1, 0, 0, 392, 0.07, 0.14],
 } as const satisfies Record<string, readonly number[]>;
 export type Sfx = keyof typeof SOUNDS;
 
@@ -85,4 +86,39 @@ export function playSfx(s: Sfx | null, enabled: boolean): void {
   } catch {
     /* audio unusable: silence */
   }
+}
+
+/** A short tune: one ZzFX sound (`voice`, its frequency replaced) per note, `stepMs` apart. */
+export interface Tune {
+  voice: readonly number[];
+  /** Hz; 0 is a rest */
+  notes: readonly number[];
+  stepMs: number;
+}
+
+/** The Konami code's fanfare: a quick square-wave arpeggio up to a held high E. */
+export const KONAMI_TUNE: Tune = {
+  voice: [0.5, 0, 0, 0.005, 0.06, 0.08, 2, 0.5],
+  notes: [523, 659, 784, 1047, 0, 784, 1047, 1047, 1319],
+  stepMs: 95,
+};
+
+/** Plays `tune` when the effects are on and the audio unlocked; fails silently otherwise. */
+export function playTune(tune: Tune, enabled: boolean): void {
+  if (!enabled || !zzfx || context?.state !== 'running') return;
+  const z = zzfx;
+  tune.notes.forEach((hz, i) => {
+    if (hz === 0) return;
+    setTimeout(() => {
+      try {
+        const p = [...tune.voice];
+        p[2] = hz;
+        // the last note is held
+        if (i === tune.notes.length - 1) p[4] = 0.3;
+        z.playSamples([z.buildSamples(...p)]);
+      } catch {
+        /* audio unusable: silence */
+      }
+    }, i * tune.stepMs);
+  });
 }

@@ -156,3 +156,12 @@ test('master mode opens with gold on the level (or a master medal earned without
   const r = recordRun(undefined, { moves: 9, timeMs: 1, mode: 'master' }, { moves: 'gold' });
   expect(isMasterUnlocked(r)).toBe(true);
 });
+
+test('all chapters open (the Konami code): every chapter opens with its first two levels', () => {
+  expect(isChapterUnlocked(chapters, 1, {}, true)).toBe(true);
+  expect(isLevelUnlocked(chapters, 1, 0, {}, true)).toBe(true);
+  expect(isLevelUnlocked(chapters, 1, 1, {}, true)).toBe(true);
+  // the levels further in still open one completion at a time
+  expect(isLevelUnlocked(chapters, 0, 2, {}, true)).toBe(false);
+  expect(isChapterUnlocked(chapters, 5, {}, true)).toBe(false);
+});
