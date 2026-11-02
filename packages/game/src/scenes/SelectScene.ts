@@ -1,10 +1,5 @@
 import Phaser from 'phaser';
-import {
-  isChapterUnlocked,
-  isLevelUnlocked,
-  resolveThresholds,
-  type Mode,
-} from '@puzzlecave/core';
+import { isChapterUnlocked, isLevelUnlocked, resolveThresholds, type Mode } from '@puzzlecave/core';
 import { app } from '../app';
 import { setDebug } from '../debug';
 import { formatTime } from '../format';
@@ -39,6 +34,8 @@ export class SelectScene extends Phaser.Scene {
     }
     this.ci = 0;
     this.li = 0;
+    // where the player's progress is: the chapters the Konami code opened are not a reason to
+    // start at the last one
     for (let ci = chapters.length - 1; ci >= 0; ci--) {
       if (!isChapterUnlocked(chapters, ci, app.data.levels)) continue;
       const ch = chapters[ci]!;
@@ -63,10 +60,10 @@ export class SelectScene extends Phaser.Scene {
   }
 
   private chapterOpen(ci: number): boolean {
-    return app.author || isChapterUnlocked(chapters, ci, app.data.levels);
+    return app.author || isChapterUnlocked(chapters, ci, app.data.levels, app.allChaptersOpen);
   }
   private levelOpen(ci: number, li: number): boolean {
-    return app.author || isLevelUnlocked(chapters, ci, li, app.data.levels);
+    return app.author || isLevelUnlocked(chapters, ci, li, app.data.levels, app.allChaptersOpen);
   }
   /** the current chapter has master mode (all its levels do) */
   private masterChapter(): boolean {
@@ -167,7 +164,9 @@ export class SelectScene extends Phaser.Scene {
     const y0 = px(64);
     // by the progression rule alone (author mode opens every tile): read by the e2e tests
     setDebug({
-      unlocked: ch.levels.map((_, i) => isLevelUnlocked(chapters, this.ci, i, app.data.levels)),
+      unlocked: ch.levels.map((_, i) =>
+        isLevelUnlocked(chapters, this.ci, i, app.data.levels, app.allChaptersOpen),
+      ),
     });
     const g = this.add.graphics();
     ch.levels.forEach((id, i) => {

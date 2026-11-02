@@ -526,3 +526,29 @@ test('graphics switches: on by default, a saved value is kept, an invalid one fa
   const bad = load({ torchlight: 'x', dust: 0, vignette: 'no' });
   expect([bad.torchlight, bad.dust, bad.vignette]).toEqual([true, true, true]);
 });
+
+test('achievements: kept with their date; a save from before them has none', () => {
+  const kv = mem();
+  const d = defaultSave();
+  d.achievements = { 'gold:easy': 1_700_000_000_000, konami: 5 };
+  new SaveStore(kv).save(d);
+  expect(new SaveStore(kv).load().achievements).toEqual(d.achievements);
+  const old = mem({ [SAVE_KEY]: stored({ version: 2, settings: {}, levels: {} }) });
+  expect(new SaveStore(old).load().achievements).toEqual({});
+});
+
+test('achievements: invalid entries removed', () => {
+  const kv = mem({
+    [SAVE_KEY]: stored({
+      version: 2,
+      settings: {},
+      levels: {},
+      achievements: { gold1: 3, bad: 'x', neg: -1, inf: null },
+    }),
+  });
+  expect(new SaveStore(kv).load().achievements).toEqual({ gold1: 3 });
+  const notObject = mem({
+    [SAVE_KEY]: stored({ version: 2, settings: {}, levels: {}, achievements: [1] }),
+  });
+  expect(new SaveStore(notObject).load().achievements).toEqual({});
+});

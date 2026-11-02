@@ -1,8 +1,12 @@
 import Phaser from 'phaser';
+import { KONAMI, KonamiCode } from '../achievements';
 import { app } from '../app';
 import { setDebug } from '../debug';
 import { t } from '../i18n';
 import { onSceneKeyDown } from '../input/sceneKeys';
+import { showNotice } from '../notice';
+import { runAcross } from '../render/konamiRunner';
+import { KONAMI_TUNE, playTune } from '../sfx';
 import { syncMusic } from '../music';
 import { PREVIEW, PREVIEW_SHA } from '../preview';
 import { COLORS, KeyFocus, dpr, makeButton, px, textStyle } from '../ui';
@@ -27,6 +31,7 @@ export class MenuScene extends Phaser.Scene {
         .setOrigin(0.5, 1)
         .setAlpha(0.6);
     const play = () => this.scene.start('Select');
+    const trophies = () => this.scene.start('Achievements');
     const options = () => this.scene.start('Options');
     const items = [
       { id: 'play', button: makeButton(this, cx, cy, t('play'), play, 20), press: play },
@@ -35,10 +40,17 @@ export class MenuScene extends Phaser.Scene {
         button: makeButton(this, cx, cy + px(56), t('options'), options, 16),
         press: options,
       },
+      {
+        id: 'achievements',
+        button: makeButton(this, cx, cy + px(104), t('achievements'), trophies, 16),
+        press: trophies,
+      },
     ];
     const focus = new KeyFocus(items);
+    const konami = new KonamiCode();
     // arrows or Tab, then Enter; Enter alone plays
     onSceneKeyDown(this, (e) => {
+      if (!e.repeat && konami.key(e.key)) this.konami();
       if (focus.key(e)) return;
       if (e.key === 'Enter') play();
     });
@@ -51,5 +63,16 @@ export class MenuScene extends Phaser.Scene {
       items.map(({ id, button: b }) => [id, [b.x / dpr(), b.y / dpr()]]),
     );
     setDebug({ scene: 'Menu', buttons });
+  }
+
+  /**
+   * ↑ ↑ ↓ ↓ ← → ← → B A: a fanfare, the explorer running across, and every chapter open (the
+   * effect plays each time; the achievement and the chapters, once).
+   */
+  private konami(): void {
+    playTune(KONAMI_TUNE, app.data.settings.sfx);
+    runAcross(this);
+    if (app.earn([KONAMI]).length > 0) showNotice(t('konamiOpen'));
+    setDebug({ konami: true });
   }
 }

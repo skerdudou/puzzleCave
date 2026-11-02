@@ -224,6 +224,28 @@ longer than the platinum limit, or shorter (the limit should then be lowered).
 In author mode (`npm run dev` only; the published build never enables it), all levels are unlocked and the result screen
 lets you copy `goldMoves`/`goldTime` and the solution you played.
 
+### Achievements
+
+`packages/game/src/achievements.ts` lists them (menu › Achievements shows them):
+
+- Per chapter: finish every level, gold (moves) on every level, and grand master on every level
+  for a chapter with master mode. Only the chapters named in `CHAPTER_NAMES` get them (`easy`,
+  `medium`, `hard`, `expert`): a new chapter needs its names there and in `i18n.ts`.
+- Over the whole game: a first gold, 10 and 25 golds (only when there are that many levels),
+  gold everywhere, a first master medal, a first grand master, and gold plus grand master
+  everywhere.
+- Secrets, shown as "???" until earned: Deep Thought (a minute of the run clock without a move,
+  bump, undo or restart, in normal mode, after the first move; the time the game is hidden does
+  not count) and the Konami code (↑ ↑ ↓ ↓ ← → ← → B A on the main menu, keyboard only). The code
+  plays a fanfare and sends the player sprite running across the screen each time, and its
+  achievement opens every chapter for good (`isChapterUnlocked(…, allOpen)`; the levels inside
+  still open two at a time). Select still starts where the player's own progress is.
+
+The save keeps the earned ones as `achievements` (id → when, ms since 1970). The field came with a
+default, so no version bump. Those earned from the level records are checked after each finished
+level (a toast and a sound for each new one), at start and after an import (quietly: an older
+save gets what its records already earn). Erase clears them with the levels.
+
 ### Providing your own solution (levels too large for the exact solver)
 
 1. Play the level in author mode until the exit.

@@ -38,6 +38,8 @@ export interface SaveData {
   version: 2;
   settings: Settings;
   levels: Record<string, LevelRecord>;
+  /** the achievements earned: id → when (ms since 1970) */
+  achievements: Record<string, number>;
 }
 export interface KV {
   getItem(k: string): string | null;
@@ -142,6 +144,7 @@ export function parseSave(raw: string, ctx: SaveContext = NO_LEVELS): SaveData {
     version: 2,
     settings: sanitiseSettings(obj.settings),
     levels: sanitiseLevels(obj.levels),
+    achievements: sanitiseAchievements(obj.achievements),
   };
 }
 
@@ -226,6 +229,7 @@ export function defaultSave(): SaveData {
       vignette: true,
     },
     levels: {},
+    achievements: {},
   };
 }
 
@@ -308,6 +312,14 @@ function sanitiseLevels(raw: Record<string, unknown>): Record<string, LevelRecor
     const rec = sanitiseRecord(r);
     if (rec) out[id] = rec;
   }
+  return out;
+}
+
+/** The achievements earned (saves from before them: none); an id the game does not know stays. */
+function sanitiseAchievements(raw: unknown): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (!isRecord(raw)) return out;
+  for (const [id, when] of Object.entries(raw)) if (isCount(when)) out[id] = when;
   return out;
 }
 

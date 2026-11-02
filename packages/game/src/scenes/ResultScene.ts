@@ -445,7 +445,10 @@ ${d.headline}`,
     const ch = chapters[pos.chapterIndex]!;
     if (pos.levelIndex + 1 < ch.levels.length) return ch.levels[pos.levelIndex + 1];
     const nextCi = pos.chapterIndex + 1;
-    if (chapters[nextCi] && (app.author || isLevelUnlocked(chapters, nextCi, 0, app.data.levels))) {
+    if (
+      chapters[nextCi] &&
+      (app.author || isLevelUnlocked(chapters, nextCi, 0, app.data.levels, app.allChaptersOpen))
+    ) {
       return chapters[nextCi]!.levels[0];
     }
     return undefined;

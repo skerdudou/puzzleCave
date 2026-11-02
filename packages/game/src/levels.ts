@@ -6,6 +6,7 @@ import {
   type LevelData,
   type LevelRecord,
 } from '@puzzlecave/core';
+import { achievementList } from './achievements';
 import type { SaveContext } from './save';
 
 export { chapters, levels };
@@ -24,10 +25,7 @@ export function hasMaster(id: string): boolean {
 }
 
 /** master mode of a level: absent from its chapter, locked (no gold yet) or open */
-export function masterState(
-  id: string,
-  rec: LevelRecord | undefined,
-): 'none' | 'locked' | 'open' {
+export function masterState(id: string, rec: LevelRecord | undefined): 'none' | 'locked' | 'open' {
   if (!hasMaster(id)) return 'none';
   return isMasterUnlocked(rec) ? 'open' : 'locked';
 }
@@ -45,3 +43,6 @@ export const saveContext: SaveContext = {
   masterThresholds: (id) =>
     byId.has(id) && hasMaster(id) ? resolveThresholds(levelById(id).thresholds) : undefined,
 };
+
+/** The game's achievements (achievements.ts), for its levels. */
+export const achievements = achievementList({ chapters, hasMaster });

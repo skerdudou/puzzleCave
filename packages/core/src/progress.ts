@@ -46,15 +46,21 @@ export function completedCount(chapter: Chapter, records: Records): number {
   return chapter.levels.filter((id) => records[id]?.completed).length;
 }
 
+/**
+ * A chapter opens once enough levels of the previous one are completed (`unlockAfter`).
+ * `allOpen` (the Konami code): every chapter is open, whatever has been completed.
+ */
 export function isChapterUnlocked(
   chapters: readonly Chapter[],
   ci: number,
   records: Records,
+  allOpen = false,
 ): boolean {
   if (ci === 0) return true;
   const prev = chapters[ci - 1];
   const cur = chapters[ci];
   if (!prev || !cur) return false;
+  if (allOpen) return true;
   return (
     isChapterUnlocked(chapters, ci - 1, records) && completedCount(prev, records) >= cur.unlockAfter
   );
@@ -65,18 +71,19 @@ export function isLevelUnlocked(
   ci: number,
   li: number,
   records: Records,
+  allOpen = false,
 ): boolean {
   const ch = chapters[ci];
   if (!ch || li < 0 || li >= ch.levels.length) return false;
-  if (!isChapterUnlocked(chapters, ci, records)) return false;
+  if (!isChapterUnlocked(chapters, ci, records, allOpen)) return false;
   // two levels are open at a time: a player stuck on one can go on to the next
   if (li <= 1) return true;
   // a level already completed stays open (a level inserted before it, e.g. a replaced one,
   // does not lock it again)
   return Boolean(
     records[ch.levels[li - 1]!]?.completed ||
-      records[ch.levels[li - 2]!]?.completed ||
-      records[ch.levels[li]!]?.completed,
+    records[ch.levels[li - 2]!]?.completed ||
+    records[ch.levels[li]!]?.completed,
   );
 }
 

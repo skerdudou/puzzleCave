@@ -27,6 +27,7 @@ import { HapticFeed, vibrate } from '../haptics';
 import { DragSteps } from '../input/drag';
 import { HoldRepeat } from '../input/holdRepeat';
 import { boundsOf, centreOf, zoneArea, zoneAt, zonePolygon, type Box } from '../input/tapZones';
+import { DEEP_THOUGHT, Stillness } from '../achievements';
 import { RunClock, countdown } from '../runClock';
 import { showNotice } from '../notice';
 import { SfxFeed, playSfx, type Sfx } from '../sfx';
@@ -89,6 +90,8 @@ export class GameScene extends Phaser.Scene {
   private attempts = 0;
   private readonly anim = new AnimClock();
   private clock = new RunClock();
+  /** normal mode: the time since the player last did something (Deep Thought) */
+  private readonly stillness = new Stillness();
   /** master mode: the time limit (the level's bronze time), ms; none without goldTime */
   private timeLimitMs: number | undefined;
   /** master mode: the time limit is passed, the run has failed (like drowning) */
@@ -112,6 +115,7 @@ export class GameScene extends Phaser.Scene {
     this.mode = data.mode;
     this.session = new Session(this.level, this.mode);
     this.clock = new RunClock();
+    this.stillness.reset();
     this.timeLimitMs =
       this.mode === 'master'
         ? masterTimeLimitMs(resolveThresholds(this.level.thresholds))
@@ -260,6 +264,12 @@ export class GameScene extends Phaser.Scene {
     const now = performance.now();
     if (this.checkTimeLimit(now)) return;
     this.showTime(now);
+    // Deep Thought: a minute of the run clock (not the time hidden) without doing anything; not
+    // in master mode, where the clock is a countdown
+    if (this.mode === 'normal' && this.stillness.thinking(this.clock.elapsed(now))) {
+      this.stillness.reset();
+      app.earn([DEEP_THOUGHT]);
+    }
   }
 
   /** For the e2e tests: the board's place and zoom, and the screen it was laid out for. */
@@ -657,6 +667,7 @@ export class GameScene extends Phaser.Scene {
         if (this.session.undo()) {
           this.sfx('undo');
           if (restoring) this.clock.undoRestart();
+          this.stillness.act(this.clock.elapsed(performance.now()));
           this.board.rebuild(this.session.state);
           this.anim.reset();
           this.updateHud();
@@ -668,6 +679,7 @@ export class GameScene extends Phaser.Scene {
         this.session.restart();
         // The previous game stays recoverable via “Undo”: its clock is kept too.
         this.clock.restart(this.session.canUndoRestart);
+        this.stillness.reset();
         this.timedOut = false;
         this.anim.reset();
         this.board.rebuild(this.session.state);
@@ -692,13 +704,17 @@ export class GameScene extends Phaser.Scene {
     this.attempts++;
     setDebug({ attempts: this.attempts });
     const events = this.session.move(dir);
+    this.stillness.act(this.clock.elapsed(performance.now()));
     vibrate(this.haptics.next(events), app.data.settings.vibration);
     playSfx(this.sounds.next(events), app.data.settings.sfx);
     if (events.length === 0) return;
     const after = this.session.state;
     const now = performance.now();
     const moved = after.moves > before.moves;
-    if (moved) this.clock.begin(now);
+    if (moved) {
+      this.clock.begin(now);
+      this.stillness.act(this.clock.elapsed(now));
+    }
     this.board.apply(after, events, moved ? this.anim.next(now) : 0);
     this.rulesNote?.destroy();
     this.rulesNote = undefined;
@@ -869,6 +885,7 @@ export class GameScene extends Phaser.Scene {
     const previous = app.data.levels[this.level.id];
     app.data.levels[this.level.id] = recordRun(previous, result, medals);
     app.persist();
+    app.checkRecords();
     setDebug({ lastResult: result, lastAward: medals });
     const moveLog = this.session.moveLog;
     this.time.delayedCall(250, () =>
