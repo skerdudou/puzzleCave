@@ -360,9 +360,9 @@ test('master mode: master within gold, then grand master, which a later master r
   await expect.poll(() => field(page, 'scene')).toBe('Select');
   expect(await field(page, 'masterMedal')).toBe('grandMaster');
 
-  // master again: the grand master stays
+  // master again: the grand master stays, and the result shows it
   await masterRun(page, goldRoute);
-  expect(await field(page, 'resultReveal')).toContain('master:master:owned');
+  expect(await field(page, 'resultReveal')).toContain('master:grandMaster:owned');
   await page.keyboard.press('Escape');
   await expect.poll(() => field(page, 'scene')).toBe('Select');
   expect(await field(page, 'masterMedal')).toBe('grandMaster');

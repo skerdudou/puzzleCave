@@ -1,6 +1,8 @@
 // Medal reveal on the result screen: which medals appear, in which order, and how strongly
 // (pure, no Phaser).
 import {
+  bestMasterMedal,
+  bestMedal,
   MASTER_RANK,
   MEDAL_RANK,
   type Award,
@@ -48,24 +50,33 @@ export interface RevealInput {
   /** which rows have medals on this level (a level without a time limit has no time medal) */
   hasMovesTier: boolean;
   hasTimeTier: boolean;
+  /** a master mode run: its line shows master mode's best medal even when the run earned none */
+  masterRun?: boolean;
 }
 
 const isUpgrade = (now: Medal, before: Medal | undefined) =>
   before === undefined || MEDAL_RANK[now] > MEDAL_RANK[before];
 
 /**
- * Earned move and time medals from the lowest to the highest (bronze, silver, gold; moves first
- * when equal), then master mode's medal (master or grand master). A medal that was not owned, or
- * better than the owned one, is 'new'; an owned medal with a better score than the saved record
- * (the master record for master mode's medal) is 'record'.
+ * Medals on each row, from the lowest to the highest (bronze, silver, gold; moves first when
+ * equal), then master mode's medal (master or grand master). Each row shows the best medal held:
+ * the run's, or the saved one when the run did worse (or earned none). A medal that was not owned,
+ * or better than the owned one, is 'new'; an owned medal won again with a better score than the
+ * saved record (the master record for master mode's medal) is 'record'; else 'owned'.
  */
 export function planReveal(i: RevealInput): RevealPlan {
   const p = i.previous;
   const earned: Omit<RevealStep, 'delayMs'>[] = [];
-  const add = (slot: 'moves' | 'time', medal: Medal | undefined, better: boolean) => {
-    if (!medal) return;
+  const add = (slot: 'moves' | 'time', won: Medal | undefined, better: boolean) => {
     const before = p?.medals[slot];
-    const emphasis: Emphasis = isUpgrade(medal, before) ? 'new' : better ? 'record' : 'owned';
+    const medal = bestMedal(before, won);
+    if (!medal) return;
+    const emphasis: Emphasis =
+      won !== undefined && isUpgrade(won, before)
+        ? 'new'
+        : won === medal && better
+          ? 'record'
+          : 'owned';
     earned.push({ slot, medal, emphasis });
   };
   if (i.hasMovesTier)
@@ -78,17 +89,18 @@ export function planReveal(i: RevealInput): RevealPlan {
     ...s,
     delayMs: REVEAL.leadMs + k * REVEAL.staggerMs,
   }));
-  const master = i.award.master;
+  const won = i.award.master;
+  const before = p?.medals.master;
+  const master = won || i.masterRun ? bestMasterMedal(before, won) : undefined;
   if (master) {
-    const before = p?.medals.master;
     const better = p?.masterBestMoves !== undefined && i.moves < p.masterBestMoves;
     steps.push({
       slot: 'master',
       medal: master,
       emphasis:
-        before === undefined || MASTER_RANK[master] > MASTER_RANK[before]
+        won !== undefined && (before === undefined || MASTER_RANK[won] > MASTER_RANK[before])
           ? 'new'
-          : better
+          : won === master && better
             ? 'record'
             : 'owned',
       delayMs: REVEAL.leadMs + earned.length * REVEAL.staggerMs + REVEAL.masterGapMs,
