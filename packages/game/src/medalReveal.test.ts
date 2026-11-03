@@ -63,10 +63,30 @@ test('an upgrade is new, an owned medal with a better score is a record, else ow
       award: { moves: 'silver', time: 'gold' },
     }),
   ).toEqual(['moves:silver:record', 'time:gold:record']);
-  // a lower medal than the owned one is just owned
+  // a lower medal than the owned one: the owned one is shown, on both rows
   expect(brief({ ...base, previous, moves: 40, award: { moves: 'bronze' } })).toEqual([
-    'moves:bronze:owned',
+    'moves:silver:owned',
+    'time:gold:owned',
   ]);
+});
+
+test('a worse run shows the best medal held, never a record for a lower medal', () => {
+  const previous = rec({
+    bestMoves: 32,
+    bestTimeMs: 25_000,
+    medals: { moves: 'gold', time: 'gold' },
+  });
+  // faster than the time record but only silver (the gold came from another run): gold, owned
+  expect(brief({ ...base, previous, award: { moves: 'silver', time: 'silver' } })).toEqual([
+    'moves:gold:owned',
+    'time:gold:owned',
+  ]);
+});
+
+test('master run without a medal shows the master medal held; a normal run shows none', () => {
+  const previous = rec({ masterBestMoves: 20, medals: { master: 'grandMaster' } });
+  expect(brief({ ...base, previous, masterRun: true })).toEqual(['master:grandMaster:owned']);
+  expect(brief({ ...base, previous })).toEqual([]);
 });
 
 test('grand master already owned is not new', () => {
@@ -90,12 +110,13 @@ test('master then grand master: an upgrade is new, a shorter master run is a rec
   ]);
   // master again, in fewer moves than the master record: a record
   expect(brief({ ...base, previous, moves: 34, award: { master: 'master' } })).toEqual([
+    'moves:gold:owned',
     'master:master:record',
   ]);
-  // master after a grand master: owned (the save keeps the grand master)
+  // master after a grand master: the grand master held is shown
   const gm = rec({ masterBestMoves: 20, medals: { master: 'grandMaster' } });
   expect(brief({ ...base, previous: gm, award: { master: 'master' } })).toEqual([
-    'master:master:owned',
+    'master:grandMaster:owned',
   ]);
 });
 

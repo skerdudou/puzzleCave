@@ -103,25 +103,35 @@ export class ResultScene extends Phaser.Scene {
     const th = resolveThresholds(level.thresholds);
     const master = hasMaster(levelId);
     const rows = thresholdRows(th, master);
+    // each row's best medal held: this run's, or the saved one when the run did worse
+    const plan = planReveal({
+      award,
+      previous,
+      moves: result.moves,
+      timeMs: result.timeMs,
+      hasMovesTier: th.moves !== undefined,
+      hasTimeTier: th.time !== undefined,
+      masterRun: mode === 'master',
+    });
+    const shown = new Set(plan.steps.map((s) => s.slot));
     // the threshold lines: centred on cx, in lineWidth
-    // earned medals are drawn by the reveal animation, unearned ones (outlines) here
+    // held medals are drawn by the reveal animation, missing ones (outlines) here
     const spots: Partial<Record<RevealSlot, MedalSpot>> = {};
-    const medalAt = (slot: RevealSlot, earned: boolean) => {
+    const medalAt = (slot: RevealSlot) => {
       const spot = { x: cx - px(130), y, r: px(10) };
-      if (earned) spots[slot] = spot;
+      if (shown.has(slot)) spots[slot] = spot;
       else drawMedal(g, spot.x, spot.y, spot.r, undefined);
     };
     const line = (
       label: string,
       value: string,
-      medal: Award['moves'],
       hasTier: boolean,
       best: string | undefined,
       isRecord: boolean,
       kind: ThresholdRow['kind'],
     ) => {
       const slot: RevealSlot = kind;
-      if (hasTier) medalAt(slot, medal !== undefined);
+      if (hasTier) medalAt(slot);
       this.add
         .text(cx - px(110), y, t('labelValue', { label, value }), textStyle(16))
         .setOrigin(0, 0.5);
@@ -142,7 +152,6 @@ export class ResultScene extends Phaser.Scene {
     line(
       t('moves'),
       String(result.moves),
-      award.moves,
       th.moves !== undefined,
       previous?.bestMoves?.toString(),
       previous?.bestMoves === undefined || result.moves < previous.bestMoves,
@@ -151,7 +160,6 @@ export class ResultScene extends Phaser.Scene {
     line(
       t('time'),
       formatTime(result.timeMs),
-      award.time,
       th.time !== undefined,
       previous?.bestTimeMs !== undefined ? formatTime(previous.bestTimeMs) : undefined,
       previous?.bestTimeMs === undefined || result.timeMs < previous.bestTimeMs,
@@ -164,7 +172,7 @@ export class ResultScene extends Phaser.Scene {
       if (mode === 'master') {
         // this run: moves · time, under the name of its medal (revealed with the others), or of
         // the mode without a medal ("Master mode", not "Master", the first medal's name)
-        medalAt('master', award.master !== undefined);
+        medalAt('master');
         text = t('labelValue', {
           label: award.master ? masterMedalName(award.master) : t('masterModeName'),
           value: `${result.moves} · ${formatTime(result.timeMs)}`,
@@ -267,14 +275,6 @@ export class ResultScene extends Phaser.Scene {
       }
     }
 
-    const plan = planReveal({
-      award,
-      previous,
-      moves: result.moves,
-      timeMs: result.timeMs,
-      hasMovesTier: th.moves !== undefined,
-      hasTimeTier: th.time !== undefined,
-    });
     setDebug({
       resultAnimDone: false,
       resultReveal: plan.steps.map((s) => `${s.slot}:${s.medal}:${s.emphasis}`),
