@@ -84,7 +84,13 @@ bundle):
 - `<meta name="robots" content="noindex, nofollow">`, the title and the app's name
   "puzzleCave (preview)", and a manifest `id` of its own: installed, it is a second app beside the
   release, never a replacement;
-- the main menu shows "preview · main · <commit>", small and dim at the bottom;
+- the main menu shows "preview · main · <commit>", small and dim at the bottom (followed by
+  "· dev" in author mode);
+- author mode can be turned on there: open the preview's link with `?dev` (`…/preview-<secret>/?dev`);
+  the choice is remembered (key `puzzlecave.preview.dev`, so the installed app keeps it) until
+  `?dev=0`. All levels are then unlocked and the result screen has the two copy buttons; the tools
+  that need the development server (save a solution, replay saved or optimized solutions) are not
+  shown. The release has no such switch (the code is not in its bundle);
 - its service worker, registered from its folder, is scoped to that folder (the release's is
   scoped to `/puzzleCave/`): each precaches and updates its own build, the same way as below.
 
@@ -221,7 +227,7 @@ errors on `platinumMoves > goldMoves` and on a platinum limit below the proven o
 proven lower bound written in the saved solution's header; it warns when the saved solution is
 longer than the platinum limit, or shorter (the limit should then be lowered).
 
-In author mode (`npm run dev` only; the published build never enables it), all levels are unlocked and the result screen
+In author mode (`npm run dev`, or the preview of `main` opened with `?dev`; the release never enables it), all levels are unlocked and the result screen
 lets you copy `goldMoves`/`goldTime` and the solution you played.
 
 ### Achievements

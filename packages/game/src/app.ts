@@ -4,7 +4,7 @@ import { setDebug } from './debug';
 import { detectLang, setLang, t } from './i18n';
 import { showNotice, showToast } from './notice';
 import { achievements, saveContext } from './levels';
-import { SAVE_KEYS } from './preview';
+import { PREVIEW, SAVE_KEYS, previewDevMode } from './preview';
 import { SaveStore, browserStorage, defaultSave, type SaveData } from './save';
 import { playSfx } from './sfx';
 
@@ -14,8 +14,10 @@ export const app = {
   author: false,
   init(): void {
     this.data = this.store.load();
-    // development server only: the published build never opens author mode (no ?dev switch)
-    this.author = import.meta.env.DEV;
+    // the development server; the preview of main by ?dev (remembered, ?dev=0 to leave it); the
+    // release never opens author mode (no switch, PREVIEW is the constant false there)
+    this.author =
+      import.meta.env.DEV || (PREVIEW && previewDevMode(location.search, browserStorage()));
     setLang(this.data.settings.lang ?? detectLang(navigator.languages ?? []));
     // a save from before the achievements (or of an older game version): what its records
     // already earn, without a toast for each
