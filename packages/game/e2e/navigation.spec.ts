@@ -8,6 +8,7 @@ type Pc = {
   konami?: boolean;
   notice?: string;
   playButton?: [number, number];
+  pageShift?: number;
   buttonWidths?: Record<string, number>;
   achievementRows?: Record<string, unknown>;
 };
@@ -91,6 +92,39 @@ test.describe('on a phone', () => {
     for (let i = 1; i <= 10; i++) await touch('touchMove', x + (dx * i) / 10);
     await touch('touchEnd', x + dx);
   }
+
+  test('the page follows the finger a little, and goes back when it is lifted too soon', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await expect.poll(() => scene(page)).toBe('Menu');
+    await page.keyboard.press('Enter');
+    await expect.poll(() => scene(page)).toBe('Select');
+    const first = (await debug(page)).chapter;
+    const cdp = await page.context().newCDPSession(page);
+    const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', x: number) =>
+      cdp.send('Input.dispatchTouchEvent', {
+        type,
+        touchPoints: type === 'touchEnd' ? [] : [{ x, y: 400, id: 1 }],
+      });
+    await touch('touchStart', 300);
+    for (const x of [295, 290, 285, 280, 275]) await touch('touchMove', x);
+    // 25 px: the page moves to the left, less than the finger, not enough for a swipe
+    await expect.poll(async () => (await debug(page)).pageShift).toBeLessThan(0);
+    expect((await debug(page)).pageShift).toBeGreaterThan(-25);
+    await touch('touchEnd', 275);
+    await expect.poll(async () => (await debug(page)).pageShift).toBe(0);
+    expect((await debug(page)).chapter).toBe(first);
+    // the first chapter has none before it: to the right, a rubber band
+    await touch('touchStart', 100);
+    for (let i = 1; i <= 10; i++) await touch('touchMove', 100 + i * 20);
+    const shift = (await debug(page)).pageShift!;
+    expect(shift).toBeGreaterThan(0);
+    expect(shift).toBeLessThanOrEqual(18);
+    await touch('touchEnd', 300);
+    await expect.poll(async () => (await debug(page)).pageShift).toBe(0);
+    expect((await debug(page)).chapter).toBe(first);
+  });
 
   test('a swipe changes chapter; a tap still picks a level', async ({ page }) => {
     await page.goto('/');
