@@ -9,6 +9,7 @@ import { SelectScene } from './scenes/SelectScene';
 import { ResultScene } from './scenes/ResultScene';
 import { ReplayScene } from './scenes/ReplayScene';
 import { app } from './app';
+import { backAction, installBackButton } from './backButton';
 import { textBoxes, type TextBox } from './debug';
 import { startUpdates } from './pwa';
 import { initSfx } from './sfx';
@@ -66,4 +67,13 @@ window.addEventListener('resize', () => {
     Math.round(window.innerHeight * ratio()),
   );
   game.scale.setZoom(1 / ratio());
+});
+
+// the phone's back button goes back a screen (backButton.ts)
+const back = installBackButton(() => game.scene.getScenes(true).at(-1)?.sys.settings.key);
+game.events.once(Phaser.Core.Events.READY, () => {
+  for (const s of game.scene.scenes)
+    s.events.on(Phaser.Scenes.Events.CREATE, () => {
+      if (backAction(s.sys.settings.key) === 'escape') back.guard();
+    });
 });

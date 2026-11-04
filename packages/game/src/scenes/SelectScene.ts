@@ -1,7 +1,10 @@
 import Phaser from 'phaser';
 import { isChapterUnlocked, isLevelUnlocked, resolveThresholds, type Mode } from '@puzzlecave/core';
+import { KonamiCode } from '../achievements';
 import { app } from '../app';
 import { setDebug } from '../debug';
+import { swipeStep } from '../input/swipe';
+import { konamiEntered } from '../konami';
 import { formatTime } from '../format';
 import { getLang, t } from '../i18n';
 import { onSceneKeyDown } from '../input/sceneKeys';
@@ -14,7 +17,7 @@ import {
   type MedalKind,
 } from '../medalInfo';
 import { syncMusic } from '../music';
-import { COLORS, drawMedal, drawThresholdLine, makeButton, px, textStyle } from '../ui';
+import { COLORS, dpr, drawMedal, drawThresholdLine, makeButton, px, textStyle } from '../ui';
 import { isTouchDevice } from '../touch';
 import { authorServerAvailable, fetchSolution } from '../author/client';
 
@@ -51,7 +54,17 @@ export class SelectScene extends Phaser.Scene {
 
   create(): void {
     this.draw();
-    onSceneKeyDown(this, (e) => this.onKey(e));
+    const konami = new KonamiCode();
+    onSceneKeyDown(this, (e) => {
+      // the arrows of the code also move the selection, as on the menu they move the focus
+      if (!e.repeat && konami.key(e.key) && konamiEntered(this)) this.redraw();
+      this.onKey(e);
+    });
+    // a horizontal swipe changes chapter (a tile's own release ignores it: see swiped)
+    this.input.on('pointerup', (p: Phaser.Input.Pointer) => {
+      const step = this.swiped(p);
+      if (step) this.switchChapter(step);
+    });
     const onResize = () => this.scene.restart({ levelId: this.currentId() });
     this.scale.on('resize', onResize);
     this.events.once('shutdown', () => this.scale.off('resize', onResize));
@@ -94,7 +107,8 @@ export class SelectScene extends Phaser.Scene {
 
   private redraw(): void {
     // destroyed, not just removed: a button's frame and its listeners go with it
-    for (const child of [...this.children.list]) child.destroy();
+    // (the Konami runner, an effect over the screen, runs on)
+    for (const child of [...this.children.list]) if (!child.getData('fx')) child.destroy();
     this.draw();
     setDebug({
       chapter: chapters[this.ci]?.id,
@@ -200,8 +214,8 @@ export class SelectScene extends Phaser.Scene {
         .zone(x, y, cell, cell)
         .setOrigin(0)
         .setInteractive({ useHandCursor: open });
-      zone.on('pointerup', () => {
-        if (!open) return;
+      zone.on('pointerup', (p: Phaser.Input.Pointer) => {
+        if (!open || this.swiped(p)) return;
         if (this.li === i) this.play('normal');
         else {
           this.li = i;
@@ -339,6 +353,11 @@ export class SelectScene extends Phaser.Scene {
       label: t('labelSaved'),
       back: { scene: 'Select', data: { levelId: id } },
     });
+  }
+
+  /** The chapter a released pointer swiped to (+1, -1), or 0 for a tap. */
+  private swiped(p: Phaser.Input.Pointer): -1 | 0 | 1 {
+    return swipeStep((p.upX - p.downX) / dpr(), (p.upY - p.downY) / dpr());
   }
 
   private onKey(e: KeyboardEvent): void {

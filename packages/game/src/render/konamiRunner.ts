@@ -6,7 +6,8 @@ export const RUN_MS = 1700;
 
 /**
  * The Konami code's effect: the cave explorer (the game's own player sprite) dashes across the
- * bottom of the screen, bobbing at each stride and kicking up dust behind.
+ * bottom of the screen, bobbing at each stride and kicking up dust behind. Its objects carry the
+ * data 'fx': a scene that redraws its children keeps them.
  */
 export function runAcross(scene: Phaser.Scene): void {
   const w = scene.scale.width;
@@ -16,7 +17,8 @@ export function runAcross(scene: Phaser.Scene): void {
     .image(-size, ground, 'player')
     .setDisplaySize(size, size)
     .setOrigin(0.5, 1)
-    .setDepth(20);
+    .setDepth(20)
+    .setData('fx', true);
   // the strides
   const bob = scene.tweens.add({
     targets: hero,
@@ -34,7 +36,8 @@ export function runAcross(scene: Phaser.Scene): void {
       const d = px(3 + Math.random() * 3);
       const puff = scene.add
         .rectangle(hero.x - size * 0.3, ground - px(2), d, d, 0xc9b38a, 0.8)
-        .setDepth(19);
+        .setDepth(19)
+        .setData('fx', true);
       scene.tweens.add({
         targets: puff,
         x: puff.x - px(10 + Math.random() * 14),

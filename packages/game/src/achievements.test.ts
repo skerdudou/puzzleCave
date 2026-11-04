@@ -7,6 +7,7 @@ import {
   achievementList,
   grant,
   newlyEarned,
+  shownAchievements,
   viewOf,
   type AchievementLevels,
 } from './achievements';
@@ -181,4 +182,14 @@ test('time gold per chapter: the levels with time medals only', () => {
   // a chapter without any time medals has no time gold achievement
   const untimed = achievementList({ ...lv, hasTime: () => false }).map((a) => a.id);
   expect(untimed.some((id) => id.startsWith('timeGold:'))).toBe(false);
+});
+
+test('on a touch screen the Konami code is not listed, unless already earned', () => {
+  const list = achievementList(lv);
+  const ids = (touch: boolean, earned: Record<string, number> = {}) =>
+    shownAchievements(list, earned, touch).map((a) => a.id);
+  expect(ids(false)).toContain('konami');
+  expect(ids(true)).not.toContain('konami');
+  expect(ids(true)).toHaveLength(list.length - 1);
+  expect(ids(true, { konami: 1 })).toContain('konami');
 });

@@ -158,6 +158,21 @@ export function makeButton(
   return b;
 }
 
+/**
+ * Widens buttons (their side padding, evenly) to the widest of them: a column of buttons of one
+ * width. Their origin stays where it was.
+ */
+export function sameWidth(buttons: readonly Phaser.GameObjects.Text[]): void {
+  const widest = Math.max(...buttons.map((b) => b.width));
+  for (const b of buttons) {
+    const extra = widest - b.width;
+    if (extra <= 0) continue;
+    const p = b.padding;
+    const left = Math.floor(extra / 2);
+    b.setPadding(p.left! + left, p.top!, p.right! + extra - left, p.bottom!);
+  }
+}
+
 /** Keyboard focus on a button: lit like under the mouse, on a lighter background. */
 export function setButtonFocus(b: Phaser.GameObjects.Text, on: boolean): void {
   b.setData('focused', on);
