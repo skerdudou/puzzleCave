@@ -123,9 +123,9 @@ export class SelectScene extends Phaser.Scene {
     this.add
       .text(cx, px(30), ch.name[getLang()] ?? ch.name.en, textStyle(18, COLORS.accent))
       .setOrigin(0.5);
-    if (this.ci > 0) makeButton(this, px(30), px(30), '‹', () => this.switchChapter(-1), 18);
+    if (this.ci > 0) this.button(px(30), px(30), '‹', () => this.switchChapter(-1), 18);
     if (this.ci < chapters.length - 1)
-      makeButton(this, this.scale.width - px(30), px(30), '›', () => this.switchChapter(1), 18);
+      this.button(this.scale.width - px(30), px(30), '›', () => this.switchChapter(1), 18);
     // Keyboard help (not on a touch screen). It can wrap to two lines on a small screen: it
     // stays anchored at the bottom.
     const help =
@@ -143,8 +143,7 @@ export class SelectScene extends Phaser.Scene {
             )
             .setOrigin(0.5, 1)
         : undefined;
-    const menu = makeButton(
-      this,
+    const menu = this.button(
       px(40),
       this.scale.height - px(40),
       t('menu'),
@@ -273,13 +272,14 @@ export class SelectScene extends Phaser.Scene {
     }
     setDebug({ masterLine: masterText, masterMedal: rec?.medals.master ?? null });
     y += px(40);
+    let playButton: Phaser.GameObjects.Text | undefined;
     if (this.levelOpen(this.ci, this.li)) {
       const open = master === 'open';
       const row = [
-        makeButton(this, open ? icx - px(80) : icx, y, t('play'), () => this.play('normal'), 16),
+        this.button(open ? icx - px(80) : icx, y, t('play'), () => this.play('normal'), 16),
       ];
-      if (open)
-        row.push(makeButton(this, icx + px(80), y, t('master'), () => this.play('master'), 14));
+      if (open) row.push(this.button(icx + px(80), y, t('master'), () => this.play('master'), 14));
+      playButton = row[0];
       const rowY = y;
       let bottom = row[0]!.getBounds().bottom;
       if (master === 'locked') {
@@ -304,13 +304,15 @@ export class SelectScene extends Phaser.Scene {
         }
       }
     }
+    // for the e2e tests: the Play button's centre, CSS px (none on a locked level)
+    setDebug({ playButton: playButton && [playButton.x / dpr(), playButton.y / dpr()] });
     if (authorServerAvailable()) {
       // the button only appears if a solution is saved (asynchronous read)
       const id = level.id;
       const by = y + px(52);
       void fetchSolution(id).then((sol) => {
         if (!sol || !this.sys.isActive() || this.currentId() !== id) return;
-        const b = makeButton(this, icx, by, t('replaySaved'), () => this.replaySaved(), 12);
+        const b = this.button(icx, by, t('replaySaved'), () => this.replaySaved(), 12);
         b.setName('replaySaved');
       });
     }
@@ -353,6 +355,26 @@ export class SelectScene extends Phaser.Scene {
       label: t('labelSaved'),
       back: { scene: 'Select', data: { levelId: id } },
     });
+  }
+
+  /** A button whose release ending a swipe is not a press (the swipe changes chapter). */
+  private button(
+    x: number,
+    y: number,
+    label: string,
+    onClick: () => void,
+    size: number,
+  ): Phaser.GameObjects.Text {
+    return makeButton(
+      this,
+      x,
+      y,
+      label,
+      (p?: Phaser.Input.Pointer) => {
+        if (!p || !this.swiped(p)) onClick();
+      },
+      size,
+    );
   }
 
   /** The chapter a released pointer swiped to (+1, -1), or 0 for a tap. */

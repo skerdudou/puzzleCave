@@ -6,6 +6,8 @@ type Pc = {
   chapter?: string;
   levelId?: string;
   konami?: boolean;
+  notice?: string;
+  playButton?: [number, number];
   buttonWidths?: Record<string, number>;
   achievementRows?: Record<string, unknown>;
 };
@@ -64,7 +66,12 @@ test('Back in the browser goes back a screen; from the menu it leaves the game',
   await expect.poll(() => scene(page)).toBe('Select');
   await page.goBack({ waitUntil: 'commit' }).catch(() => undefined);
   await expect.poll(() => scene(page)).toBe('Menu');
-  // the menu: the page before the game
+  // the menu: a first Back warns and stays
+  await page.goBack({ waitUntil: 'commit' }).catch(() => undefined);
+  await expect.poll(async () => (await debug(page)).notice).toBe('Press back again to quit');
+  expect(await scene(page)).toBe('Menu');
+  expect(page.url()).not.toBe('about:blank');
+  // a second one leaves for the page before the game
   await page.goBack({ waitUntil: 'commit' }).catch(() => undefined);
   await expect.poll(() => page.url()).toBe('about:blank');
 });
@@ -99,6 +106,22 @@ test.describe('on a phone', () => {
     await swipe(page, 90, 120, 150);
     await expect.poll(async () => (await debug(page)).chapter).toBe(first);
     expect((await debug(page)).levelId).toBe(level);
+  });
+
+  test('a swipe that ends on Play changes chapter, it does not start the level', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await expect.poll(() => scene(page)).toBe('Menu');
+    await page.keyboard.press('Enter');
+    await expect.poll(() => scene(page)).toBe('Select');
+    const first = (await debug(page)).chapter;
+    const [x, y] = (await debug(page)).playButton!;
+    await swipe(page, x + 150, y, -150);
+    await expect.poll(async () => (await debug(page)).chapter).not.toBe(first);
+    // a few frames for a scene change that should not come
+    await page.waitForTimeout(300);
+    expect(await scene(page)).toBe('Select');
   });
 
   test('the Konami code is not listed among the achievements', async ({ page }) => {

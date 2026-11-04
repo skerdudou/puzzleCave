@@ -9,6 +9,8 @@ import { SelectScene } from './scenes/SelectScene';
 import { ResultScene } from './scenes/ResultScene';
 import { ReplayScene } from './scenes/ReplayScene';
 import { app } from './app';
+import { t } from './i18n';
+import { showNotice } from './notice';
 import { backAction, installBackButton } from './backButton';
 import { textBoxes, type TextBox } from './debug';
 import { startUpdates } from './pwa';
@@ -70,7 +72,10 @@ window.addEventListener('resize', () => {
 });
 
 // the phone's back button goes back a screen (backButton.ts)
-const back = installBackButton(() => game.scene.getScenes(true).at(-1)?.sys.settings.key);
+const back = installBackButton(
+  () => game.scene.getScenes(true).at(-1)?.sys.settings.key,
+  () => showNotice(t('backAgainToQuit')),
+);
 game.events.once(Phaser.Core.Events.READY, () => {
   for (const s of game.scene.scenes)
     s.events.on(Phaser.Scenes.Events.CREATE, () => {
