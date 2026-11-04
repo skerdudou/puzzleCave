@@ -5,6 +5,7 @@ import { app } from '../app';
 import { setDebug } from '../debug';
 import { swipeStep } from '../input/swipe';
 import { konamiEntered } from '../konami';
+import { keysLine } from '../levelIntro';
 import { formatTime } from '../format';
 import { getLang, t } from '../i18n';
 import { onSceneKeyDown } from '../input/sceneKeys';
@@ -236,6 +237,19 @@ export class SelectScene extends Phaser.Scene {
         .text(icx, y, t('by', { author: level.author }), textStyle(12, COLORS.dim))
         .setOrigin(0.5);
     y += px(22);
+    // the keys at start, when not 0 (as the level's banner says them)
+    const keys = keysLine(level.initialKeys);
+    setDebug({ keysLine: keys });
+    if (keys) {
+      const k = this.add
+        .text(icx, y - px(6), keys, {
+          ...textStyle(11, COLORS.accent),
+          align: 'center',
+          wordWrap: { width: infoW - px(32) },
+        })
+        .setOrigin(0.5, 0);
+      y += k.height + px(8);
+    }
     const th = resolveThresholds(level.thresholds);
     const master = this.masterState();
     const rows = thresholdRows(th, master !== 'none');

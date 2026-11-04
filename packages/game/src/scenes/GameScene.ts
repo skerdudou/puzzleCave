@@ -17,6 +17,7 @@ import { t } from '../i18n';
 import { InputController, type Action } from '../input/InputController';
 import { directionLabels } from '../input/keyboardLabels';
 import { hasMaster, levelById } from '../levels';
+import { introLines } from '../levelIntro';
 import { syncMusic } from '../music';
 import { chapterTint } from '../render/ambience';
 import { AnimClock } from '../render/animTiming';
@@ -103,7 +104,10 @@ export class GameScene extends Phaser.Scene {
   private timeText?: Phaser.GameObjects.Text;
   private keysText?: Phaser.GameObjects.Text;
   private overlay?: Phaser.GameObjects.Text;
-  private rulesNote?: Phaser.GameObjects.Text;
+  /** the level's intro (master mode's rules, keys at start) under the header, until hidden */
+  private banner?: Phaser.GameObjects.Text;
+  /** the room the banner takes above the board (kept once it is hidden: the board stays put) */
+  private bannerSpace = 0;
   private muteButton?: Phaser.GameObjects.Text;
 
   constructor() {
@@ -127,11 +131,14 @@ export class GameScene extends Phaser.Scene {
     this.finished = false;
     this.anim.reset();
     this.overlay = undefined;
-    this.rulesNote = undefined;
+    this.banner = undefined;
+    this.bannerSpace = 0;
     this.hud = [];
   }
 
   create(): void {
+    // the banner first: the board is laid out under it
+    this.showBanner();
     // the cave first: the board and the HUD go over it
     const layout = this.computeLayout();
     this.ambience = new AmbienceView(this, {
@@ -153,6 +160,12 @@ export class GameScene extends Phaser.Scene {
       if (!e.repeat) {
         this.haptics.reset();
         this.sounds.reset();
+      }
+      // Space hides the level's intro banner
+      if (e.key === ' ' && this.banner) {
+        e.preventDefault();
+        if (!e.repeat) this.hideBanner();
+        return;
       }
       if (e.key.toLowerCase() === 'm' && !e.ctrlKey && !e.metaKey && !e.altKey) {
         if (!e.repeat) this.toggleMute();
@@ -215,20 +228,21 @@ export class GameScene extends Phaser.Scene {
     this.input.on('pointerup', release);
     this.input.on('pointerupoutside', release);
     const onResize = () => {
+      // the banner (if still shown) laid out again for the new width; once hidden, its room goes
+      if (this.banner) {
+        this.banner.destroy();
+        this.showBanner();
+      } else this.bannerSpace = 0;
       const next = this.computeLayout();
       this.ambience.layout(next, this.topReserve());
       this.board.setLayout(next);
       this.showLayout(next);
       this.buildHud();
-      if (this.rulesNote) {
-        this.rulesNote.destroy();
-        this.showRules();
-      }
       // the failed run's message too: centred, its size following the interface's
       const failed = this.overlay?.getData('message') as string | undefined;
       if (failed !== undefined) this.showFailed(failed);
     };
-    if (this.mode === 'master') this.showRules();
+    this.pulseKeys();
     this.scale.on('resize', onResize);
     // the clock does not count while the game is hidden (another app, screen locked…)
     const hidden = () => this.clock.pause(performance.now());
@@ -343,7 +357,8 @@ export class GameScene extends Phaser.Scene {
       this.level.width,
       this.level.height,
       16,
-      this.topReserve(),
+      // the banner's room under the header: it never covers the board
+      this.topReserve() + this.bannerSpace,
       this.bottomReserve(),
       fractionalZoom(window.devicePixelRatio || 1),
     );
@@ -716,8 +731,7 @@ export class GameScene extends Phaser.Scene {
       this.stillness.act(this.clock.elapsed(now));
     }
     this.board.apply(after, events, moved ? this.anim.next(now) : 0);
-    this.rulesNote?.destroy();
-    this.rulesNote = undefined;
+    this.hideBanner();
     this.updateHud();
     if (after.status === 'won') this.finish(now);
     else if (after.status === 'drowned') this.showFailed(t('drowned'));
@@ -811,23 +825,61 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  /** Master mode: its rules over the board until the first move. */
-  private showRules(): void {
-    const limit = this.timeLimitMs;
-    const rules =
-      limit === undefined
-        ? t('masterRules')
-        : `${t('masterRules')}\n${t('masterTimeRule', { time: formatTime(limit) })}`;
-    this.rulesNote = this.add
-      .text(this.scale.width / 2, this.scale.height / 2, rules, {
-        ...textStyle(16, MASTER_COLOR),
+  /**
+   * The level's intro, under the header (the board is laid out below it, never under it):
+   * master mode's rules (one short line once a master run has been won), the keys at start when
+   * not 0. Hidden by the first move, a click or tap on it, or Space.
+   */
+  private showBanner(): void {
+    const lines = introLines({
+      master: this.mode === 'master',
+      ...(this.timeLimitMs === undefined ? {} : { timeLimitMs: this.timeLimitMs }),
+      masterVeteran: Object.values(app.data.levels).some((r) => r?.medals.master !== undefined),
+      initialKeys: this.level.initialKeys,
+    });
+    setDebug({ banner: lines.length ? lines : null });
+    if (!lines.length) return;
+    const hint = t(isTouchDevice() ? 'bannerHideTouch' : 'bannerHide');
+    const b = this.add
+      .text(this.scale.width / 2, this.topReserve(), [...lines, hint].join('\n'), {
+        ...textStyle(13, this.mode === 'master' ? MASTER_COLOR : COLORS.accent),
         align: 'center',
-        backgroundColor: '#000000cc',
-        padding: { x: px(14), y: px(10) },
-        wordWrap: { width: this.scale.width - px(64) },
+        backgroundColor: '#000000aa',
+        padding: { x: px(12), y: px(6) },
+        wordWrap: { width: this.scale.width - px(32) },
       })
-      .setOrigin(0.5)
-      .setDepth(10);
+      .setOrigin(0.5, 0)
+      .setDepth(HUD_DEPTH)
+      .setInteractive({ useHandCursor: true });
+    b.on('pointerup', () => this.hideBanner());
+    this.banner = b;
+    this.bannerSpace = b.height + px(8);
+    // for the e2e tests: its centre, CSS px
+    setDebug({ bannerAt: [b.x / dpr(), (b.y + b.height / 2) / dpr()] });
+  }
+
+  private hideBanner(): void {
+    if (!this.banner) return;
+    this.banner.destroy();
+    this.banner = undefined;
+    setDebug({ banner: null });
+  }
+
+  /** Keys at start (not 0): their counter blinks a few times, lit, as the level opens. */
+  private pulseKeys(): void {
+    const keys = this.keysText;
+    if (!keys || this.level.initialKeys === 0) return;
+    keys.setColor(COLORS.accent);
+    this.tweens.add({
+      targets: keys,
+      alpha: 0.3,
+      duration: 260,
+      yoyo: true,
+      repeat: 4,
+      onComplete: () => {
+        if (keys.active) keys.setAlpha(1).setColor(COLORS.text);
+      },
+    });
   }
 
   /**
