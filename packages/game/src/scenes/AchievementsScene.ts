@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { viewOf } from '../achievements';
+import { shownAchievements, viewOf } from '../achievements';
 import { app } from '../app';
 import { setDebug } from '../debug';
 import { getLang, t } from '../i18n';
@@ -12,7 +12,8 @@ import {
   releaseSpeed,
   scrollThumb,
 } from '../input/scroll';
-import { achievements } from '../levels';
+import { achievements as allAchievements } from '../levels';
+import { isTouchDevice } from '../touch';
 import { syncMusic } from '../music';
 import { COLORS, devicePx, dpr, drawMedal, makeButton, px, shrinkToFit, textStyle } from '../ui';
 
@@ -50,6 +51,7 @@ export class AchievementsScene extends Phaser.Scene {
     const left = cx - rowW / 2;
     let y = px(28);
     this.add.text(cx, y, t('achievements'), textStyle(20, COLORS.accent)).setOrigin(0.5);
+    const achievements = shownAchievements(allAchievements, app.data.achievements, isTouchDevice());
     const earnedIds = achievements.filter((a) => app.data.achievements[a.id] !== undefined);
     y += px(26);
     this.add

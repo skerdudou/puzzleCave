@@ -270,3 +270,15 @@ export function viewOf(
   }
   return view;
 }
+
+/**
+ * The achievements the achievements screen lists: on a touch screen, without the Konami code
+ * (no keyboard to enter it) unless it is already earned (a save brought from a computer).
+ */
+export function shownAchievements(
+  list: readonly Achievement[],
+  earned: Readonly<Record<string, number>>,
+  touch: boolean,
+): Achievement[] {
+  return list.filter((a) => !(touch && a.id === KONAMI && earned[a.id] === undefined));
+}
