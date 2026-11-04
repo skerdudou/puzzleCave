@@ -17,13 +17,14 @@ export class MenuScene extends Phaser.Scene {
     const cx = this.scale.width / 2;
     const cy = this.scale.height / 2;
     this.add.text(cx, cy - px(90), 'puzzleCave', textStyle(36, COLORS.accent)).setOrigin(0.5);
-    // the preview of main (src/preview.ts): which commit, small and dim at the bottom
+    // the preview of main (src/preview.ts): which commit, and whether author mode (?dev) is on,
+    // small and dim at the bottom
     if (PREVIEW)
       this.add
         .text(
           cx,
           this.scale.height - px(6),
-          `preview · main · ${PREVIEW_SHA}`,
+          `preview · main · ${PREVIEW_SHA}${app.author ? ' · dev' : ''}`,
           textStyle(9, COLORS.dim),
         )
         .setOrigin(0.5, 1)

@@ -27,3 +27,36 @@ test('the preview build (VITE_PREVIEW=1): save keys of its own, its commit', asy
     corrupt: 'puzzlecave.preview.save.corrupt',
   });
 });
+
+const memory = () => {
+  const m = new Map<string, string>();
+  return {
+    m,
+    getItem: (k: string) => m.get(k) ?? null,
+    setItem: (k: string, v: string) => void m.set(k, v),
+  };
+};
+
+test('preview author mode: off at first, ?dev turns it on and is remembered, ?dev=0 off', async () => {
+  const { previewDevMode, PREVIEW_DEV_KEY } = await load();
+  const s = memory();
+  expect(previewDevMode('', s)).toBe(false);
+  expect(previewDevMode('?dev', s)).toBe(true);
+  expect(s.m.get(PREVIEW_DEV_KEY)).toBe('1');
+  expect(previewDevMode('', s)).toBe(true);
+  expect(previewDevMode('?lang=fr&dev=1', s)).toBe(true);
+  expect(previewDevMode('?dev=0', s)).toBe(false);
+  expect(previewDevMode('', s)).toBe(false);
+});
+
+test('preview author mode without storage: the parameter alone, for this visit', async () => {
+  const { previewDevMode } = await load();
+  expect(previewDevMode('?dev', null)).toBe(true);
+  expect(previewDevMode('', null)).toBe(false);
+  const blocked = () => {
+    throw new Error('blocked');
+  };
+  const throwing = { getItem: blocked, setItem: blocked };
+  expect(previewDevMode('?dev', throwing)).toBe(true);
+  expect(previewDevMode('', throwing)).toBe(false);
+});
