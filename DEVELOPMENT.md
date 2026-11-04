@@ -45,20 +45,27 @@ machine locally (the probe then reports SwiftShader).
 ## Publishing
 
 The game is published on GitHub Pages at https://skerdudou.github.io/puzzleCave/ by
-`.github/workflows/pages.yml`: the root always holds the **latest release**, the highest `v*` tag
-(`git tag v1.0.0 && git push origin v1.0.0`), and a sub-folder known only by its link holds a
-**preview of `main`** (below). The workflow runs when a release is published, a version tag or a
-commit on `main` is pushed, or by hand (Actions › Deploy to GitHub Pages › Run workflow). It runs
-the typecheck, `validate` and the tests on the code pushed, then `.github/scripts/build-site.sh`
-builds both: the release from a `git worktree` of its tag (with its own `npm ci`), the preview
-from the commit pushed to `main` (for a tag, a release or a manual run: `main` as it is then).
+`.github/workflows/pages.yml`: the root always holds the **latest release**, the highest `v*` tag,
+and a sub-folder known only by its link holds a **preview of `main`** (below). The workflow runs
+when a commit is pushed to `main`, or by hand (Actions › Deploy to GitHub Pages › Run workflow).
+It runs the typecheck, `validate` and the tests on the code pushed, then
+`.github/scripts/build-site.sh` builds both: the release from a `git worktree` of its tag (with
+its own `npm ci`), the preview from the commit pushed to `main` (for a manual run: `main` as it
+is then).
 
 GitHub Pages identifies a deployment by its commit (`GITHUB_SHA`) and keeps the site already
 deployed for that commit: a second deployment of the same commit reports success but changes
-nothing. A tag put on the commit `main` is already deployed at (the usual case) is therefore not
-published by its own run (seen with v0.3.0); the next commit pushed to `main` publishes it. The
-`github-pages` environment only accepts `main` and `v*` tags, so a manual run from another branch
-is refused.
+nothing. A tag goes on a commit of `main`, which is already deployed: a run for the tag would
+build for nothing (seen with v0.3.0 and v0.4.0), so pushing a tag (or publishing a GitHub
+release) runs nothing. To release, tag the commit and push the tag, then push a commit to `main`
+(an empty one if there is nothing else to push): its run puts the new tag at the root.
+
+    git tag -a v1.0.0 -m v1.0.0 && git push origin v1.0.0
+    git commit --allow-empty -m "Publish v1.0.0" && git push origin main
+
+A manual run deploys the commit `main` is at again: it only changes the site if that commit's
+deployment failed. The `github-pages` environment only accepts `main` and `v*` tags, so a manual
+run from another branch is refused.
 
 ### Preview of `main`
 

@@ -3,12 +3,12 @@
 # (preview-<PREVIEW_DIR secret>/; DEVELOPMENT.md › Preview of `main`).
 name: Deploy to GitHub Pages
 
+# Not on a tag nor a release: Pages keeps the site already deployed for a commit, and a tag sits
+# on a commit of main that is already deployed, so its run would build for nothing. A release is
+# published by the next commit pushed to main (DEVELOPMENT.md › Publishing).
 on:
-  release:
-    types: [published]
   push:
     branches: [main]
-    tags: ['v*']
   workflow_dispatch:
 
 permissions:
@@ -40,7 +40,7 @@ jobs:
       - name: Build the site (the release at the root, the preview of main beside it)
         env:
           PREVIEW_DIR: ${{ secrets.PREVIEW_DIR }}
-          # a push to main: that commit; a tag, a release or a manual run: main as it is now
+          # a push to main: that commit; a manual run: main as it is now
           PREVIEW_REF: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.sha || 'origin/main' }}
         run: bash .github/scripts/build-site.sh site
       - uses: actions/configure-pages@v6
