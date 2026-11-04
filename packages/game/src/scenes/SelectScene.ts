@@ -58,7 +58,7 @@ export class SelectScene extends Phaser.Scene {
     // the scene is reused: a restart (resize) while the page was aside puts it back
     this.settle = undefined;
     this.pageShift = 0;
-    this.cameras.main.setScroll(0, 0);
+    this.grid = undefined;
     this.draw();
     const konami = new KonamiCode();
     onSceneKeyDown(this, (e) => {
@@ -67,7 +67,7 @@ export class SelectScene extends Phaser.Scene {
       this.onKey(e);
     });
     // a horizontal swipe changes chapter (a tile's own release ignores it: see swiped)
-    // while the finger moves, the whole page follows it a little: it shows it can be swiped
+    // while the finger moves, the grid of levels follows it a little: it shows it can be swiped
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
       if (!p.isDown || prefersReducedMotion()) return;
       const dx = (p.x - p.downX) / dpr();
@@ -175,15 +175,20 @@ export class SelectScene extends Phaser.Scene {
       if (overlap > 0) menu.y -= overlap + px(4);
     }
 
+    // the chapter's content (its grid, or its lock): what a swipe moves sideways, alone
+    const grid = this.add.container(this.pageShift * dpr(), 0);
+    this.grid = grid;
     if (!this.chapterOpen(this.ci)) {
-      this.add
-        .text(
-          cx,
-          px(120),
-          `🔒 ${ch.unlockAfter === 1 ? t('lockedHintOne') : t('lockedHint', { n: ch.unlockAfter })}`,
-          textStyle(16, COLORS.locked),
-        )
-        .setOrigin(0.5);
+      grid.add(
+        this.add
+          .text(
+            cx,
+            px(120),
+            `🔒 ${ch.unlockAfter === 1 ? t('lockedHintOne') : t('lockedHint', { n: ch.unlockAfter })}`,
+            textStyle(16, COLORS.locked),
+          )
+          .setOrigin(0.5),
+      );
       return;
     }
 
@@ -201,6 +206,8 @@ export class SelectScene extends Phaser.Scene {
       ),
     });
     const g = this.add.graphics();
+    // the grid's parts, in the container that a swipe moves
+    const gridParts: Phaser.GameObjects.GameObject[] = [g];
     ch.levels.forEach((id, i) => {
       const level = levelById(id);
       const rec = app.data.levels[id];
@@ -209,7 +216,7 @@ export class SelectScene extends Phaser.Scene {
       const open = this.levelOpen(this.ci, i);
       g.fillStyle(i === this.li ? 0x4a4360 : 0x2c2838, 1).fillRect(x, y, cell, cell);
       if (i === this.li) g.lineStyle(px(2), 0xffd25e, 1).strokeRect(x, y, cell, cell);
-      this.add
+      const label = this.add
         .text(
           x + cell / 2,
           y + cell * 0.35,
@@ -217,6 +224,7 @@ export class SelectScene extends Phaser.Scene {
           textStyle(14, open ? COLORS.text : COLORS.locked),
         )
         .setOrigin(0.5);
+      gridParts.push(label);
       const my = y + cell * 0.75;
       // Without a gold threshold for a criterion, no medal can be awarded: no slot.
       const th = resolveThresholds(level.thresholds);
@@ -232,6 +240,7 @@ export class SelectScene extends Phaser.Scene {
         .zone(x, y, cell, cell)
         .setOrigin(0)
         .setInteractive({ useHandCursor: open });
+      gridParts.push(zone);
       zone.on('pointerup', (p: Phaser.Input.Pointer) => {
         if (!open || this.swiped(p)) return;
         if (this.li === i) this.play('normal');
@@ -241,6 +250,7 @@ export class SelectScene extends Phaser.Scene {
         }
       });
     });
+    grid.add(gridParts);
 
     const level = levelById(this.currentId());
     const rec = app.data.levels[level.id];
@@ -356,15 +366,17 @@ export class SelectScene extends Phaser.Scene {
     return ci >= 0 && ci < chapters.length;
   }
 
-  /** How far the page is moved sideways, CSS px (> 0: to the right). */
+  /** How far the grid is moved sideways, CSS px (> 0: to the right). */
   private pageShift = 0;
+  /** the grid of levels (or the lock), the one part of the page a swipe moves */
+  private grid?: Phaser.GameObjects.Container;
 
-  /** Moves the whole page sideways by `x` CSS px (the camera, the other way). */
+  /** Moves the grid of levels sideways by `x` CSS px (the rest of the page stays). */
   private shiftPage(x: number): void {
     this.settle?.remove();
     this.settle = undefined;
     this.pageShift = x;
-    this.cameras.main.setScroll(-x * dpr(), 0);
+    this.grid?.setX(x * dpr());
     setDebug({ pageShift: x });
   }
 
@@ -383,12 +395,12 @@ export class SelectScene extends Phaser.Scene {
       ease: 'Cubic.easeOut',
       onUpdate: () => {
         this.pageShift = s.x;
-        this.cameras.main.setScroll(-s.x * dpr(), 0);
+        this.grid?.setX(s.x * dpr());
       },
       onComplete: () => {
         this.settle = undefined;
         this.pageShift = 0;
-        this.cameras.main.setScroll(0, 0);
+        this.grid?.setX(0);
         setDebug({ pageShift: 0 });
       },
     });

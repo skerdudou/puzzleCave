@@ -107,11 +107,24 @@ test.describe('on a phone', () => {
         type,
         touchPoints: type === 'touchEnd' ? [] : [{ x, y: 400, id: 1 }],
       });
+    // only the grid of levels moves: the tile "1" goes, Play stays
+    const xs = () =>
+      page.evaluate(() => {
+        const texts = (
+          window as unknown as { __pcTexts: () => { text: string; x: number }[] }
+        ).__pcTexts();
+        const at = (s: string) => texts.find((t) => t.text === s)!.x;
+        return { tile: at('1'), play: at('Play') };
+      });
+    const before = await xs();
     await touch('touchStart', 300);
     for (const x of [295, 290, 285, 280, 275]) await touch('touchMove', x);
-    // 25 px: the page moves to the left, less than the finger, not enough for a swipe
+    // 25 px: the grid moves to the left, less than the finger, not enough for a swipe
     await expect.poll(async () => (await debug(page)).pageShift).toBeLessThan(0);
     expect((await debug(page)).pageShift).toBeGreaterThan(-25);
+    const moved = await xs();
+    expect(moved.tile).toBeLessThan(before.tile);
+    expect(moved.play).toBe(before.play);
     await touch('touchEnd', 275);
     await expect.poll(async () => (await debug(page)).pageShift).toBe(0);
     expect((await debug(page)).chapter).toBe(first);
