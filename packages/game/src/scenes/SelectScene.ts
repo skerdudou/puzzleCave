@@ -3,7 +3,8 @@ import { isChapterUnlocked, isLevelUnlocked, resolveThresholds, type Mode } from
 import { KonamiCode } from '../achievements';
 import { app } from '../app';
 import { setDebug } from '../debug';
-import { swipeStep } from '../input/swipe';
+import { SWIPE_MIN, dragOffset, swipeStep } from '../input/swipe';
+import { prefersReducedMotion } from '../medalReveal';
 import { konamiEntered } from '../konami';
 import { keysLine } from '../levelIntro';
 import { formatTime } from '../format';
@@ -54,6 +55,10 @@ export class SelectScene extends Phaser.Scene {
   }
 
   create(): void {
+    // the scene is reused: a restart (resize) while the page was aside puts it back
+    this.settle = undefined;
+    this.pageShift = 0;
+    this.cameras.main.setScroll(0, 0);
     this.draw();
     const konami = new KonamiCode();
     onSceneKeyDown(this, (e) => {
@@ -62,10 +67,23 @@ export class SelectScene extends Phaser.Scene {
       this.onKey(e);
     });
     // a horizontal swipe changes chapter (a tile's own release ignores it: see swiped)
-    this.input.on('pointerup', (p: Phaser.Input.Pointer) => {
-      const step = this.swiped(p);
-      if (step) this.switchChapter(step);
+    // while the finger moves, the whole page follows it a little: it shows it can be swiped
+    this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
+      if (!p.isDown || prefersReducedMotion()) return;
+      const dx = (p.x - p.downX) / dpr();
+      const dy = (p.y - p.downY) / dpr();
+      this.shiftPage(dragOffset(dx, dy, this.canSwitch(dx < 0 ? 1 : -1)));
     });
+    const release = (p: Phaser.Input.Pointer) => {
+      const step = this.swiped(p);
+      if (step && this.canSwitch(step)) {
+        this.switchChapter(step);
+        // the new chapter slides in from the side the finger went to
+        this.settlePage(-step * 1.5 * SWIPE_MIN, 200);
+      } else this.settlePage(this.pageShift, 150);
+    };
+    this.input.on('pointerup', release);
+    this.input.on('pointerupoutside', release);
     const onResize = () => this.scene.restart({ levelId: this.currentId() });
     this.scale.on('resize', onResize);
     this.events.once('shutdown', () => this.scale.off('resize', onResize));
@@ -330,6 +348,50 @@ export class SelectScene extends Phaser.Scene {
         b.setName('replaySaved');
       });
     }
+  }
+
+  /** There is a chapter `delta` away from this one. */
+  private canSwitch(delta: number): boolean {
+    const ci = this.ci + delta;
+    return ci >= 0 && ci < chapters.length;
+  }
+
+  /** How far the page is moved sideways, CSS px (> 0: to the right). */
+  private pageShift = 0;
+
+  /** Moves the whole page sideways by `x` CSS px (the camera, the other way). */
+  private shiftPage(x: number): void {
+    this.settle?.remove();
+    this.settle = undefined;
+    this.pageShift = x;
+    this.cameras.main.setScroll(-x * dpr(), 0);
+    setDebug({ pageShift: x });
+  }
+
+  private settle?: Phaser.Tweens.Tween;
+
+  /** The page, from `from` CSS px aside, glides back into place in `ms` (at once: reduced motion). */
+  private settlePage(from: number, ms: number): void {
+    this.shiftPage(from);
+    if (from === 0) return;
+    if (prefersReducedMotion()) return this.shiftPage(0);
+    const s = { x: from };
+    this.settle = this.tweens.add({
+      targets: s,
+      x: 0,
+      duration: ms,
+      ease: 'Cubic.easeOut',
+      onUpdate: () => {
+        this.pageShift = s.x;
+        this.cameras.main.setScroll(-s.x * dpr(), 0);
+      },
+      onComplete: () => {
+        this.settle = undefined;
+        this.pageShift = 0;
+        this.cameras.main.setScroll(0, 0);
+        setDebug({ pageShift: 0 });
+      },
+    });
   }
 
   private switchChapter(delta: number): void {
