@@ -1,5 +1,27 @@
 import type { Plugin } from 'vite';
 import { loadPack } from '@puzzlecave/tiled';
+import { readSolutions } from './src/server/solutions';
+
+const SOLUTIONS_ID = 'virtual:solutions';
+const SOLUTIONS_RESOLVED = '\0virtual:solutions';
+
+/**
+ * `virtual:solutions`: the saved solutions (levels/solutions/<id>.txt), for the preview of main's
+ * author mode, which replays them without the development server. `bundle` false (the release,
+ * the dev server, which reads them from disk): an empty table, nothing of them in the build.
+ */
+export function solutionsPlugin(dir: string, bundle: boolean): Plugin {
+  return {
+    name: 'puzzlecave-solutions',
+    resolveId(source) {
+      return source === SOLUTIONS_ID ? SOLUTIONS_RESOLVED : null;
+    },
+    load(id) {
+      if (id !== SOLUTIONS_RESOLVED) return null;
+      return `export const solutions = ${JSON.stringify(bundle ? readSolutions(dir) : {})};\n`;
+    },
+  };
+}
 
 const ID = 'virtual:levels';
 const RESOLVED = '\0virtual:levels';

@@ -75,4 +75,8 @@ else
   grep -rqF 'puzzlecave.preview.save.v1' "$out/assets" ||
     fail "the preview does not save under its own key"
   if grep -q 'name="robots"' "$site/index.html"; then fail "the release's index.html is marked noindex"; fi
+  # the saved solutions: bundled in the preview (its author mode replays them), never in the release
+  grep -rqF '# optimal (proven)' "$out/assets" ||
+    fail "the preview does not bundle the saved solutions"
+  if grep -rqF '# optimal (proven)' "$site/assets"; then fail "the release bundles the saved solutions"; fi
 fi

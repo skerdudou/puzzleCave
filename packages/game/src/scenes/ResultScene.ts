@@ -246,7 +246,12 @@ export class ResultScene extends Phaser.Scene {
         () => void copy(formatMoves(moveLog), sol),
         12,
       );
-      if (authorServerAvailable()) {
+      if (!authorServerAvailable()) {
+        // no development server (the preview of main): no saving, the run replays at once (on
+        // `vite dev` it is offered after saving)
+        y += px(48);
+        makeButton(this, cx, y, t('replayMine'), () => this.replay(moveLog, t('labelMine')), 12);
+      } else {
         y += px(48);
         const save = makeButton(
           this,
