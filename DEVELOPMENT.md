@@ -95,9 +95,13 @@ bundle):
   "· dev" in author mode);
 - author mode can be turned on there: open the preview's link with `?dev` (`…/preview-<secret>/?dev`);
   the choice is remembered (key `puzzlecave.preview.dev`, so the installed app keeps it) until
-  `?dev=0`. All levels are then unlocked and the result screen has the two copy buttons; the tools
-  that need the development server (save a solution, replay saved or optimized solutions) are not
-  shown. The release has no such switch (the code is not in its bundle);
+  `?dev=0`. All levels are then unlocked, the selection screen has "Replay solution" (or S) on a
+  level with a saved solution, and the result screen has the two copy buttons and "Replay my
+  solution". The saved solutions are bundled in the preview, as of its commit
+  (`virtual:solutions`, `solutionsPlugin` in `vite-plugin-levels.ts`; a chunk of its own, loaded
+  on the first replay); the release's table is empty. Saving a solution (and its optimization)
+  needs the development server: not shown. The release has no such switch (the code is not in its
+  bundle);
 - its service worker, registered from its folder, is scoped to that folder (the release's is
   scoped to `/puzzleCave/`): each precaches and updates its own build, the same way as below.
 
@@ -542,7 +546,7 @@ In author mode (development server only):
 - **Replay my solution / Replay optimized solution**: animated replay (8 moves/s at the start). Space: pause/play; ←/→: previous/next move; +/−: speed (1 to 20 moves/s); Home: back to the start; Esc: back. On-screen buttons do the same.
 - On the selection screen of a level that has a saved solution: "Replay solution" button (or S key).
 
-Settings: `PC_IMPROVE_TIMEOUT=<seconds>` (default 120) sets the maximum duration of an optimization; one job at a time per level; children are stopped when the server stops. The optimization may rewrite `platinumMoves` (or `goldMoves` and `goldTime` on a level without them; the result then shows the reference time) in the `.tmx` (same rule as the CLI): the page is then not reloaded automatically, reload it to see the new threshold. The `/__pc/*` routes do not exist in the build, and nothing from `levels/solutions` is bundled in it.
+Settings: `PC_IMPROVE_TIMEOUT=<seconds>` (default 120) sets the maximum duration of an optimization; one job at a time per level; children are stopped when the server stops. The optimization may rewrite `platinumMoves` (or `goldMoves` and `goldTime` on a level without them; the result then shows the reference time) in the `.tmx` (same rule as the CLI): the page is then not reloaded automatically, reload it to see the new threshold. The `/__pc/*` routes do not exist in the build, and nothing from `levels/solutions` is bundled in the release (the preview of `main` bundles them, for its replays).
 
 Details: a short `PC_IMPROVE_TIMEOUT` may show "best known" on a level proven optimal with a longer budget; forcibly replacing a proven solution never degrades it, though (the old one is kept in `<id>.prev.txt` during the work, then restored if the new run proves nothing). A stuck job is killed by the server after the timeout + 90 s. The write routes rely on Vite's host checks: do not start the server with `--host` or `allowedHosts: true`.
 

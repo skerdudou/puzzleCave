@@ -2,7 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig, loadEnv, type Plugin } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import { authorPlugin, type AuthorPluginState } from './vite-plugin-author';
-import { levelsPlugin } from './vite-plugin-levels';
+import { levelsPlugin, solutionsPlugin } from './vite-plugin-levels';
 
 const levelsDir = fileURLToPath(new URL('../../levels', import.meta.url));
 const envDir = fileURLToPath(new URL('.', import.meta.url));
@@ -34,6 +34,8 @@ export default defineConfig(({ mode }) => {
     plugins: [
       levelsPlugin(levelsDir, () => author.api?.busy() ?? false),
       authorPlugin(levelsDir, author),
+      // the saved solutions, replayed by the preview's author mode (empty in the release)
+      solutionsPlugin(levelsDir, preview),
       preview && previewHtmlPlugin(),
       VitePWA({
         // a new version waits until the game lets it in (src/pwa.ts): never in the middle of a

@@ -21,7 +21,7 @@ import {
 import { syncMusic } from '../music';
 import { COLORS, dpr, drawMedal, drawThresholdLine, makeButton, px, textStyle } from '../ui';
 import { isTouchDevice } from '../touch';
-import { authorServerAvailable, fetchSolution } from '../author/client';
+import { savedSolution, savedSolutionsAvailable } from '../author/client';
 
 export class SelectScene extends Phaser.Scene {
   private ci = 0;
@@ -348,11 +348,11 @@ export class SelectScene extends Phaser.Scene {
     }
     // for the e2e tests: the Play button's centre, CSS px (none on a locked level)
     setDebug({ playButton: playButton && [playButton.x / dpr(), playButton.y / dpr()] });
-    if (authorServerAvailable()) {
+    if (savedSolutionsAvailable()) {
       // the button only appears if a solution is saved (asynchronous read)
       const id = level.id;
       const by = y + px(52);
-      void fetchSolution(id).then((sol) => {
+      void savedSolution(id).then((sol) => {
         if (!sol || !this.sys.isActive() || this.currentId() !== id) return;
         const b = this.button(icx, by, t('replaySaved'), () => this.replaySaved(), 12);
         b.setName('replaySaved');
@@ -422,9 +422,9 @@ export class SelectScene extends Phaser.Scene {
   }
 
   private async replaySaved(): Promise<void> {
-    if (!authorServerAvailable()) return;
+    if (!savedSolutionsAvailable()) return;
     const id = this.currentId();
-    const sol = await fetchSolution(id);
+    const sol = await savedSolution(id);
     if (!this.sys.isActive() || this.currentId() !== id) return;
     if (!sol) {
       this.add
