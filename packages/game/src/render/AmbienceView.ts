@@ -49,6 +49,8 @@ let nextId = 0;
 export class AmbienceView {
   private readonly scene: Phaser.Scene;
   private hudHeight: number;
+  /** the band's width, device px (the whole screen: a band across the top) */
+  private hudWidth: number | undefined;
   private readonly tint: number | null;
   private readonly reducedMotion: boolean;
   private readonly keys: { rock: string; overlay: string; glow: string; vignette: string };
@@ -92,10 +94,12 @@ export class AmbienceView {
 
   /**
    * Rebuilds the rock, the vignette and the canvas sizes for a new board layout or screen size;
-   * `hudHeight` (device px) when the HUD's height changed with it.
+   * `hudHeight` (device px) when the HUD's height changed with it, `hudWidth` when the HUD is a
+   * column on the left (undefined: a band across the top).
    */
-  layout(board: BoardLayout, hudHeight = this.hudHeight): void {
+  layout(board: BoardLayout, hudHeight = this.hudHeight, hudWidth?: number): void {
     this.hudHeight = hudHeight;
+    this.hudWidth = hudWidth;
     const s = board.scale;
     const screenW = this.scene.scale.width;
     const screenH = this.scene.scale.height;
@@ -119,7 +123,7 @@ export class AmbienceView {
 
     this.band?.destroy();
     this.band = this.scene.add
-      .rectangle(0, 0, screenW, this.hudHeight, COLORS.bg, 0.55)
+      .rectangle(0, 0, this.hudWidth ?? screenW, this.hudHeight, COLORS.bg, 0.55)
       .setOrigin(0)
       .setDepth(AMBIENCE_DEPTH.hudBand);
 

@@ -15,7 +15,18 @@ import {
 import { achievements as allAchievements } from '../levels';
 import { isTouchDevice } from '../touch';
 import { syncMusic } from '../music';
-import { COLORS, devicePx, dpr, drawMedal, makeButton, px, shrinkToFit, textStyle } from '../ui';
+import {
+  COLORS,
+  HEADER_BAND,
+  devicePx,
+  dpr,
+  drawMedal,
+  headerBand,
+  makeButton,
+  px,
+  shrinkToFit,
+  textStyle,
+} from '../ui';
 
 /**
  * The achievements: one row each (a gold medal once earned, its name and what earns it, or
@@ -49,11 +60,10 @@ export class AchievementsScene extends Phaser.Scene {
     const cx = w / 2;
     const rowW = Math.min(w - px(32), px(460));
     const left = cx - rowW / 2;
-    let y = px(28);
-    this.add.text(cx, y, t('achievements'), textStyle(20, COLORS.accent)).setOrigin(0.5);
+    // the count under the band at the top (back to the menu, the screen's name)
+    let y = px(HEADER_BAND) + px(22);
     const achievements = shownAchievements(allAchievements, app.data.achievements, isTouchDevice());
     const earnedIds = achievements.filter((a) => app.data.achievements[a.id] !== undefined);
-    y += px(26);
     this.add
       .text(
         cx,
@@ -100,21 +110,20 @@ export class AchievementsScene extends Phaser.Scene {
       rows[a.id] = { earned: v.earned, secret: v.secret, ...(progress ? { progress } : {}) };
     }
 
-    y += px(10);
-    this.add.text(cx, y, t('achHelp'), textStyle(9, COLORS.dim)).setOrigin(0.5).setAlpha(0.8);
-    y += px(34);
-    // a drag that scrolled is not a press of Back
+    this.contentH = y + px(10);
+    // the band at the top, fixed: back to the menu (a drag that scrolled is not a press of it),
+    // its left side lined up with the list, and the screen's name
     this.back = makeButton(
       this,
-      cx,
-      y,
-      t('back'),
+      0,
+      0,
+      `‹ ${t('menu')}`,
       () => {
         if (!this.dragged) this.scene.start('Menu');
       },
-      16,
+      12,
     );
-    this.contentH = this.back.y + this.back.height / 2 + px(24);
+    headerBand(this, t('achievements'), this.back, left);
 
     this.thumb = this.add.graphics().setScrollFactor(0).setDepth(5);
     this.setScroll(0, true);
@@ -144,20 +153,22 @@ export class AchievementsScene extends Phaser.Scene {
     this.cameras.main.setScroll(0, next);
     this.thumb.clear();
     const inset = px(4);
-    const track = h - 2 * inset;
+    // the track runs below the band at the top
+    const top = px(HEADER_BAND) + inset;
+    const track = h - top - inset;
     const thumb = scrollThumb(next, this.contentH, h, px(24));
     if (thumb) {
       const k = track / h;
       const w = Math.max(2, px(3));
       const x = this.scale.width - inset - w;
-      this.thumb.fillStyle(0xffffff, 0.08).fillRoundedRect(x, inset, w, track, w / 2);
+      this.thumb.fillStyle(0xffffff, 0.08).fillRoundedRect(x, top, w, track, w / 2);
       this.thumb
         .fillStyle(0x8a8597, 0.9)
-        .fillRoundedRect(x, inset + thumb.top * k, w, thumb.length * k, w / 2);
+        .fillRoundedRect(x, top + thumb.top * k, w, thumb.length * k, w / 2);
     }
     setDebug({
       scrollY: this.scroll / dpr(),
-      buttons: { back: [this.back.x / dpr(), (this.back.y - this.scroll) / dpr()] },
+      buttons: { back: [this.back.getBounds().centerX / dpr(), this.back.y / dpr()] },
     });
   }
 

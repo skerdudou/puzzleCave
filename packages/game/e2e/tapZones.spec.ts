@@ -302,13 +302,17 @@ test('tap mode: the lit triangle stays inside the area (never over the d-pad or 
 
 test.describe('landscape', () => {
   test.use({ viewport: { width: 740, height: 360 } });
-  test('tap mode: the zones stop 24 px left of the d-pad column', async ({ page }) => {
+  test('tap mode: the zones go from the HUD column to 24 px left of the d-pad column', async ({
+    page,
+  }) => {
     await tapMode(page);
     const f = await startPc01(page);
     const area = (await debug(page)).zoneArea!;
     const pad = await dpadBox(page);
     expect(area.x + area.w).toBeCloseTo(pad.x - 24, 0);
-    expect(area.y).toBeCloseTo((await headerBottom(page)) + 24, 0);
+    // the HUD is a column on the left (128 px): the zones start right of it, from the top
+    expect(area.x).toBeCloseTo(128, 0);
+    expect(area.y).toBeCloseTo(8, 0);
     expect(area.y + area.h).toBe(360);
     // left of the d-pad, within the margin: nothing; further left: "right" (a step)
     await f.tap(pad.x - 12, pad.y + pad.h / 2);

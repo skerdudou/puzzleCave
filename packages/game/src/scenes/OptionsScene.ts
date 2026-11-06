@@ -23,10 +23,12 @@ import {
 import { syncMusic } from '../music';
 import {
   COLORS,
+  HEADER_BAND,
   KeyFocus,
   TOUCH_TARGET,
   devicePx,
   dpr,
+  headerBand,
   makeButton,
   px,
   textStyle,
@@ -55,6 +57,8 @@ export class OptionsScene extends Phaser.Scene {
   private buttons: Record<string, [number, number]> = {};
   /** drop-down list items, in screen coordinates (device px) */
   private menuButtons: Record<string, [number, number]> = {};
+  /** buttons fixed on the screen (the band at the top): device px, not moved by the scroll */
+  private fixedButtons: Record<string, [number, number]> = {};
   private langMenu: Phaser.GameObjects.GameObject[] = [];
   /** scroll offset, device px */
   private scroll = 0;
@@ -129,9 +133,8 @@ export class OptionsScene extends Phaser.Scene {
     const labelGap = px(touch ? TOUCH_TARGET / 2 + 6 : 16);
     // with a mouse, a little tighter: everything fits a 1280×720 screen
     const rowStep = px(touch ? TOUCH_TARGET / 2 + 26 : 40);
-    let y = px(touch ? 50 : 44);
-    this.add.text(cx, y, t('options'), textStyle(24, COLORS.accent)).setOrigin(0.5);
-    y += px(touch ? 56 : 48);
+    // the first label under the band at the top (back to the menu, the screen's name)
+    let y = px(HEADER_BAND) + px(touch ? 34 : 28);
     const change = (fn: () => void) => {
       fn();
       app.persist();
@@ -207,8 +210,10 @@ export class OptionsScene extends Phaser.Scene {
 
     // the music and the sound effects, side by side (one under the other on a narrow screen)
     label(t('sound'));
-    const onOff = (key: 'music' | 'effects' | 'torchlight' | 'dust' | 'vignette', on: boolean) =>
-      t('labelValue', { label: t(key), value: on ? t('on') : t('off') });
+    const onOff = (
+      key: 'music' | 'effects' | 'torchlight' | 'dust' | 'vignette' | 'smoothing',
+      on: boolean,
+    ) => t('labelValue', { label: t(key), value: on ? t('on') : t('off') });
     row([
       [
         'sound',
@@ -272,17 +277,19 @@ export class OptionsScene extends Phaser.Scene {
 
     // graphics: the cave ambience, one switch each, laid out like music and effects
     label(t('graphics'));
-    const graphic = (key: 'torchlight' | 'dust' | 'vignette'): [string, string, () => void] => [
+    const graphic = (
+      key: 'torchlight' | 'dust' | 'vignette' | 'smoothing',
+    ): [string, string, () => void] => [
       key,
       onOff(key, s[key]),
       () => change(() => (s[key] = !s[key])),
     ];
-    row([graphic('torchlight'), graphic('dust'), graphic('vignette')]);
+    row([graphic('torchlight'), graphic('dust'), graphic('vignette'), graphic('smoothing')]);
 
     // the progress: kept in a file, brought back from one (it replaces the progress) or erased;
     // both of those ask first
     label(t('progress'));
-    const [, imp, erase] = row(
+    const progressRow = row(
       [
         ['export', t('exportSave'), () => this.exportProgress()],
         [
@@ -299,15 +306,15 @@ export class OptionsScene extends Phaser.Scene {
       [14, 13, 12],
     );
 
-    const back = button(
-      'back',
-      cx,
-      y + labelGap - px(4),
-      t('back'),
-      () => this.scene.start('Menu'),
-      16,
-    );
-    this.contentH = back.y + back.height / 2 + px(24);
+    const [, imp, erase] = progressRow;
+    this.contentH = Math.max(...progressRow.map((b) => b.getBounds().bottom)) + px(24);
+
+    // the band at the top, fixed: back to the menu (last in the keyboard's order), its left side
+    // lined up with the content's column, and the screen's name
+    const back = button('back', 0, 0, `‹ ${t('menu')}`, () => this.scene.start('Menu'), 12);
+    headerBand(this, t('options'), back, cx - Math.min(this.scale.width - px(32), px(460)) / 2);
+    delete this.buttons.back;
+    this.fixedButtons = { back: [back.getBounds().centerX, back.y] };
 
     this.thumb = this.add.graphics().setScrollFactor(0).setDepth(5);
     this.setScroll(this.scroll, true);
@@ -345,17 +352,19 @@ export class OptionsScene extends Phaser.Scene {
     this.cameras.main.setScroll(0, next);
     this.thumb.clear();
     const inset = px(4);
-    const track = h - 2 * inset;
+    // the track runs below the band at the top
+    const top = px(HEADER_BAND) + inset;
+    const track = h - top - inset;
     // the thumb runs along the track as the content runs along the viewport
     const thumb = scrollThumb(next, this.contentH, h, px(24));
     if (thumb) {
       const k = track / h;
       const w = Math.max(2, px(3));
       const x = this.scale.width - inset - w;
-      this.thumb.fillStyle(0xffffff, 0.08).fillRoundedRect(x, inset, w, track, w / 2);
+      this.thumb.fillStyle(0xffffff, 0.08).fillRoundedRect(x, top, w, track, w / 2);
       this.thumb
         .fillStyle(0x8a8597, 0.9)
-        .fillRoundedRect(x, inset + thumb.top * k, w, thumb.length * k, w / 2);
+        .fillRoundedRect(x, top + thumb.top * k, w, thumb.length * k, w / 2);
     }
     this.publishButtons();
   }
@@ -423,10 +432,14 @@ export class OptionsScene extends Phaser.Scene {
     this.setScroll(this.scroll + d);
   }
 
-  /** Scrolls just enough for a focused button to be on the screen (Back: to the very bottom). */
+  /**
+   * Scrolls just enough for a focused button to be on the screen, below the band at the top (a
+   * button in the band is always on it).
+   */
   private reveal(b: Phaser.GameObjects.Text): void {
+    if (b.scrollFactorY === 0) return;
     const margin = px(24);
-    const top = b.y - b.height / 2 - margin;
+    const top = b.y - b.height / 2 - margin - px(HEADER_BAND);
     const bottom = b.y + b.height / 2 + margin;
     this.velocity = 0;
     if (top < this.scroll) this.setScroll(top);
@@ -535,6 +548,7 @@ export class OptionsScene extends Phaser.Scene {
     const buttons: Record<string, [number, number]> = {};
     for (const [id, [x, y]] of Object.entries(this.buttons)) buttons[id] = css(x, y - this.scroll);
     for (const [id, [x, y]] of Object.entries(this.menuButtons)) buttons[id] = css(x, y);
+    for (const [id, [x, y]] of Object.entries(this.fixedButtons)) buttons[id] = css(x, y);
     setDebug({
       buttons,
       scrollY: this.scroll / dpr(),

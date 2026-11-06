@@ -76,3 +76,30 @@ test('two ArrowRight presses arriving within one frame advance exactly two moves
   await page.waitForTimeout(300);
   expect((await debug(page)).replayIndex).toBe(2);
 });
+
+test('the progress bar: pressed halfway, the replay goes to the middle move', async ({ page }) => {
+  await openReplayPaused(page);
+  const bar = (await debug(page)).replayBar as { x: number; y: number; w: number };
+  await page.mouse.click(bar.x + bar.w / 2, bar.y);
+  await expect.poll(async () => (await debug(page)).replayIndex).toBe(Math.round(moves.length / 2));
+  // dragged to the end: the last move
+  await page.mouse.move(bar.x + bar.w / 2, bar.y);
+  await page.mouse.down();
+  await page.mouse.move(bar.x + bar.w + 30, bar.y, { steps: 5 });
+  await page.mouse.up();
+  await expect.poll(async () => (await debug(page)).replayIndex).toBe(moves.length);
+});
+
+test('▶ held down: several moves, until released', async ({ page }) => {
+  await openReplayPaused(page);
+  const [x, y] = ((await debug(page)).replayStepButtons as Record<string, [number, number]>)
+    .forward!;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await expect.poll(async () => (await debug(page)).replayIndex).toBeGreaterThanOrEqual(3);
+  await page.mouse.up();
+  const stopped = (await debug(page)).replayIndex;
+  await page.waitForTimeout(400);
+  expect((await debug(page)).replayIndex).toBe(stopped);
+  expect((await debug(page)).replayPlaying).toBe(false);
+});

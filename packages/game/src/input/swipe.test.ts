@@ -14,12 +14,13 @@ test('a tap, a short slide or a mostly vertical one: no swipe', () => {
   expect(swipeStep(90, 59)).toBe(-1);
 });
 
-test('the page follows the finger: not in the dead zone, half past it, up to a limit', () => {
-  expect(dragOffset(DRAG_DEADZONE, 0, true)).toBe(0);
-  expect(dragOffset(DRAG_DEADZONE + 20, 0, true)).toBe(10);
-  expect(dragOffset(-(DRAG_DEADZONE + 20), 0, true)).toBe(-10);
-  expect(dragOffset(1000, 0, true)).toBe(1.5 * SWIPE_MIN);
-  expect(dragOffset(30, 40, true)).toBe(0);
+test('the page follows the finger: not in the dead zone, all of it past it, up to a page', () => {
+  expect(dragOffset(DRAG_DEADZONE, 0, true, 200)).toBe(0);
+  expect(dragOffset(DRAG_DEADZONE + 20, 0, true, 200)).toBe(20);
+  expect(dragOffset(-(DRAG_DEADZONE + 20), 0, true, 200)).toBe(-20);
+  expect(dragOffset(1000, 0, true, 200)).toBe(200);
+  expect(dragOffset(-1000, 0, true, 200)).toBe(-200);
+  expect(dragOffset(30, 40, true, 200)).toBe(0);
 });
 
 test('no chapter that way: the page barely moves (a rubber band)', () => {

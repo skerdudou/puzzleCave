@@ -88,3 +88,15 @@ test('empty solution: nothing to play', () => {
   expect(p.tick(1000)).toBe(0);
   expect(p.stepForward()).toBe(false);
 });
+
+test('seek: to a move, clamped; reaching the end stops', () => {
+  const p = new Playback(10);
+  p.seek(4.4);
+  expect(p.index).toBe(4);
+  expect(p.playing).toBe(true);
+  p.seek(-3);
+  expect(p.index).toBe(0);
+  p.seek(99);
+  expect(p.index).toBe(10);
+  expect(p.playing).toBe(false);
+});

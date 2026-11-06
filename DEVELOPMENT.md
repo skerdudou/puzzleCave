@@ -57,9 +57,13 @@ GitHub Pages identifies a deployment by its commit (`GITHUB_SHA`) and keeps the 
 deployed for that commit: a second deployment of the same commit reports success but changes
 nothing. A tag goes on a commit of `main`, which is already deployed: a run for the tag would
 build for nothing (seen with v0.3.0 and v0.4.0), so pushing a tag (or publishing a GitHub
-release) runs nothing. To release, tag the commit and push the tag, then push a commit to `main`
-(an empty one if there is nothing else to push): its run puts the new tag at the root.
+release) runs nothing. To release, set the version of the root and of every package to the
+release's (they all carry the latest release's number), commit, tag that commit and push the tag,
+then push a commit to `main` (an empty one if there is nothing else to push): its run puts the new
+tag at the root.
 
+    npm version 1.0.0 --workspaces --include-workspace-root --no-git-tag-version
+    git commit -am "Version 1.0.0" && git push origin main
     git tag -a v1.0.0 -m v1.0.0 && git push origin v1.0.0
     git commit --allow-empty -m "Publish v1.0.0" && git push origin main
 
@@ -543,12 +547,35 @@ wrong push fatal). The whole table takes about a minute.
 In author mode (development server only):
 
 - **Save solution**: on the result screen, after finishing a level, this button sends your moves to the server, which replays them (refused if they do not win), writes them to `levels/solutions/<id>.txt` (header `# designer solution (not optimized)`) and then runs `improve <id> --apply` in the background. The game shows the progress (current step, elapsed time) then the result: "Optimized: X → Y moves (proven optimal | best known, lower bound ≥ L)", "Already optimal" or "No improvement". If a saved solution that is as short or shorter already exists, saving is refused and the "Replace anyway" button appears.
-- **Replay my solution / Replay optimized solution**: animated replay (8 moves/s at the start). Space: pause/play; ←/→: previous/next move; +/−: speed (1 to 20 moves/s); Home: back to the start; Esc: back. On-screen buttons do the same.
+- **Replay my solution / Replay optimized solution**: animated replay (8 moves/s at the start). Space: pause/play; ←/→: previous/next move; +/−: speed (1 to 20 moves/s); Home: back to the start; Esc: back. On-screen buttons do the same; ◀ and ▶ held down repeat (at the Repeat rate of the Options), and the progress bar above them is pressed or dragged to go to a move. The screen stays on while the replay plays (Screen Wake Lock, where the browser has it).
 - On the selection screen of a level that has a saved solution: "Replay solution" button (or S key).
 
 Settings: `PC_IMPROVE_TIMEOUT=<seconds>` (default 120) sets the maximum duration of an optimization; one job at a time per level; children are stopped when the server stops. The optimization may rewrite `platinumMoves` (or `goldMoves` and `goldTime` on a level without them; the result then shows the reference time) in the `.tmx` (same rule as the CLI): the page is then not reloaded automatically, reload it to see the new threshold. The `/__pc/*` routes do not exist in the build, and nothing from `levels/solutions` is bundled in the release (the preview of `main` bundles them, for its replays).
 
 Details: a short `PC_IMPROVE_TIMEOUT` may show "best known" on a level proven optimal with a longer budget; forcibly replacing a proven solution never degrades it, though (the old one is kept in `<id>.prev.txt` during the work, then restored if the new run proves nothing). A stuck job is killed by the server after the timeout + 90 s. The write routes rely on Vite's host checks: do not start the server with `--host` or `allowedHosts: true`.
+
+## Board art
+
+The board is drawn from the 16×16 textures of `packages/game/public/textures`. Walls and water are
+chosen by their neighbours (`src/render/autotile.ts`, `src/render/shore.ts`):
+
+- `WALL_<NWES>`: the sides where the wall goes on (`WALL` alone).
+- `WATER_<NWES>[_cNW][_cNE]`: the sides that are a bank (not water), and the corners above that
+  are a bank between two water sides (`WATER` alone: open water). The water sits about 2 px below
+  the floor: under a bank to the north, a 1 px dark bank face (the exit's darkest tone) then 2
+  rows of shadow; along a bank to the west or east, and at such a corner, 1 px of softer shadow;
+  along a bank to the south, a 1 px light lip. The 25 files were drawn once from `WATER.png` by
+  those rules; like the walls, they are edited as images (a change to `WATER.png` means
+  redrawing them).
+
+**Smoothing** (Options › Graphics, on by default): the art is drawn 4× larger through xBR
+(`xbr-js`, `src/render/smoothing.ts`). The terrain is assembled whole and smoothed when a level
+is drawn (walls, water and floor continue from one cell to the next), once per terrain: the last
+3 are kept, so an undo or a restart after a block sank costs nothing, and they are freed when the
+level is left. The sprites that move (key, door, block, player) are smoothed one by one at start,
+inside a 2 px transparent border kept in their texture: xBR rounds the edges the art touches,
+and the smooth drawing of a sprite between two cells fades them out instead of cutting them flat.
+Smoothed textures are drawn with linear filtering (4 texels a pixel at most).
 
 ## Layout
 

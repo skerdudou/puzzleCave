@@ -8,6 +8,8 @@ type Pc = {
   hudName?: string;
   hudIcons?: Record<string, string> | null;
   hudLayout?: { name: Box; buttons: Box[]; counters: Box[] };
+  hudSide?: boolean;
+  boardLayout?: { x: number; width: number };
 };
 const debug = (page: Page): Promise<Pc> =>
   page.evaluate(() => (window as unknown as { __pc?: Pc }).__pc ?? {});
@@ -80,9 +82,14 @@ test.describe('very narrow screen, 220 px', () => {
 
 test.describe('landscape phone, 740 × 360', () => {
   test.use({ viewport: { width: 740, height: 360 }, hasTouch: true, deviceScaleFactor: 2 });
-  test('one row: counters, name and buttons side by side', async ({ page }) => {
+  test('a column on the left: name, counters and buttons one under the other', async ({ page }) => {
     const pc = await startPc01(page);
     expect(pc.hudName).toBe('Five Lessons');
+    expect(pc.hudSide).toBe(true);
     checkLayout(pc, 740);
+    // all of it in the column, the board right of it (device px over 2)
+    const { name, buttons, counters } = pc.hudLayout!;
+    for (const b of [name, ...buttons, ...counters]) expect(b.x + b.w).toBeLessThanOrEqual(128);
+    expect(pc.boardLayout!.x / 2).toBeGreaterThanOrEqual(128);
   });
 });

@@ -454,3 +454,41 @@ export function paintMedal(
       break;
   }
 }
+
+/** The band at the top of the menu screens (level selection, options, achievements), base px. */
+export const HEADER_BAND = 48;
+
+/**
+ * The band at the top of a menu screen, fixed on it while the content scrolls under it: `back`
+ * (made by the caller: its own focus and drag rules) at its left, its left side at `backLeft`
+ * (device px), and `title` in the middle (pushed right where the screen is too narrow for both).
+ * It catches the presses on it: a control scrolled under it is not pressed through it.
+ */
+export function headerBand(
+  scene: Phaser.Scene,
+  title: string,
+  back: Phaser.GameObjects.Text,
+  backLeft: number,
+): Phaser.GameObjects.Text {
+  const h = px(HEADER_BAND);
+  scene.add
+    .rectangle(0, 0, scene.scale.width, h, hex(COLORS.panel))
+    .setOrigin(0)
+    .setScrollFactor(0)
+    .setDepth(10)
+    .setInteractive();
+  // above the band (a button's frame sits one below the button)
+  back
+    .setOrigin(0, 0.5)
+    .setPosition(Math.max(px(12), backLeft), h / 2)
+    .setScrollFactor(0)
+    .setDepth(12);
+  const cx = scene.scale.width / 2;
+  const name = scene.add
+    .text(cx, h / 2, title, textStyle(16, COLORS.accent))
+    .setOrigin(0.5)
+    .setScrollFactor(0)
+    .setDepth(12);
+  name.setX(Math.max(cx, back.getBounds().right + px(12) + name.width / 2));
+  return name;
+}

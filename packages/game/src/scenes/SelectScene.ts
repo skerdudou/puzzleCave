@@ -3,7 +3,7 @@ import { isChapterUnlocked, isLevelUnlocked, resolveThresholds, type Mode } from
 import { KonamiCode } from '../achievements';
 import { app } from '../app';
 import { setDebug } from '../debug';
-import { SWIPE_MIN, dragOffset, swipeStep } from '../input/swipe';
+import { dragOffset, swipeStep } from '../input/swipe';
 import { prefersReducedMotion } from '../medalReveal';
 import { konamiEntered } from '../konami';
 import { keysLine } from '../levelIntro';
@@ -19,9 +19,22 @@ import {
   type MedalKind,
 } from '../medalInfo';
 import { syncMusic } from '../music';
-import { COLORS, dpr, drawMedal, drawThresholdLine, makeButton, px, textStyle } from '../ui';
+import {
+  COLORS,
+  HEADER_BAND,
+  dpr,
+  drawMedal,
+  drawThresholdLine,
+  headerBand,
+  makeButton,
+  px,
+  textStyle,
+} from '../ui';
 import { isTouchDevice } from '../touch';
 import { savedSolution, savedSolutionsAvailable } from '../author/client';
+
+/** Below the band at the top (back to the menu, the game's name), base px. */
+const BAND = HEADER_BAND;
 
 export class SelectScene extends Phaser.Scene {
   private ci = 0;
@@ -57,8 +70,10 @@ export class SelectScene extends Phaser.Scene {
   create(): void {
     // the scene is reused: a restart (resize) while the page was aside puts it back
     this.settle = undefined;
+    this.sliding = false;
     this.pageShift = 0;
     this.grid = undefined;
+    this.neighbours = [];
     this.draw();
     const konami = new KonamiCode();
     onSceneKeyDown(this, (e) => {
@@ -67,26 +82,29 @@ export class SelectScene extends Phaser.Scene {
       this.onKey(e);
     });
     // a horizontal swipe changes chapter (a tile's own release ignores it: see swiped)
-    // while the finger moves, the grid of levels follows it a little: it shows it can be swiped
+    // while the finger moves, the grids of levels follow it, the next chapter's beside this
+    // one's (a rubber band where there is no chapter that way)
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
-      if (!p.isDown || prefersReducedMotion()) return;
+      if (!p.isDown || this.sliding || prefersReducedMotion()) return;
       const dx = (p.x - p.downX) / dpr();
       const dy = (p.y - p.downY) / dpr();
-      this.shiftPage(dragOffset(dx, dy, this.canSwitch(dx < 0 ? 1 : -1)));
+      this.shiftPage(dragOffset(dx, dy, this.canSwitch(dx < 0 ? 1 : -1), this.pageW));
     });
     const release = (p: Phaser.Input.Pointer) => {
+      if (this.sliding) return;
       const step = this.swiped(p);
-      if (step && this.canSwitch(step)) {
-        this.switchChapter(step);
-        // the new chapter slides in from the side the finger went to
-        this.settlePage(-step * 1.5 * SWIPE_MIN, 200);
-      } else this.settlePage(this.pageShift, 150);
+      if (step && this.canSwitch(step)) this.slide(step);
+      else this.settlePage(this.pageShift, 150);
     };
     this.input.on('pointerup', release);
     this.input.on('pointerupoutside', release);
     const onResize = () => this.scene.restart({ levelId: this.currentId() });
     this.scale.on('resize', onResize);
-    this.events.once('shutdown', () => this.scale.off('resize', onResize));
+    this.events.once('shutdown', () => {
+      this.scale.off('resize', onResize);
+      this.clip?.destroy();
+      this.clip = undefined;
+    });
     syncMusic(this, app.data.settings.sound, 'music-menu');
     setDebug({ scene: 'Select', chapter: chapters[this.ci]?.id, levelId: this.currentId() });
   }
@@ -139,12 +157,39 @@ export class SelectScene extends Phaser.Scene {
   private draw(): void {
     const ch = chapters[this.ci]!;
     const cx = this.scale.width / 2;
-    this.add
-      .text(cx, px(30), ch.name[getLang()] ?? ch.name.en, textStyle(18, COLORS.accent))
+    const cols = this.cols();
+    const cell = px(56);
+    const gap = px(8);
+    const gridW = cols * cell + (cols - 1) * gap;
+    const side = this.side();
+    const x0 = (this.gridAreaW() - gridW) / 2;
+    const y0 = px(BAND + 60);
+    // the chapter's name over its grid (in the left column on a low screen), between the arrows,
+    // which stand by the grid's sides (further out when the name is wider)
+    const gcx = x0 + gridW / 2;
+    const title = this.add
+      .text(gcx, px(BAND + 28), ch.name[getLang()] ?? ch.name.en, textStyle(18, COLORS.accent))
       .setOrigin(0.5);
-    if (this.ci > 0) this.button(px(30), px(30), '‹', () => this.switchChapter(-1), 18);
+    const reach = Math.max(gridW / 2 + px(4), title.width / 2 + px(10));
+    const arrowX = (d: -1 | 1) =>
+      Math.min(this.scale.width - px(24), Math.max(px(24), gcx + d * (reach + px(16))));
+    const arrows: Partial<Record<-1 | 1, Phaser.GameObjects.Text>> = {};
+    const rowY = px(BAND + 28);
+    if (this.ci > 0) arrows[-1] = this.button(arrowX(-1), rowY, '‹', () => this.slide(-1), 18);
     if (this.ci < chapters.length - 1)
-      this.button(this.scale.width - px(30), px(30), '›', () => this.switchChapter(1), 18);
+      arrows[1] = this.button(arrowX(1), rowY, '›', () => this.slide(1), 18);
+    // the band: back to the menu, its left side lined up with the previous chapter's arrow (where
+    // that arrow is, or would be on the first chapter); the game's name in the middle (smaller
+    // than on the menu)
+    const arrowW = (arrows[-1] ?? arrows[1])?.width ?? 0;
+    const back = this.button(0, 0, `‹ ${t('menu')}`, () => this.scene.start('Menu'), 12);
+    const name = headerBand(this, 'puzzleCave', back, arrowX(-1) - arrowW / 2);
+    setDebug({ selectBack: this.box(back), selectGameName: this.box(name) });
+    setDebug({
+      selectTitle: this.box(title),
+      selectArrows: [arrows[-1], arrows[1]].map((a) => (a ? this.box(a) : null)),
+      selectGrid: { x: x0 / dpr(), y: y0 / dpr(), w: gridW / dpr() },
+    });
     // Keyboard help (not on a touch screen). It can wrap to two lines on a small screen: it
     // stays anchored at the bottom.
     const help =
@@ -162,95 +207,33 @@ export class SelectScene extends Phaser.Scene {
             )
             .setOrigin(0.5, 1)
         : undefined;
-    const menu = this.button(
-      px(40),
-      this.scale.height - px(40),
-      t('menu'),
-      () => this.scene.start('Menu'),
-      12,
-    );
-    if (help) {
-      // The Menu button moves up just enough not to overlap the help.
-      const overlap = menu.y + menu.height / 2 - (help.y - help.height);
-      if (overlap > 0) menu.y -= overlap + px(4);
-    }
 
-    // the chapter's content (its grid, or its lock): what a swipe moves sideways, alone
-    const grid = this.add.container(this.pageShift * dpr(), 0);
-    this.grid = grid;
-    if (!this.chapterOpen(this.ci)) {
-      grid.add(
-        this.add
-          .text(
-            cx,
-            px(120),
-            `🔒 ${ch.unlockAfter === 1 ? t('lockedHintOne') : t('lockedHint', { n: ch.unlockAfter })}`,
-            textStyle(16, COLORS.locked),
-          )
-          .setOrigin(0.5),
-      );
-      return;
+    // the chapters' grids (or locks), side by side in a strip seen through the grid's width: what
+    // a swipe moves sideways, alone; the neighbours show only while it moves
+    const margin = px(16);
+    const pageW = gridW + 2 * margin;
+    this.pageW = pageW / dpr();
+    const strip = this.add.container(this.pageShift * dpr(), 0);
+    this.grid = strip;
+    strip.add(this.drawPage(this.ci, x0, y0, true));
+    this.neighbours = [];
+    for (const d of [-1, 1] as const) {
+      if (!this.canSwitch(d)) continue;
+      const page = this.drawPage(this.ci + d, x0 + d * pageW, y0, false);
+      page.setVisible(this.pageShift !== 0);
+      this.neighbours.push(page);
+      strip.add(page);
     }
-
-    const cols = this.cols();
-    const cell = px(56);
-    const gap = px(8);
-    const gridW = cols * cell + (cols - 1) * gap;
-    const side = this.side();
-    const x0 = (this.gridAreaW() - gridW) / 2;
-    const y0 = px(64);
-    // by the progression rule alone (author mode opens every tile): read by the e2e tests
-    setDebug({
-      unlocked: ch.levels.map((_, i) =>
-        isLevelUnlocked(chapters, this.ci, i, app.data.levels, app.allChaptersOpen),
-      ),
-    });
-    const g = this.add.graphics();
-    // the grid's parts, in the container that a swipe moves
-    const gridParts: Phaser.GameObjects.GameObject[] = [g];
-    ch.levels.forEach((id, i) => {
-      const level = levelById(id);
-      const rec = app.data.levels[id];
-      const x = x0 + (i % cols) * (cell + gap);
-      const y = y0 + Math.floor(i / cols) * (cell + gap);
-      const open = this.levelOpen(this.ci, i);
-      g.fillStyle(i === this.li ? 0x4a4360 : 0x2c2838, 1).fillRect(x, y, cell, cell);
-      if (i === this.li) g.lineStyle(px(2), 0xffd25e, 1).strokeRect(x, y, cell, cell);
-      const label = this.add
-        .text(
-          x + cell / 2,
-          y + cell * 0.35,
-          open ? String(i + 1) : '🔒',
-          textStyle(14, open ? COLORS.text : COLORS.locked),
-        )
-        .setOrigin(0.5);
-      gridParts.push(label);
-      const my = y + cell * 0.75;
-      // Without a gold threshold for a criterion, no medal can be awarded: no slot.
-      const th = resolveThresholds(level.thresholds);
-      const slots: (MedalKind | undefined)[] = [];
-      if (th.moves) slots.push(rec?.medals.moves);
-      if (th.time) slots.push(rec?.medals.time);
-      // master mode: one slot, its best medal (master or grand master)
-      if (hasMaster(id) && th.grandMasterMoves !== undefined) slots.push(rec?.medals.master);
-      slots.forEach((m, k) =>
-        drawMedal(g, x + (cell * (k + 1)) / (slots.length + 1), my, px(5), m),
-      );
-      const zone = this.add
-        .zone(x, y, cell, cell)
-        .setOrigin(0)
-        .setInteractive({ useHandCursor: open });
-      gridParts.push(zone);
-      zone.on('pointerup', (p: Phaser.Input.Pointer) => {
-        if (!open || this.swiped(p)) return;
-        if (this.li === i) this.play('normal');
-        else {
-          this.li = i;
-          this.redraw();
-        }
-      });
-    });
-    grid.add(gridParts);
+    this.clip?.destroy();
+    this.clip = this.make.graphics({}, false);
+    this.clip.fillStyle(0xffffff).fillRect(x0 - margin, 0, pageW, this.scale.height);
+    // (WebGL: a Mask filter, in screen coordinates as the strip moves under it)
+    const mask = strip
+      .enableFilters()
+      .filters?.external.addMask(this.clip, false, undefined, 'world');
+    // the clip never changes: drawn into the mask once, not every frame
+    if (mask) mask.autoUpdate = false;
+    if (!this.chapterOpen(this.ci)) return;
 
     const level = levelById(this.currentId());
     const rec = app.data.levels[level.id];
@@ -335,16 +318,6 @@ export class SelectScene extends Phaser.Scene {
           .setOrigin(0.5);
         bottom = Math.max(bottom, locked.getBounds().bottom);
       }
-      // a short screen (small phone): Menu would sit on Play or under the master line, it joins
-      // the Play row on the left
-      if (bottom + px(4) > menu.getBounds().top) {
-        const gap = px(12);
-        let x = icx - ([menu, ...row].reduce((w, b) => w + b.width, 0) + gap * row.length) / 2;
-        for (const b of [menu, ...row]) {
-          b.setPosition(x + b.width / 2, rowY);
-          x += b.width + gap;
-        }
-      }
     }
     // for the e2e tests: the Play button's centre, CSS px (none on a locked level)
     setDebug({ playButton: playButton && [playButton.x / dpr(), playButton.y / dpr()] });
@@ -360,6 +333,98 @@ export class SelectScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * A chapter's grid of levels at (x0, y0), or its lock, in a container; `current`: the one shown,
+   * whose tiles can be pressed (a neighbour, seen while swiping, shows its first level picked).
+   */
+  private drawPage(
+    ci: number,
+    x0: number,
+    y0: number,
+    current: boolean,
+  ): Phaser.GameObjects.Container {
+    const ch = chapters[ci]!;
+    const page = this.add.container(0, 0);
+    const cols = this.cols();
+    const cell = px(56);
+    const gap = px(8);
+    const gridW = cols * cell + (cols - 1) * gap;
+    if (!this.chapterOpen(ci)) {
+      page.add(
+        this.add
+          .text(
+            x0 + gridW / 2,
+            px(BAND + 116),
+            `🔒 ${ch.unlockAfter === 1 ? t('lockedHintOne') : t('lockedHint', { n: ch.unlockAfter })}`,
+            { ...textStyle(16, COLORS.locked), align: 'center', wordWrap: { width: gridW } },
+          )
+          .setOrigin(0.5),
+      );
+      return page;
+    }
+    const picked = current ? this.li : 0;
+    // by the progression rule alone (author mode opens every tile): read by the e2e tests
+    if (current)
+      setDebug({
+        unlocked: ch.levels.map((_, i) =>
+          isLevelUnlocked(chapters, ci, i, app.data.levels, app.allChaptersOpen),
+        ),
+      });
+    const g = this.add.graphics();
+    page.add(g);
+    ch.levels.forEach((id, i) => {
+      const level = levelById(id);
+      const rec = app.data.levels[id];
+      const x = x0 + (i % cols) * (cell + gap);
+      const y = y0 + Math.floor(i / cols) * (cell + gap);
+      const open = this.levelOpen(ci, i);
+      g.fillStyle(i === picked ? 0x4a4360 : 0x2c2838, 1).fillRect(x, y, cell, cell);
+      if (i === picked) g.lineStyle(px(2), 0xffd25e, 1).strokeRect(x, y, cell, cell);
+      page.add(
+        this.add
+          .text(
+            x + cell / 2,
+            y + cell * 0.35,
+            open ? String(i + 1) : '🔒',
+            textStyle(14, open ? COLORS.text : COLORS.locked),
+          )
+          .setOrigin(0.5),
+      );
+      const my = y + cell * 0.75;
+      // Without a gold threshold for a criterion, no medal can be awarded: no slot.
+      const th = resolveThresholds(level.thresholds);
+      const slots: (MedalKind | undefined)[] = [];
+      if (th.moves) slots.push(rec?.medals.moves);
+      if (th.time) slots.push(rec?.medals.time);
+      // master mode: one slot, its best medal (master or grand master)
+      if (hasMaster(id) && th.grandMasterMoves !== undefined) slots.push(rec?.medals.master);
+      slots.forEach((m, k) =>
+        drawMedal(g, x + (cell * (k + 1)) / (slots.length + 1), my, px(5), m),
+      );
+      if (!current) return;
+      const zone = this.add
+        .zone(x, y, cell, cell)
+        .setOrigin(0)
+        .setInteractive({ useHandCursor: open });
+      page.add(zone);
+      zone.on('pointerup', (p: Phaser.Input.Pointer) => {
+        if (!open || this.swiped(p)) return;
+        if (this.li === i) this.play('normal');
+        else {
+          this.li = i;
+          this.redraw();
+        }
+      });
+    });
+    return page;
+  }
+
+  /** A text's bounds, CSS px (for the e2e tests). */
+  private box(o: Phaser.GameObjects.Text): { x: number; y: number; w: number; h: number } {
+    const b = o.getBounds();
+    return { x: b.x / dpr(), y: b.y / dpr(), w: b.width / dpr(), h: b.height / dpr() };
+  }
+
   /** There is a chapter `delta` away from this one. */
   private canSwitch(delta: number): boolean {
     const ci = this.ci + delta;
@@ -368,8 +433,16 @@ export class SelectScene extends Phaser.Scene {
 
   /** How far the grid is moved sideways, CSS px (> 0: to the right). */
   private pageShift = 0;
-  /** the grid of levels (or the lock), the one part of the page a swipe moves */
+  /** the strip of grids of levels (or locks), the one part of the page a swipe moves */
   private grid?: Phaser.GameObjects.Container;
+  /** the chapters beside this one in the strip, shown while it moves */
+  private neighbours: Phaser.GameObjects.Container[] = [];
+  /** the strip is seen through the grid's width */
+  private clip?: Phaser.GameObjects.Graphics;
+  /** from one grid to the next in the strip, CSS px */
+  private pageW = 0;
+  /** the strip is sliding to the next chapter: the finger does not move it meanwhile */
+  private sliding = false;
 
   /** Moves the grid of levels sideways by `x` CSS px (the rest of the page stays). */
   private shiftPage(x: number): void {
@@ -377,6 +450,7 @@ export class SelectScene extends Phaser.Scene {
     this.settle = undefined;
     this.pageShift = x;
     this.grid?.setX(x * dpr());
+    for (const n of this.neighbours) n.setVisible(x !== 0);
     setDebug({ pageShift: x });
   }
 
@@ -399,9 +473,41 @@ export class SelectScene extends Phaser.Scene {
       },
       onComplete: () => {
         this.settle = undefined;
-        this.pageShift = 0;
-        this.grid?.setX(0);
-        setDebug({ pageShift: 0 });
+        this.shiftPage(0);
+      },
+    });
+  }
+
+  /**
+   * To the chapter `step` away: the strip slides from where it is until that chapter's grid is
+   * in place (at once with reduced motion), then the page is drawn for it.
+   */
+  private slide(step: -1 | 1): void {
+    // a press during a slide: that one ends at once (its chapter drawn), this one starts
+    if (this.sliding) this.settle?.complete();
+    if (!this.canSwitch(step) || this.sliding) return;
+    if (prefersReducedMotion()) return this.switchChapter(step);
+    const to = -step * this.pageW;
+    const from = this.pageShift;
+    this.shiftPage(from);
+    // the chapter it goes to shows from the start (still at 0, the strip hid it)
+    for (const n of this.neighbours) n.setVisible(true);
+    this.sliding = true;
+    const s = { x: from };
+    this.settle = this.tweens.add({
+      targets: s,
+      x: to,
+      // the rest of the way: a quick finish for a long swipe
+      duration: Math.max(120, (260 * Math.abs(to - from)) / Math.max(1, this.pageW)),
+      ease: 'Cubic.easeOut',
+      onUpdate: () => {
+        this.pageShift = s.x;
+        this.grid?.setX(s.x * dpr());
+      },
+      onComplete: () => {
+        this.settle = undefined;
+        this.sliding = false;
+        this.switchChapter(step);
       },
     });
   }
@@ -411,6 +517,11 @@ export class SelectScene extends Phaser.Scene {
     if (ci < 0 || ci >= chapters.length) return;
     this.ci = ci;
     this.li = 0;
+    this.settle?.remove();
+    this.settle = undefined;
+    this.sliding = false;
+    this.pageShift = 0;
+    setDebug({ pageShift: 0 });
     this.redraw();
   }
 
@@ -489,9 +600,9 @@ export class SelectScene extends Phaser.Scene {
       case 'ArrowDown':
         return moveTo(this.li + cols);
       case 'PageUp':
-        return this.switchChapter(-1);
+        return this.slide(-1);
       case 'PageDown':
-        return this.switchChapter(1);
+        return this.slide(1);
       case 'Enter':
         return this.play('normal');
       case 'Escape':

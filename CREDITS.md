@@ -9,5 +9,8 @@
 - Sound effects: synthesised in the game by ZzFX — Frank Force, MIT license
   (https://github.com/KilledByAPixel/ZzFX).
 
+- Board smoothing (Options › Graphics › Smoothing): xBRjs — Josep del Rio, MIT license
+  (https://github.com/joseprio/xBRjs, bundled via xbr-js); the xBR algorithm is by Hyllian.
+
 - Font: Silkscreen — Jason Kottke, SIL Open Font License 1.1
   (https://fonts.google.com/specimen/Silkscreen, bundled via @fontsource/silkscreen).

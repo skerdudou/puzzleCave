@@ -1,5 +1,13 @@
 import Phaser from 'phaser';
 import { levels } from '../levels';
+import { SHORE_TEXTURES } from '../render/shore';
+import {
+  SMOOTH_SPRITES,
+  addPixels,
+  smoothKey,
+  smoothSprite,
+  texturePixels,
+} from '../render/smoothing';
 import { t } from '../i18n';
 import { makeButton, px, textStyle } from '../ui';
 
@@ -28,7 +36,9 @@ export const TEXTURES = [
   'WALL_NES',
   'WALL_WES',
   'WALL_NWES',
-] as const;
+  // the water's banks (render/shore.ts)
+  ...SHORE_TEXTURES.filter((n) => n !== 'WATER'),
+];
 
 export class BootScene extends Phaser.Scene {
   private failed: string[] = [];
@@ -42,6 +52,14 @@ export class BootScene extends Phaser.Scene {
     this.load.on('loaderror', (file: Phaser.Loader.File) => this.failed.push(file.key));
   }
   create(): void {
+    // the sprites that move, smoothed once (the board smooths its terrain itself)
+    for (const key of SMOOTH_SPRITES)
+      if (this.textures.exists(key))
+        addPixels(
+          this.textures,
+          smoothKey(key, true),
+          smoothSprite(texturePixels(this.textures, key)),
+        );
     if (this.failed.length || levels.length === 0) {
       // often a network hiccup on the first visit (later ones play from the offline cache)
       const cx = this.scale.width / 2;

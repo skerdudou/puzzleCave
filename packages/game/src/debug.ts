@@ -14,6 +14,8 @@ export interface TextBox {
   w: number;
   h: number;
   button: boolean;
+  /** fixed on the screen while the content scrolls (the band at the top of a menu screen) */
+  fixed: boolean;
 }
 
 /**
@@ -44,6 +46,7 @@ export function textBoxes(scene: Phaser.Scene): TextBox[] {
         w: b.width / ratio,
         h: b.height / ratio,
         button,
+        fixed: t.scrollFactorY === 0,
       });
     }
   };

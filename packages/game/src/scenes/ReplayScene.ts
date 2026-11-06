@@ -1,16 +1,20 @@
 import Phaser from 'phaser';
 import { Session, type Dir, type LevelData } from '@puzzlecave/core';
+import { app } from '../app';
 import { setDebug } from '../debug';
+import { ellipsize } from '../format';
 import { t } from '../i18n';
 import { levelById } from '../levels';
 import { Playback } from '../author/playback';
+import { HoldRepeat } from '../input/holdRepeat';
 import { onSceneKeyDown } from '../input/sceneKeys';
 import { chapterTint } from '../render/ambience';
 import { AmbienceView, HUD_DEPTH } from '../render/AmbienceView';
 import { BoardView } from '../render/BoardView';
 import { boardLayout, fractionalZoom } from '../render/layout';
 import { isTouchDevice } from '../touch';
-import { COLORS, makeButton, placeIconBefore, px, textIcon, textStyle } from '../ui';
+import { COLORS, dpr, hex, makeButton, placeIconBefore, px, textIcon, textStyle } from '../ui';
+import { keepAwake } from '../wakeLock';
 
 export interface ReplaySceneData {
   levelId: string;
@@ -23,6 +27,15 @@ export interface ReplaySceneData {
   startIndex?: number;
   paused?: boolean;
 }
+
+/**
+ * While the bar is dragged, the board is drawn again at most this often, ms (going back rebuilds
+ * the run from the start, and a smoothed terrain changed by a block sinking costs an xBR); where
+ * the finger is lifted, at once.
+ */
+const SEEK_SYNC_MS = 150;
+/** The progress bar's height and the room it takes above the buttons, base px. */
+const BAR_ROOM = 36;
 
 /** Solution replay: all rules come from Session, display from BoardView. */
 export class ReplayScene extends Phaser.Scene {
@@ -39,7 +52,20 @@ export class ReplayScene extends Phaser.Scene {
   private keysText?: Phaser.GameObjects.Text;
   private keyIcon?: Phaser.GameObjects.Image;
   private speedText?: Phaser.GameObjects.Text;
-  private playBtn?: Phaser.GameObjects.Text;
+  /** sets the Pause/Play button's word, its width unchanged */
+  private playLabel?: (label: string) => void;
+  /** the progress bar: its track (device px) and its drawing */
+  private bar?: { x: number; y: number; w: number; g: Phaser.GameObjects.Graphics };
+  /** the bar is being dragged: playing again once released if it was */
+  private seeking: { wasPlaying: boolean; id: number } | null = null;
+  /** ◀ and ▶ held: one move, then more while the finger stays */
+  private hold!: HoldRepeat;
+  /** the screen kept on (while the replay plays) */
+  private awake: { release(): void } | null = null;
+  /** when the board last followed the bar being dragged (performance.now()) */
+  private seekSyncAt = 0;
+  /** the bar moved since: the board is to follow it */
+  private seekPending = false;
 
   constructor() {
     super('Replay');
@@ -51,10 +77,17 @@ export class ReplayScene extends Phaser.Scene {
     this.playback = new Playback(data.moves.length);
     this.hud = [];
     this.shown = 0;
+    this.seeking = null;
+    this.awake = null;
+    this.seekPending = false;
   }
 
   create(): void {
     this.session = new Session(this.level);
+    this.hold = new HoldRepeat(
+      (d) => this.stepBy(d === 'right' ? 1 : -1),
+      () => app.data.settings.repeatRate,
+    );
     // the cave first: the board and the HUD go over it (a resize restarts the scene)
     const layout = this.layoutNow();
     this.ambience = new AmbienceView(this, {
@@ -62,7 +95,7 @@ export class ReplayScene extends Phaser.Scene {
       hudHeight: this.topReserve(),
     });
     this.ambience.layout(layout);
-    this.board = new BoardView(this, this.session.state, layout);
+    this.board = new BoardView(this, this.session.state, layout, app.data.settings.smoothing);
     this.board.setTerrainTint(chapterTint(this.level.id));
     this.buildHud();
     const start = this.info.startIndex ?? 0;
@@ -74,6 +107,21 @@ export class ReplayScene extends Phaser.Scene {
     this.refreshHud();
 
     onSceneKeyDown(this, (e) => this.onKey(e));
+    // the bar: pressed, then dragged, it moves the replay to that point
+    this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
+      if (this.seeking?.id === p.id && p.isDown) this.seekTo(p.x);
+    });
+    const release = (p: Phaser.Input.Pointer) => {
+      this.hold.release(p.id);
+      if (this.seeking?.id !== p.id) return;
+      // where the finger was lifted (its last move may not have been seen)
+      this.seekTo(p.x);
+      if (this.seeking.wasPlaying && !this.playback.atEnd) this.playback.playing = true;
+      this.seeking = null;
+      if (this.seekPending) this.syncSeek(true);
+    };
+    this.input.on('pointerup', release);
+    this.input.on('pointerupoutside', release);
     const onResize = () =>
       this.scene.restart({
         ...this.info,
@@ -82,8 +130,12 @@ export class ReplayScene extends Phaser.Scene {
       });
     this.scale.on('resize', onResize);
     this.events.once('shutdown', () => {
+      this.awake?.release();
+      this.awake = null;
+      this.hold.reset();
       this.scale.off('resize', onResize);
       this.ambience.destroy();
+      this.board.destroy();
     });
     setDebug({ scene: 'Replay', levelId: this.level.id, replayTotal: this.info.moves.length });
   }
@@ -92,7 +144,20 @@ export class ReplayScene extends Phaser.Scene {
     this.ambience.update(time, this.board.heroCentre());
     const n = this.playback.tick(delta);
     if (n > 0) this.sync(this.playback.animMs());
+    if (this.seekPending) this.syncSeek(false);
     this.refreshHud();
+  }
+
+  /** The board brought to the bar's move: now (`force`), or once SEEK_SYNC_MS have passed. */
+  private syncSeek(force: boolean): void {
+    const now = performance.now();
+    if (!force && now - this.seekSyncAt < SEEK_SYNC_MS) {
+      this.seekPending = true;
+      return;
+    }
+    this.seekPending = false;
+    this.seekSyncAt = now;
+    this.sync(0);
   }
 
   private layoutNow() {
@@ -108,9 +173,28 @@ export class ReplayScene extends Phaser.Scene {
     );
   }
 
-  /** The title and the move counter above the board. */
+  /** The title, the move counter and the speed above the board (the speed on a 3rd line). */
   private topReserve(): number {
-    return px(64);
+    return px(this.speedBelow() ? 88 : 64);
+  }
+
+  /**
+   * The counters' line is too short for "Move 999 / 999 · Keys -9 · End" and the speed beside
+   * it (a phone): the speed goes on a line of its own.
+   */
+  private speedBelow(): boolean {
+    const total = this.info.moves.length;
+    const probe = (s: string) => {
+      const o = this.add.text(0, 0, s, textStyle(14));
+      const w = o.width;
+      o.destroy();
+      return w;
+    };
+    const counters =
+      probe(`${t('replayMove', { i: total, n: total })} · ${t('keys')} -99 · ${t('replayEnd')}`) +
+      px(20);
+    const speed = probe(t('replaySpeed', { v: 20 }));
+    return counters + speed + px(36) > this.scale.width;
   }
 
   private narrow(): boolean {
@@ -118,7 +202,7 @@ export class ReplayScene extends Phaser.Scene {
   }
 
   private bottomReserve(): number {
-    return px(this.narrow() ? 124 : 72);
+    return px((this.narrow() ? 124 : 72) + BAR_ROOM);
   }
 
   /** Brings the board to the playback index (forward: moves replayed; backward: rebuilt). */
@@ -131,6 +215,8 @@ export class ReplayScene extends Phaser.Scene {
       this.board.rebuild(this.session.state);
       return;
     }
+    // a long jump forward (the bar): played without animation, the last one too
+    if (target - this.shown > 1) animMs = 0;
     while (this.shown < target) {
       const events = this.session.move(this.info.moves[this.shown]!);
       this.shown++;
@@ -141,25 +227,23 @@ export class ReplayScene extends Phaser.Scene {
 
   private buildHud(): void {
     for (const o of this.hud) o.destroy();
-    this.playBtn = undefined;
+    this.playLabel = undefined;
     this.hud = [];
     const w = this.scale.width;
     const h = this.scale.height;
-    this.hud.push(
-      this.add
-        .text(
-          px(12),
-          px(14),
-          `${this.level.name} — ${this.info.label}`,
-          textStyle(14, COLORS.accent),
-        )
-        .setOrigin(0, 0),
-    );
+    // the title on one line, cut with "…" when too long for the screen
+    const title = this.add.text(px(12), px(14), '', textStyle(14, COLORS.accent)).setOrigin(0, 0);
+    const full = `${this.level.name} — ${this.info.label}`;
+    title.setText(ellipsize(full, (s) => title.setText(s).width <= w - px(24)));
+    this.hud.push(title);
     // "Move 3/12 · ", then the key's art and "Keys 1" (placed again as the move count grows)
     this.moveText = this.add.text(px(12), px(38), '', textStyle(14)).setOrigin(0, 0);
     this.keysText = this.add.text(px(12), px(38), '', textStyle(14)).setOrigin(0, 0);
     this.keyIcon = textIcon(this, 'KEY');
-    this.speedText = this.add.text(w - px(12), px(38), '', textStyle(14)).setOrigin(1, 0);
+    // the speed at the right of the counters, or under them on a phone
+    this.speedText = this.speedBelow()
+      ? this.add.text(px(12), px(62), '', textStyle(14)).setOrigin(0, 0)
+      : this.add.text(w - px(12), px(38), '', textStyle(14)).setOrigin(1, 0);
     this.hud.push(this.moveText, this.keyIcon, this.keysText, this.speedText);
     // the keys only: a touch screen has the buttons
     const help = this.add
@@ -171,12 +255,14 @@ export class ReplayScene extends Phaser.Scene {
       .setOrigin(0.5, 1);
     this.hud.push(help);
 
-    const rows: [string, () => void][][] = [
+    // ◀ and ▶ step on the press, and again while held (the key repeat setting)
+    const held = () => {};
+    const rows: [string, () => void, (1 | -1)?][][] = [
       [
         [t('toStart'), () => this.toStart()],
-        ['◀', () => this.stepBy(-1)],
+        ['◀', held, -1],
         [t('pause'), () => this.togglePlay()],
-        ['▶', () => this.stepBy(1)],
+        ['▶', held, 1],
         ['−', () => this.faster(-1)],
         ['+', () => this.faster(1)],
         [t('back'), () => this.leave()],
@@ -190,23 +276,91 @@ export class ReplayScene extends Phaser.Scene {
     const playIndex = 2; // 3rd button of the full row: Start, ◀, Pause/Play…
     let flat = 0;
     let y = h - help.height - px(26) - (rows.length - 1) * px(48);
+    const buttonsTop = y - px(22);
+    const stepButtons: Record<string, [number, number]> = {};
     for (const row of rows) {
       const buttons = row.map(([label, fn]) => makeButton(this, 0, y, label, fn, 13));
+      const pi = playIndex - flat;
+      // Pause and Play take turns on one button: as wide as the longer, nothing moves
+      if (pi >= 0 && pi < buttons.length)
+        this.playLabel = fixedWidth(buttons[pi]!, [t('pause'), t('playBtn')]);
       const gap = px(8);
       const total = buttons.reduce((s, b) => s + b.width, 0) + gap * (buttons.length - 1);
       let x = (w - total) / 2;
-      for (const b of buttons) {
+      for (const [i, b] of buttons.entries()) {
         b.setOrigin(0, 0.5).setX(x);
         x += b.width + gap;
         this.hud.push(b);
+        const step = row[i]![2];
+        if (step) {
+          this.holdOn(b, step);
+          stepButtons[step > 0 ? 'forward' : 'back'] = [b.getBounds().centerX / dpr(), y / dpr()];
+        }
       }
-      const pi = playIndex - flat;
       flat += row.length;
-      if (pi >= 0 && pi < buttons.length) this.playBtn = buttons[pi];
       y += px(48);
     }
+    this.buildBar(buttonsTop - px(BAR_ROOM / 2));
     // above the cave's darkness, vignette and HUD band (a button's frame follows it, 1 below)
     for (const o of this.hud) (o as Phaser.GameObjects.Text).setDepth(HUD_DEPTH);
+    setDebug({ replayStepButtons: stepButtons });
+  }
+
+  /** ◀ or ▶ held down: a move at once, then more after a delay until released or slid off. */
+  private holdOn(b: Phaser.GameObjects.Text, step: 1 | -1): void {
+    const dir: Dir = step > 0 ? 'right' : 'left';
+    b.on('pointerdown', (p: Phaser.Input.Pointer) =>
+      this.hold.press(p.id, dir, () => p.isDown && b.active && b.getBounds().contains(p.x, p.y)),
+    );
+    b.on('pointerout', (p: Phaser.Input.Pointer) => this.hold.release(p.id));
+  }
+
+  /** The progress bar across the screen at `y` (device px), with a zone a finger can drag. */
+  private buildBar(y: number): void {
+    const x = px(20);
+    const w = this.scale.width - 2 * x;
+    const g = this.add.graphics();
+    this.bar = { x, y, w, g };
+    const zone = this.add
+      .zone(x - px(10), y - px(BAR_ROOM / 2), w + px(20), px(BAR_ROOM))
+      .setOrigin(0)
+      .setInteractive({ useHandCursor: true });
+    zone.on('pointerdown', (p: Phaser.Input.Pointer) => {
+      this.seeking = { wasPlaying: this.playback.playing, id: p.id };
+      this.playback.playing = false;
+      this.seekTo(p.x);
+    });
+    this.hud.push(g, zone);
+    setDebug({ replayBar: { x: x / dpr(), y: y / dpr(), w: w / dpr() } });
+  }
+
+  /** The replay at the move under `x` (device px) on the bar. */
+  private seekTo(x: number): void {
+    const bar = this.bar;
+    if (!bar || this.playback.total === 0) return;
+    const frac = Math.max(0, Math.min(1, (x - bar.x) / bar.w));
+    const target = Math.round(frac * this.playback.total);
+    if (target === this.playback.index) return;
+    this.playback.seek(target);
+    this.syncSeek(!this.seeking);
+    this.refreshHud();
+  }
+
+  private drawBar(): void {
+    const bar = this.bar;
+    if (!bar) return;
+    const p = this.playback;
+    const frac = p.total ? p.index / p.total : 0;
+    const th = px(6);
+    const knob = px(this.seeking ? 9 : 7);
+    bar.g
+      .clear()
+      .fillStyle(0x2c2838, 1)
+      .fillRect(bar.x, bar.y - th / 2, bar.w, th)
+      .fillStyle(hex(COLORS.accent), 1)
+      .fillRect(bar.x, bar.y - th / 2, bar.w * frac, th)
+      .fillStyle(hex(COLORS.text), 1)
+      .fillCircle(bar.x + bar.w * frac, bar.y, knob);
   }
 
   private refreshHud(): void {
@@ -220,7 +374,15 @@ export class ReplayScene extends Phaser.Scene {
       placeIconBefore(this.keyIcon, this.keysText, this.moveText.x + this.moveText.width);
     }
     this.speedText?.setText(t('replaySpeed', { v: p.speed }));
-    this.playBtn?.setText(p.playing ? t('pause') : t('playBtn'));
+    this.playLabel?.(p.playing ? t('pause') : t('playBtn'));
+    // the screen stays on while the replay plays (a drag on the bar pauses it for a moment)
+    const watching = p.playing || !!this.seeking?.wasPlaying;
+    if (watching && !this.awake) this.awake = keepAwake();
+    else if (!watching && this.awake) {
+      this.awake.release();
+      this.awake = null;
+    }
+    this.drawBar();
     setDebug({
       replayIndex: p.index,
       replaySpeed: p.speed,
@@ -271,4 +433,24 @@ export class ReplayScene extends Phaser.Scene {
         return this.leave();
     }
   }
+}
+
+/**
+ * Gives a button the width of the widest of `labels` (its side padding, evenly) and returns how
+ * to change its word without changing its width.
+ */
+function fixedWidth(b: Phaser.GameObjects.Text, labels: string[]): (label: string) => void {
+  const p = { ...b.padding } as Required<Phaser.Types.GameObjects.Text.TextPadding>;
+  const initial = b.text;
+  const widest = Math.max(
+    ...labels.map((l) => b.setPadding(p.left, p.top, p.right, p.bottom).setText(l).width),
+  );
+  const set = (label: string) => {
+    b.setPadding(p.left, p.top, p.right, p.bottom).setText(label);
+    const extra = widest - b.width;
+    const left = Math.floor(extra / 2);
+    b.setPadding(p.left + left, p.top, p.right + extra - left, p.bottom);
+  };
+  set(initial);
+  return set;
 }

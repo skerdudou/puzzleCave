@@ -1,5 +1,17 @@
 import { expect, test, type Page } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { storedSave } from './storedSave';
+
+const chapterIds = (): string[] =>
+  (
+    JSON.parse(
+      readFileSync(
+        fileURLToPath(new URL('../../../levels/chapters.json', import.meta.url)),
+        'utf8',
+      ),
+    ) as { id: string }[]
+  ).map((c) => c.id);
 
 type Pc = {
   scene?: string;
@@ -9,6 +21,9 @@ type Pc = {
   notice?: string;
   playButton?: [number, number];
   pageShift?: number;
+  selectTitle?: { x: number; y: number; w: number; h: number };
+  selectArrows?: ({ x: number; y: number; w: number; h: number } | null)[];
+  selectGrid?: { x: number; y: number; w: number };
   buttonWidths?: Record<string, number>;
   achievementRows?: Record<string, unknown>;
 };
@@ -75,6 +90,46 @@ test('Back in the browser goes back a screen; from the menu it leaves the game',
   // a second one leaves for the page before the game
   await page.goBack({ waitUntil: 'commit' }).catch(() => undefined);
   await expect.poll(() => page.url()).toBe('about:blank');
+});
+
+test.describe('a phone in landscape', () => {
+  test.use({ viewport: { width: 844, height: 390 }, hasTouch: true, deviceScaleFactor: 2 });
+  test('the chapter name over the grid, between the arrows, which stand by the grid', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await expect.poll(() => scene(page)).toBe('Menu');
+    await page.keyboard.press('Enter');
+    await expect.poll(() => scene(page)).toBe('Select');
+    // the second chapter: an arrow each way
+    await page.keyboard.press('PageDown');
+    await expect
+      .poll(async () => (await debug(page)).selectArrows?.every((a) => a !== null))
+      .toBe(true);
+    const { selectTitle: title, selectArrows, selectGrid: grid } = await debug(page);
+    const [left, right] = selectArrows as { x: number; w: number }[];
+    const gridMid = grid!.x + grid!.w / 2;
+    expect(Math.abs(title!.x + title!.w / 2 - gridMid)).toBeLessThan(2);
+    // the grid in the left part of the screen: its name too, not at the screen's middle
+    expect(gridMid).toBeLessThan(844 / 2 - 50);
+    expect(left!.x + left!.w).toBeLessThanOrEqual(title!.x);
+    expect(right!.x).toBeGreaterThanOrEqual(title!.x + title!.w);
+    // by the grid's sides, not the screen's
+    expect(right!.x).toBeLessThan(grid!.x + grid!.w + 60);
+    expect(left!.x + left!.w).toBeGreaterThan(grid!.x - 60);
+  });
+});
+
+test('two PageDown pressed during one slide: two chapters further, none lost', async ({ page }) => {
+  await page.goto('/');
+  await expect.poll(() => scene(page)).toBe('Menu');
+  await page.keyboard.press('Enter');
+  await expect.poll(() => scene(page)).toBe('Select');
+  const first = (await debug(page)).chapter;
+  await page.keyboard.press('PageDown');
+  await page.keyboard.press('PageDown');
+  const ids = chapterIds();
+  await expect.poll(async () => (await debug(page)).chapter).toBe(ids[ids.indexOf(first!) + 2]);
 });
 
 test.describe('on a phone', () => {

@@ -95,7 +95,8 @@ test.describe('phone in landscape', () => {
     const pc = await debug(page);
     expect(pc.maxScrollY).toBeGreaterThan(40);
     expect(pc.scrollY).toBe(0);
-    expect((await button(page, 'back'))[1]).toBeGreaterThan(360); // Back is below the screen
+    // back to the menu: in the band at the top, fixed on the screen
+    expect((await button(page, 'back'))[1]).toBeLessThan(48);
     const settings = pc.settings;
     const before = await saved(page);
     const [sx, sy] = await button(page, 'sound');
@@ -205,13 +206,13 @@ test.describe('phone in landscape', () => {
     await page.keyboard.press('Home');
     await expect.poll(async () => (await debug(page)).scrollY).toBe(0);
     // the arrows go from button to button: the first ones are on the screen, nothing scrolls;
-    // going back from the first wraps to Back, at the bottom: the content follows
+    // going back from the first wraps to Back, in the band at the top: nothing scrolls either
     await page.keyboard.press('ArrowDown');
     await expect.poll(async () => (await debug(page)).focus).toBe('sound');
     expect((await debug(page)).scrollY).toBe(0);
     await page.keyboard.press('ArrowUp');
     await expect.poll(async () => (await debug(page)).focus).toBe('back');
-    await expect.poll(async () => (await debug(page)).scrollY).toBe(max);
+    expect((await debug(page)).scrollY).toBe(0);
     await page.keyboard.press('Home');
     await page.keyboard.press('End');
     await expect.poll(async () => (await debug(page)).scrollY).toBe(max);
@@ -221,7 +222,7 @@ test.describe('phone in landscape', () => {
     await expect.poll(async () => (await debug(page)).maxScrollY).toBe(max - 40);
     expect((await debug(page)).scrollY).toBe(max - 40);
     // portrait: much less to scroll (a few rows still go past the screen), the offset clamped
-    // to it; End shows Back
+    // to it; Back stays in the band
     await page.setViewportSize({ width: 360, height: 740 });
     await expect.poll(async () => (await debug(page)).maxScrollY).toBeLessThan(max - 300);
     const portraitMax = (await debug(page)).maxScrollY!;

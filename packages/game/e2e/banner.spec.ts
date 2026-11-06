@@ -41,12 +41,12 @@ test('keys at start: said on the selection and in a banner over the board; Space
   await page.keyboard.press('Enter');
   await expect.poll(() => scene(page)).toBe('Game');
   await expect.poll(async () => (await debug(page)).banner).toEqual(['Keys at start: 2']);
-  // under the banner, not under it: the board starts below
-  const [, by] = (await debug(page)).bannerAt!;
-  expect((await debug(page)).boardLayout!.y).toBeGreaterThan(by);
+  // over the board: the board keeps its place and zoom, with or without it
+  const withBanner = (await debug(page)).boardLayout;
   await page.keyboard.press(' ');
   await expect.poll(async () => (await debug(page)).banner).toBeNull();
   expect((await debug(page)).moves).toBe(0);
+  expect((await debug(page)).boardLayout).toEqual(withBanner);
 });
 
 test('a level without keys at start, in normal mode: no banner', async ({ page }) => {

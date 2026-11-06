@@ -65,6 +65,13 @@ export class Playback {
     return true;
   }
 
+  /** To move `i` (clamped to the solution); playing or paused as it was. */
+  seek(i: number): void {
+    this.index = Math.max(0, Math.min(this.total, Math.round(i)));
+    this.acc = 0;
+    if (this.atEnd) this.playing = false;
+  }
+
   restart(): void {
     this.index = 0;
     this.acc = 0;

@@ -152,6 +152,7 @@ test('invalid settings replaced by defaults', () => {
     torchlight: true,
     dust: true,
     vignette: true,
+    smoothing: true,
   });
 });
 
@@ -175,6 +176,7 @@ test('a save from before the drag, vibration and touch control options: defaults
     torchlight: true,
     dust: true,
     vignette: true,
+    smoothing: true,
   });
 });
 
@@ -551,4 +553,13 @@ test('achievements: invalid entries removed', () => {
     [SAVE_KEY]: stored({ version: 2, settings: {}, levels: {}, achievements: [1] }),
   });
   expect(new SaveStore(notObject).load().achievements).toEqual({});
+});
+
+test('smoothing: on by default; a saved value kept, anything else back to on', () => {
+  const load = (settings: object) =>
+    parseSave(JSON.stringify({ version: 2, settings, levels: {} })).settings;
+  expect(defaultSave().settings.smoothing).toBe(true);
+  expect(load({ smoothing: false }).smoothing).toBe(false);
+  expect(load({ smoothing: 'yes' }).smoothing).toBe(true);
+  expect(load({}).smoothing).toBe(true);
 });

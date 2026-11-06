@@ -33,6 +33,8 @@ export interface Settings {
   dust: boolean;
   /** cave ambience: the screen's edges darkened */
   vignette: boolean;
+  /** the board's art smoothed (xBR), or drawn as it is */
+  smoothing: boolean;
 }
 export interface SaveData {
   version: 2;
@@ -227,6 +229,7 @@ export function defaultSave(): SaveData {
       torchlight: true,
       dust: true,
       vignette: true,
+      smoothing: true,
     },
     levels: {},
     achievements: {},
@@ -273,6 +276,7 @@ function sanitiseSettings(raw: unknown): Settings {
     torchlight: typeof s.torchlight === 'boolean' ? s.torchlight : d.torchlight,
     dust: typeof s.dust === 'boolean' ? s.dust : d.dust,
     vignette: typeof s.vignette === 'boolean' ? s.vignette : d.vignette,
+    smoothing: typeof s.smoothing === 'boolean' ? s.smoothing : d.smoothing,
   };
 }
 

@@ -41,6 +41,7 @@ import {
   paintFrame,
   makeButton,
   placeIconBefore,
+  sameWidth,
   px,
   textIcon,
   textStyle,
@@ -52,6 +53,8 @@ const DPAD = 56;
 /** Master mode colour, and the countdown's warning colour. */
 const MASTER_COLOR = '#9be7ff';
 const WARN_COLOR = '#ff6b5e';
+/** The HUD as a column on the left (touch, landscape), base px wide. */
+const HUD_COLUMN = 128;
 /** The keys' counter, 3rd in the HUD: the key's art goes before it. */
 const KEYS_COUNTER = 2;
 
@@ -106,9 +109,9 @@ export class GameScene extends Phaser.Scene {
   private overlay?: Phaser.GameObjects.Text;
   /** the level's intro (master mode's rules, keys at start) under the header, until hidden */
   private banner?: Phaser.GameObjects.Text;
-  /** the room the banner takes above the board (kept once it is hidden: the board stays put) */
-  private bannerSpace = 0;
   private muteButton?: Phaser.GameObjects.Text;
+  /** The HUD is a column on the left instead of a band at the top: touch in landscape. */
+  private hudSide = false;
 
   constructor() {
     super('Game');
@@ -132,21 +135,18 @@ export class GameScene extends Phaser.Scene {
     this.anim.reset();
     this.overlay = undefined;
     this.banner = undefined;
-    this.bannerSpace = 0;
     this.hud = [];
   }
 
   create(): void {
-    // the banner first: the board is laid out under it
-    this.showBanner();
     // the cave first: the board and the HUD go over it
     const layout = this.computeLayout();
     this.ambience = new AmbienceView(this, {
       levelId: this.level.id,
       hudHeight: this.topReserve(),
     });
-    this.ambience.layout(layout);
-    this.board = new BoardView(this, this.session.state, layout);
+    this.ambience.layout(layout, ...this.hudBand());
+    this.board = new BoardView(this, this.session.state, layout, app.data.settings.smoothing);
     this.board.setTerrainTint(chapterTint(this.level.id));
     this.showLayout(layout);
     this.hold = new HoldRepeat(
@@ -154,6 +154,8 @@ export class GameScene extends Phaser.Scene {
       () => app.data.settings.repeatRate,
     );
     this.buildHud();
+    // over the board (it can be closed): the board keeps the zoom it has without it
+    this.showBanner();
     this.controls = new InputController((a) => this.handle(a), app.data.settings.repeatRate);
     const down = (e: KeyboardEvent) => {
       // a new press (not the key's own repeat): a bump vibrates (and sounds) again
@@ -228,19 +230,19 @@ export class GameScene extends Phaser.Scene {
     this.input.on('pointerup', release);
     this.input.on('pointerupoutside', release);
     const onResize = () => {
-      // the banner (if still shown) laid out again for the new width; once hidden, its room goes
-      if (this.banner) {
-        this.banner.destroy();
-        this.showBanner();
-      } else this.bannerSpace = 0;
       const next = this.computeLayout();
-      this.ambience.layout(next, this.topReserve());
+      this.ambience.layout(next, ...this.hudBand());
       this.board.setLayout(next);
       this.showLayout(next);
       this.buildHud();
       // the failed run's message too: centred, its size following the interface's
       const failed = this.overlay?.getData('message') as string | undefined;
       if (failed !== undefined) this.showFailed(failed);
+      // the banner (if still shown) laid out again for the new width
+      if (this.banner) {
+        this.banner.destroy();
+        this.showBanner();
+      }
     };
     this.pulseKeys();
     this.scale.on('resize', onResize);
@@ -261,6 +263,7 @@ export class GameScene extends Phaser.Scene {
       this.drags.clear();
       this.zoneHeld = null;
       this.ambience.destroy();
+      this.board.destroy();
     });
     syncMusic(this, app.data.settings.sound, 'music-game');
     setDebug({
@@ -350,18 +353,39 @@ export class GameScene extends Phaser.Scene {
     return this.mode === 'master' ? px(100) : px(80);
   }
 
+  /** The HUD's band behind it, device px: [height, width] (no width: across the top). */
+  private hudBand(): [number, number | undefined] {
+    return this.hudSide ? [this.scale.height, px(HUD_COLUMN)] : [this.topReserve(), undefined];
+  }
+
   protected computeLayout(): BoardLayout {
-    return boardLayout(
-      this.scale.width - this.sideReserve(),
+    this.hudSide = this.sidePad();
+    if (!this.hudSide)
+      return boardLayout(
+        this.scale.width - this.sideReserve(),
+        this.scale.height,
+        this.level.width,
+        this.level.height,
+        16,
+        this.topReserve(),
+        this.bottomReserve(),
+        fractionalZoom(window.devicePixelRatio || 1),
+      );
+    // touch in landscape: the HUD as a column on the left gives the board the screen's height,
+    // which is what it lacks there (a bigger board on nearly every level, measured); always
+    // there, so that Undo and Restart stay under the same thumb from one level to the next
+    const col = px(HUD_COLUMN);
+    const left = boardLayout(
+      this.scale.width - this.sideReserve() - col,
       this.scale.height,
       this.level.width,
       this.level.height,
       16,
-      // the banner's room under the header: it never covers the board
-      this.topReserve() + this.bannerSpace,
-      this.bottomReserve(),
+      px(8),
+      px(8),
       fractionalZoom(window.devicePixelRatio || 1),
     );
+    return { ...left, x: left.x + col };
   }
 
   protected buildHud(): void {
@@ -500,7 +524,9 @@ export class GameScene extends Phaser.Scene {
       return { made, name, counters, keyIcon, buttonBoxes, icons: iconWords };
     };
     // the words first; Undo and Restart as icons when the words leave the name too little room
-    const row = headerRow(false, false) ?? headerRow(true, true)!;
+    const row = this.hudSide
+      ? this.sideHeader(buttons, hudButtons)
+      : (headerRow(false, false) ?? headerRow(true, true)!);
     const { name: nameText, counters, keyIcon, buttonBoxes } = row;
     this.hud.push(...row.made);
     [this.movesText, this.timeText, this.keysText] = counters as [
@@ -508,7 +534,7 @@ export class GameScene extends Phaser.Scene {
       Phaser.GameObjects.Text,
       Phaser.GameObjects.Text,
     ];
-    if (this.mode === 'master' && narrow) {
+    if (this.mode === 'master' && narrow && !this.hudSide) {
       // the MASTER label on a 3rd line
       this.hud.push(
         this.add
@@ -523,6 +549,8 @@ export class GameScene extends Phaser.Scene {
       hudNameSize: parseInt(String(nameText.style.fontSize), 10) / dpr() / uiScale(),
       // Undo and Restart drawn as icons: their words, still their names
       hudIcons: row.icons,
+      // the HUD as a column on the left (touch, landscape)
+      hudSide: this.hudSide,
       hudLayout: {
         name: css(nameText.getBounds()),
         buttons: buttonBoxes,
@@ -542,10 +570,19 @@ export class GameScene extends Phaser.Scene {
         )
         .map((o) => css(o.getBounds())),
     );
-    const headerBottom = header.y + header.h;
+    // (the HUD as a column: nothing above the zones)
+    const headerBottom = this.hudSide ? 0 : header.y + header.h;
     const viewW = w / dpr();
     const viewH = this.scale.height / dpr();
     this.zoneArea = zoneArea(viewW, viewH, headerBottom, null, undefined, viewH - px(24) / dpr());
+    // the HUD's column: the zones start right of it, from the top
+    const column = this.hudSide ? px(HUD_COLUMN) / dpr() : 0;
+    const besideColumn = (a: Box | null): Box | null => {
+      if (!a || !column) return a;
+      const top = px(8) / dpr();
+      const w = a.x + a.w - column;
+      return w > 0 ? { x: column, y: top, w, h: a.y + a.h - top } : null;
+    };
     if (isTouchDevice()) {
       const side = this.sidePad();
       const pad = side
@@ -559,7 +596,7 @@ export class GameScene extends Phaser.Scene {
           h: r.h / dpr(),
         })),
       );
-      this.zoneArea = zoneArea(viewW, viewH, headerBottom, { box: padBox, side });
+      this.zoneArea = besideColumn(zoneArea(viewW, viewH, headerBottom, { box: padBox, side }));
       for (const dir of ['up', 'down', 'left', 'right'] as const) {
         const r = pad[dir];
         const box = this.add
@@ -629,6 +666,105 @@ export class GameScene extends Phaser.Scene {
       zoneCentre: this.zoneArea && centreOf(this.zoneArea),
     });
     this.updateHud();
+  }
+
+  /**
+   * The HUD as a column on the left (touch, landscape): the level's name and the counters one
+   * under the other at the top, the buttons at the bottom (Undo lowest, under the left thumb).
+   */
+  private sideHeader(
+    buttons: [string, Action][],
+    hudButtons: Record<string, [number, number]>,
+  ): {
+    made: Phaser.GameObjects.GameObject[];
+    name: Phaser.GameObjects.Text;
+    counters: Phaser.GameObjects.Text[];
+    keyIcon: Phaser.GameObjects.Image | undefined;
+    buttonBoxes: Box[];
+    icons: null;
+  } {
+    const made: Phaser.GameObjects.GameObject[] = [];
+    const col = px(HUD_COLUMN);
+    const x = px(10);
+    const room = col - 2 * x;
+    const css = (b: Phaser.Geom.Rectangle): Box => ({
+      x: b.x / dpr(),
+      y: b.y / dpr(),
+      w: b.width / dpr(),
+      h: b.height / dpr(),
+    });
+    let y = px(10);
+    // the name: up to 3 lines, cut with "…" past them
+    const name = this.add
+      .text(x, y, this.level.name, {
+        ...textStyle(12, COLORS.accent),
+        wordWrap: { width: room },
+      })
+      .setOrigin(0, 0);
+    if (name.getWrappedText().length > 3) {
+      const full = this.level.name;
+      name.setText(ellipsize(full, (s) => name.setText(s).getWrappedText().length <= 3));
+    }
+    made.push(name);
+    y += name.height + px(10);
+    // the counters, one a line, the largest size at which the longest fits the column
+    const timeLabel = this.timeLimitMs === undefined ? t('time') : t('timeLeft');
+    const samples = [`${t('moves')} 999`, `${timeLabel} 0:00.00`, `${t('keys')} -9`];
+    let counters: Phaser.GameObjects.Text[] = [];
+    let keyIcon: Phaser.GameObjects.Image | undefined;
+    for (let size = 13; size >= 8; size--) {
+      for (const c of counters) c.destroy();
+      keyIcon?.destroy();
+      keyIcon = undefined;
+      counters = [];
+      let cy = y;
+      let widest = 0;
+      for (const [i, text] of samples.entries()) {
+        const txt = this.add.text(x, cy, text, textStyle(size)).setOrigin(0, 0);
+        let right = txt.x + txt.width;
+        if (i === KEYS_COUNTER) {
+          keyIcon = textIcon(this, 'KEY', size);
+          placeIconBefore(keyIcon, txt, x);
+          right = txt.x + txt.width;
+        }
+        widest = Math.max(widest, right - x);
+        counters.push(txt);
+        cy += txt.height + px(4);
+      }
+      if (widest <= room || size === 8) {
+        y = cy;
+        break;
+      }
+    }
+    made.push(...counters);
+    if (keyIcon) made.push(keyIcon);
+    if (this.mode === 'master') {
+      const m = this.add.text(x, y + px(4), t('masterMode'), textStyle(12, MASTER_COLOR));
+      made.push(m);
+    }
+    // the buttons from the bottom up: Undo, Restart, then Menu apart above them
+    const order = [...buttons].reverse();
+    const boxes: Box[] = [];
+    const made2: Phaser.GameObjects.Text[] = [];
+    let by = this.scale.height - px(10);
+    for (const [label, action] of order) {
+      const click = () => {
+        if (!this.dragMoved && !this.zonePress) this.handle(action);
+      };
+      const b = makeButton(this, col / 2, 0, label, click, 13);
+      made2.push(b);
+    }
+    sameWidth(made2);
+    for (const [i, b] of made2.entries()) {
+      const action = order[i]![1];
+      if (action.type === 'menu') by -= px(12);
+      b.setPosition(col / 2, by - b.height / 2);
+      by -= b.height + px(6);
+      hudButtons[action.type] = [b.x / dpr(), b.y / dpr()];
+      boxes.push(css(b.getBounds()));
+    }
+    made.push(...made2);
+    return { made, name, counters, keyIcon, buttonBoxes: boxes, icons: null };
   }
 
   /**
@@ -826,7 +962,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * The level's intro, under the header (the board is laid out below it, never under it):
+   * The level's intro, under the header, over the board (whose zoom does not change for it):
    * master mode's rules (one short line once a master run has been won), the keys at start when
    * not 0. Hidden by the first move, a click or tap on it, or Space.
    */
@@ -840,20 +976,27 @@ export class GameScene extends Phaser.Scene {
     setDebug({ banner: lines.length ? lines : null });
     if (!lines.length) return;
     const hint = t(isTouchDevice() ? 'bannerHideTouch' : 'bannerHide');
+    // centred over the room the board has (right of the HUD's column, left of the d-pad)
+    const left = this.hudSide ? px(HUD_COLUMN) : 0;
+    const room = this.scale.width - left - (this.hudSide ? this.sideReserve() : 0);
     const b = this.add
-      .text(this.scale.width / 2, this.topReserve(), [...lines, hint].join('\n'), {
-        ...textStyle(13, this.mode === 'master' ? MASTER_COLOR : COLORS.accent),
-        align: 'center',
-        backgroundColor: '#000000aa',
-        padding: { x: px(12), y: px(6) },
-        wordWrap: { width: this.scale.width - px(32) },
-      })
+      .text(
+        left + room / 2,
+        this.hudSide ? px(8) : this.topReserve(),
+        [...lines, hint].join('\n'),
+        {
+          ...textStyle(13, this.mode === 'master' ? MASTER_COLOR : COLORS.accent),
+          align: 'center',
+          backgroundColor: '#000000aa',
+          padding: { x: px(12), y: px(6) },
+          wordWrap: { width: room - px(32) },
+        },
+      )
       .setOrigin(0.5, 0)
       .setDepth(HUD_DEPTH)
       .setInteractive({ useHandCursor: true });
     b.on('pointerup', () => this.hideBanner());
     this.banner = b;
-    this.bannerSpace = b.height + px(8);
     // for the e2e tests: its centre, CSS px
     setDebug({ bannerAt: [b.x / dpr(), (b.y + b.height / 2) / dpr()] });
   }

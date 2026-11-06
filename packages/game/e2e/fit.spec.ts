@@ -19,7 +19,21 @@ const names = Object.fromEntries(
 const shots = fileURLToPath(new URL('../.oneshot/shots/', import.meta.url));
 const KEY = { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' } as const;
 
-type Box = { text: string; x: number; y: number; w: number; h: number; button: boolean };
+type Box = {
+  text: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  button: boolean;
+  fixed: boolean;
+};
+/**
+ * The band at the top of the menu screens, CSS px (src/ui.ts HEADER_BAND; not imported: ui.ts
+ * loads Phaser). Some of these screens grow the interface past 1280 × 720: the check below only
+ * needs a lower bound.
+ */
+const HEADER_BAND = 48;
 const debug = (page: Page) =>
   page.evaluate(() => (window as unknown as { __pc?: Record<string, unknown> }).__pc ?? {});
 const field = async (page: Page, k: string) => (await debug(page))[k];
@@ -98,6 +112,9 @@ for (const { width, height, touch, langs } of VIEWS) {
           for (let i = 0; i < boxes.length; i++)
             for (let j = i + 1; j < boxes.length; j++) {
               const [a, b] = [boxes[i]!, boxes[j]!];
+              // content scrolled under the band at the top (fixed) is hidden by it, not over it
+              const scrolled = a.fixed !== b.fixed ? (a.fixed ? b : a) : null;
+              if (scrolled && scrolled.y < HEADER_BAND) continue;
               if ((a.button && b.button) || (hud && a.button !== b.button))
                 if (overlap(a, b)) failures.push(`${where}: ${name(a)} overlaps ${name(b)}`);
             }
