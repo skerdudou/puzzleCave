@@ -51,5 +51,8 @@ test.each([
     h: Math.min(8 * 16, (cy + 2) * 16) - y,
   };
   xbrPatch(after, big, rect);
-  expect(big.data).toEqual(xbr(after).data);
+  // the first byte that differs (-1: none): a deep toEqual of 330 kB is slow
+  const whole = xbr(after).data;
+  expect(big.data.length).toBe(whole.length);
+  expect(big.data.findIndex((v, i) => v !== whole[i])).toBe(-1);
 });

@@ -123,7 +123,7 @@ test.describe('phone in landscape', () => {
     expect(await saved(page)).toBe(before);
   });
 
-  test('after scrolling, Vibration and Back answer a tap', async ({ page }) => {
+  test('after scrolling, Smoothing (near the bottom) and Back answer a tap', async ({ page }) => {
     await openOptions(page);
     const f = await Finger.on(page);
     // a few drags (one finger's travel is less than the whole height to scroll)
@@ -135,12 +135,12 @@ test.describe('phone in landscape', () => {
     const y = await restingScroll(page);
     expect(y).toBe((await debug(page)).maxScrollY);
 
-    const vibration = (await debug(page)).settings!.vibration;
-    const [vx, vy] = await button(page, 'vibration');
-    expect(vy).toBeGreaterThan(0);
+    const smoothing = (await debug(page)).settings!.smoothing;
+    const [vx, vy] = await button(page, 'smoothing');
+    expect(vy).toBeGreaterThan(48);
     expect(vy).toBeLessThan(360);
     await f.tap(vx, vy);
-    await expect.poll(async () => (await debug(page)).settings!.vibration).toBe(!vibration);
+    await expect.poll(async () => (await debug(page)).settings!.smoothing).toBe(!smoothing);
     // the scene was redrawn where it was
     expect((await debug(page)).scrollY).toBe(y);
 

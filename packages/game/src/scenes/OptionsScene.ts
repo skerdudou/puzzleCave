@@ -130,11 +130,11 @@ export class OptionsScene extends Phaser.Scene {
     // touch: taller buttons (TOUCH_TARGET), so more room between a label, its control and the
     // next label
     const touch = isTouchDevice();
-    const labelGap = px(touch ? TOUCH_TARGET / 2 + 6 : 16);
+    const labelGap = px(touch ? TOUCH_TARGET / 2 + 6 : 15);
     // with a mouse, a little tighter: everything fits a 1280×720 screen
-    const rowStep = px(touch ? TOUCH_TARGET / 2 + 26 : 40);
+    const rowStep = px(touch ? TOUCH_TARGET / 2 + 26 : 36);
     // the first label under the band at the top (back to the menu, the screen's name)
-    let y = px(HEADER_BAND) + px(touch ? 34 : 28);
+    let y = px(HEADER_BAND) + px(touch ? 34 : 22);
     const change = (fn: () => void) => {
       fn();
       app.persist();
@@ -157,7 +157,7 @@ export class OptionsScene extends Phaser.Scene {
     // buttons side by side, centred on the row; on a narrow screen a little smaller (`sizes`, the
     // first that fits), else one under the other as many per line as fit, at the first size
     const gap = px(12);
-    const lineStep = px(touch ? TOUCH_TARGET + 6 : 34);
+    const lineStep = px(touch ? TOUCH_TARGET + 6 : 30);
     const row = (items: [id: string, label: string, fn: () => void][], sizes = [14]) => {
       const room = this.scale.width - px(16);
       // a button's width: its label and padding, at least TOUCH_TARGET on a touch screen
@@ -208,16 +208,41 @@ export class OptionsScene extends Phaser.Scene {
       y += rowStep;
     };
 
-    // the music and the sound effects, side by side (one under the other on a narrow screen)
+    // The on/off switches ("Music: On"): one a line, all as wide as the longest of their words
+    // either way, so that a switch pressed changes neither its width nor the lines.
+    type Switch = 'music' | 'effects' | 'torchlight' | 'dust' | 'vignette' | 'smoothing';
+    const onOff = (key: Switch, on: boolean) =>
+      t('labelValue', { label: t(key), value: on ? t('on') : t('off') });
+    const SWITCHES: Switch[] = ['music', 'effects', 'torchlight', 'dust', 'vignette', 'smoothing'];
+    const switchW = Math.max(
+      ...SWITCHES.flatMap((k) =>
+        [true, false].map((on) => {
+          const m = this.add.text(0, 0, onOff(k, on), textStyle(14));
+          const w = Math.max(m.width + 2 * px(8), touch ? px(TOUCH_TARGET) : 0);
+          m.destroy();
+          return w;
+        }),
+      ),
+    );
+    const switches = (items: [id: string, key: Switch, on: boolean, fn: () => void][]) => {
+      items.forEach(([id, key, on, fn], i) => {
+        if (i) y += lineStep;
+        const b = button(id, cx, y, onOff(key, on), fn);
+        // the same width for all: the padding takes what the words leave
+        const extra = Math.max(0, switchW - b.width);
+        const p = b.padding;
+        const left = Math.floor(extra / 2);
+        b.setPadding(p.left! + left, p.top!, p.right! + extra - left, p.bottom!);
+      });
+      y += rowStep;
+    };
+
     label(t('sound'));
-    const onOff = (
-      key: 'music' | 'effects' | 'torchlight' | 'dust' | 'vignette' | 'smoothing',
-      on: boolean,
-    ) => t('labelValue', { label: t(key), value: on ? t('on') : t('off') });
-    row([
+    switches([
       [
         'sound',
-        onOff('music', s.sound),
+        'music',
+        s.sound,
         () =>
           change(() => {
             s.sound = !s.sound;
@@ -226,7 +251,8 @@ export class OptionsScene extends Phaser.Scene {
       ],
       [
         'sfx',
-        onOff('effects', s.sfx),
+        'effects',
+        s.sfx,
         () =>
           change(() => {
             s.sfx = !s.sfx;
@@ -275,16 +301,17 @@ export class OptionsScene extends Phaser.Scene {
       y += rowStep;
     }
 
-    // graphics: the cave ambience, one switch each, laid out like music and effects
+    // graphics: the cave ambience and the smoothing, one switch each, like music and effects
     label(t('graphics'));
     const graphic = (
       key: 'torchlight' | 'dust' | 'vignette' | 'smoothing',
-    ): [string, string, () => void] => [
+    ): [string, Switch, boolean, () => void] => [
       key,
-      onOff(key, s[key]),
+      key,
+      s[key],
       () => change(() => (s[key] = !s[key])),
     ];
-    row([graphic('torchlight'), graphic('dust'), graphic('vignette'), graphic('smoothing')]);
+    switches([graphic('torchlight'), graphic('dust'), graphic('vignette'), graphic('smoothing')]);
 
     // the progress: kept in a file, brought back from one (it replaces the progress) or erased;
     // both of those ask first
