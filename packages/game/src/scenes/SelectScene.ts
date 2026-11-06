@@ -227,19 +227,24 @@ export class SelectScene extends Phaser.Scene {
       .text(gcx, px(BAND + 28), ch.name[getLang()] ?? ch.name.en, textStyle(18, COLORS.accent))
       .setOrigin(0.5);
     const reach = Math.max(gridW / 2 + px(4), title.width / 2 + px(10));
-    const arrowX = (d: -1 | 1) =>
-      Math.min(this.scale.width - px(24), Math.max(px(24), gcx + d * (reach + px(16))));
+    // an arrow's centre: by the grid, but at least EDGE from the screen's sides (as the band's
+    // back button; a touch screen's arrows are wider, to the finger's size)
+    const EDGE = px(12);
+    const arrowX = (d: -1 | 1, w: number) =>
+      Math.min(this.scale.width - EDGE - w / 2, Math.max(EDGE + w / 2, gcx + d * (reach + px(16))));
     const arrows: Partial<Record<-1 | 1, Phaser.GameObjects.Text>> = {};
     const rowY = px(BAND + 28);
-    if (this.ci > 0) arrows[-1] = this.button(arrowX(-1), rowY, '‹', () => this.slide(-1), 18);
-    if (this.ci < chapters.length - 1)
-      arrows[1] = this.button(arrowX(1), rowY, '›', () => this.slide(1), 18);
+    for (const d of [-1, 1] as const) {
+      if (!this.canSwitch(d)) continue;
+      const a = this.button(0, rowY, d < 0 ? '‹' : '›', () => this.slide(d), 18);
+      arrows[d] = a.setX(arrowX(d, a.width));
+    }
     // the band: back to the menu, its left side lined up with the previous chapter's arrow (where
     // that arrow is, or would be on the first chapter); the game's name in the middle (smaller
     // than on the menu)
     const arrowW = (arrows[-1] ?? arrows[1])?.width ?? 0;
     const back = this.button(0, 0, `‹ ${t('menu')}`, () => this.scene.start('Menu'), 12);
-    const name = headerBand(this, 'puzzleCave', back, arrowX(-1) - arrowW / 2);
+    const name = headerBand(this, 'puzzleCave', back, arrowX(-1, arrowW) - arrowW / 2);
     setDebug({ selectBack: this.box(back), selectGameName: this.box(name) });
     setDebug({
       selectTitle: this.box(title),

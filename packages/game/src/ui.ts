@@ -223,8 +223,13 @@ function attachFrame(b: Phaser.GameObjects.Text): void {
     g.setPosition(Math.round(bounds.x), Math.round(bounds.y))
       .setVisible(b.visible)
       .setAlpha(b.alpha)
-      .setDepth(b.depth - 1)
       .setScrollFactor(b.scrollFactorX, b.scrollFactorY);
+    if (g.depth !== b.depth - 1) {
+      g.setDepth(b.depth - 1);
+      // the scene sorts by depth before PRE_RENDER: sorted now, else for one frame the frame is
+      // drawn at its old depth (a button over a band: the band hid it, a flicker)
+      scene.sys.displayList.depthSort();
+    }
     const key = `${w}x${h}${pressed}${focused}`;
     if (key === drawn) return;
     drawn = key;
