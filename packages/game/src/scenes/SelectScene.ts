@@ -19,6 +19,7 @@ import {
   type MedalKind,
 } from '../medalInfo';
 import { syncMusic } from '../music';
+import { arrowTarget } from '../selectNav';
 import {
   COLORS,
   HEADER_BAND,
@@ -539,11 +540,11 @@ export class SelectScene extends Phaser.Scene {
    * To the chapter `step` away: the strip slides from where it is until that chapter's grid is
    * in place (at once with reduced motion), then the page is drawn for it.
    */
-  private slide(step: -1 | 1): void {
+  private slide(step: -1 | 1, li = 0): void {
     // a press during a slide: that one ends at once (its chapter drawn), this one starts
     if (this.sliding) this.settle?.complete();
     if (!this.canSwitch(step) || this.sliding) return;
-    if (prefersReducedMotion()) return this.switchChapter(step);
+    if (prefersReducedMotion()) return this.switchChapter(step, li);
     const to = -step * this.pageW;
     const from = this.pageShift;
     this.shiftPage(from);
@@ -564,16 +565,16 @@ export class SelectScene extends Phaser.Scene {
       onComplete: () => {
         this.settle = undefined;
         this.sliding = false;
-        this.switchChapter(step);
+        this.switchChapter(step, li);
       },
     });
   }
 
-  private switchChapter(delta: number): void {
+  private switchChapter(delta: number, li = 0): void {
     const ci = this.ci + delta;
     if (ci < 0 || ci >= chapters.length) return;
     this.ci = ci;
-    this.li = 0;
+    this.li = Math.min(li, chapters[ci]!.levels.length - 1);
     this.settle?.remove();
     this.settle = undefined;
     this.sliding = false;
@@ -639,23 +640,24 @@ export class SelectScene extends Phaser.Scene {
   }
 
   private onKey(e: KeyboardEvent): void {
-    const n = chapters[this.ci]!.levels.length;
-    const cols = this.cols();
-    const moveTo = (li: number) => {
-      if (li >= 0 && li < n) {
-        this.li = li;
-        this.redraw();
-      }
-    };
+    if (e.key.startsWith('Arrow')) {
+      // a chapter sliding in: it is there at once, the arrow moves in it
+      if (this.sliding) this.settle?.complete();
+      const to = arrowTarget(
+        e.key,
+        this.li,
+        chapters[this.ci]!.levels.length,
+        this.cols(),
+        chapters[this.ci - 1]?.levels.length,
+        chapters[this.ci + 1]?.levels.length,
+      );
+      if (!to) return;
+      if (to.chapter !== 0) return this.slide(to.chapter, to.li);
+      this.li = to.li;
+      this.redraw();
+      return;
+    }
     switch (e.key) {
-      case 'ArrowLeft':
-        return moveTo(this.li - 1);
-      case 'ArrowRight':
-        return moveTo(this.li + 1);
-      case 'ArrowUp':
-        return moveTo(this.li - cols);
-      case 'ArrowDown':
-        return moveTo(this.li + cols);
       case 'PageUp':
         return this.slide(-1);
       case 'PageDown':

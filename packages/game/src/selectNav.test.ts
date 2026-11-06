@@ -1,0 +1,50 @@
+import { expect, test } from 'vitest';
+import { arrowTarget } from './selectNav';
+
+// 13 levels in rows of 6: 0-5, 6-11, 12
+const at = (key: string, li: number, prevN?: number, nextN?: number) =>
+  arrowTarget(key, li, 13, 6, prevN, nextN);
+
+test('inside the grid: one level, or one row', () => {
+  expect(at('ArrowRight', 3)).toEqual({ chapter: 0, li: 4 });
+  expect(at('ArrowLeft', 3)).toEqual({ chapter: 0, li: 2 });
+  expect(at('ArrowDown', 3)).toEqual({ chapter: 0, li: 9 });
+  expect(at('ArrowUp', 9)).toEqual({ chapter: 0, li: 3 });
+  // the end of a row goes on to the next one
+  expect(at('ArrowRight', 5)).toEqual({ chapter: 0, li: 6 });
+});
+
+test('→ after the last level: the next chapter, its first level', () => {
+  expect(at('ArrowRight', 12, 11, 12)).toEqual({ chapter: 1, li: 0 });
+  expect(at('ArrowRight', 12, 11)).toBeNull();
+});
+
+test('← before the first level: the previous chapter, its last level', () => {
+  expect(at('ArrowLeft', 0, 11, 12)).toEqual({ chapter: -1, li: 10 });
+  expect(at('ArrowLeft', 0, undefined, 12)).toBeNull();
+});
+
+test('↓: a short last row is reached from the row above, then the next chapter, same column', () => {
+  expect(at('ArrowDown', 9, 11, 12)).toEqual({ chapter: 0, li: 12 });
+  expect(at('ArrowDown', 12, 11, 12)).toEqual({ chapter: 1, li: 0 });
+  expect(at('ArrowDown', 3, 11, 12)).toEqual({ chapter: 0, li: 9 });
+  // from the full row over a short last one: that row's own column has no level below
+  expect(at('ArrowDown', 9, 11)).toEqual({ chapter: 0, li: 12 });
+  // 12 levels: the last row is full, column 4 goes to the next chapter's column 4 (or its last)
+  expect(arrowTarget('ArrowDown', 10, 12, 6, 11, 9)).toEqual({ chapter: 1, li: 4 });
+  expect(arrowTarget('ArrowDown', 10, 12, 6, 11, 3)).toEqual({ chapter: 1, li: 2 });
+  expect(arrowTarget('ArrowDown', 10, 12, 6, 11, undefined)).toBeNull();
+});
+
+test('↑ over the first row: the previous chapter, the last level in that column', () => {
+  // 11 levels before: 0-5, 6-10; column 3 → 9, column 5 (none on the short row) → 5
+  expect(at('ArrowUp', 3, 11, 12)).toEqual({ chapter: -1, li: 9 });
+  expect(at('ArrowUp', 5, 11, 12)).toEqual({ chapter: -1, li: 5 });
+  expect(at('ArrowUp', 5, undefined, 12)).toBeNull();
+  // a previous chapter of fewer levels than a row
+  expect(at('ArrowUp', 5, 3, 12)).toEqual({ chapter: -1, li: 0 });
+});
+
+test('other keys: nothing', () => {
+  expect(at('Enter', 3, 11, 12)).toBeNull();
+});
