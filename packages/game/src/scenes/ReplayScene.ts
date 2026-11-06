@@ -28,12 +28,6 @@ export interface ReplaySceneData {
   paused?: boolean;
 }
 
-/**
- * While the bar is dragged, the board is drawn again at most this often, ms (going back rebuilds
- * the run from the start, and a smoothed terrain changed by a block sinking costs an xBR); where
- * the finger is lifted, at once.
- */
-const SEEK_SYNC_MS = 150;
 /** The progress bar's height and the room it takes above the buttons, base px. */
 const BAR_ROOM = 36;
 
@@ -62,9 +56,10 @@ export class ReplayScene extends Phaser.Scene {
   private hold!: HoldRepeat;
   /** the screen kept on (while the replay plays) */
   private awake: { release(): void } | null = null;
-  /** when the board last followed the bar being dragged (performance.now()) */
-  private seekSyncAt = 0;
-  /** the bar moved since: the board is to follow it */
+  /**
+   * the bar moved while dragged: the board follows it once a frame (a finger can move several
+   * times between two), in update()
+   */
   private seekPending = false;
 
   constructor() {
@@ -118,7 +113,7 @@ export class ReplayScene extends Phaser.Scene {
       this.seekTo(p.x);
       if (this.seeking.wasPlaying && !this.playback.atEnd) this.playback.playing = true;
       this.seeking = null;
-      if (this.seekPending) this.syncSeek(true);
+      if (this.seekPending) this.syncSeek();
     };
     this.input.on('pointerup', release);
     this.input.on('pointerupoutside', release);
@@ -144,19 +139,13 @@ export class ReplayScene extends Phaser.Scene {
     this.ambience.update(time, this.board.heroCentre());
     const n = this.playback.tick(delta);
     if (n > 0) this.sync(this.playback.animMs());
-    if (this.seekPending) this.syncSeek(false);
+    if (this.seekPending) this.syncSeek();
     this.refreshHud();
   }
 
-  /** The board brought to the bar's move: now (`force`), or once SEEK_SYNC_MS have passed. */
-  private syncSeek(force: boolean): void {
-    const now = performance.now();
-    if (!force && now - this.seekSyncAt < SEEK_SYNC_MS) {
-      this.seekPending = true;
-      return;
-    }
+  /** The board brought to the bar's move. */
+  private syncSeek(): void {
     this.seekPending = false;
-    this.seekSyncAt = now;
     this.sync(0);
   }
 
@@ -342,7 +331,9 @@ export class ReplayScene extends Phaser.Scene {
     const target = Math.round(frac * this.playback.total);
     if (target === this.playback.index) return;
     this.playback.seek(target);
-    this.syncSeek(!this.seeking);
+    // dragged: once a frame; pressed: at once
+    if (this.seeking) this.seekPending = true;
+    else this.syncSeek();
     this.refreshHud();
   }
 

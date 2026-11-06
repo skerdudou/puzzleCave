@@ -17,11 +17,11 @@ export function xbr(img: Rgba, alpha = false): Rgba {
 
 /**
  * Around what changed, art px: xBR reads 2 pixels around each one, so a changed pixel changes the
- * smoothed ones up to 2 px away (PATCH_REACH), and those read 2 more; the window recomputed is
- * wider still (PATCH_MARGIN), its own edges never reaching what is copied back.
+ * smoothed ones up to 2 px away (PATCH_REACH), and those read 2 more: the window recomputed
+ * (PATCH_MARGIN) is just wide enough that its own edges never reach what is copied back.
  */
 const PATCH_REACH = 2;
-const PATCH_MARGIN = 6;
+const PATCH_MARGIN = 4;
 
 /**
  * `big` (xBR of `small` before it changed inside `rect`, art px) made equal to xBR of `small`

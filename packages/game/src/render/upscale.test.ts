@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { bleed, pad, type Rgba } from './upscale';
+import { bleed, cropClamped, pad, type Rgba } from './upscale';
 
 const O = [0, 0, 0, 255]; // black
 const W = [255, 255, 255, 255]; // white
@@ -40,4 +40,17 @@ test('pad: the image inside a transparent border', () => {
   expect(at(padded, 2, 2)).toEqual(O);
   expect(at(padded, 3, 2)).toEqual(W);
   expect(at(padded, 3, 3)).toEqual(O);
+});
+
+test('cropClamped: inside, a crop; past the edges, the edge pixels repeated', () => {
+  const img = image([
+    [O, W],
+    [W, O],
+  ]);
+  const c = cropClamped(img, -1, -1, 4, 4);
+  expect(at(c, 0, 0)).toEqual(O); // the corner repeated
+  expect(at(c, 1, 1)).toEqual(O);
+  expect(at(c, 2, 1)).toEqual(W);
+  expect(at(c, 3, 1)).toEqual(W); // the right edge repeated
+  expect(at(c, 3, 3)).toEqual(O);
 });

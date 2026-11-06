@@ -570,11 +570,12 @@ chosen by their neighbours (`src/render/autotile.ts`, `src/render/shore.ts`):
 
 **Smoothing** (Options › Graphics, on by default): the art is drawn 4× larger through xBR
 (`xbr-js`, `src/render/smoothing.ts`). The terrain is assembled whole and smoothed when a level
-is drawn (walls, water and floor continue from one cell to the next), once per terrain: the last
-3 are kept, so an undo or a restart after a block sank costs nothing, and they are freed when the
-level is left. A block sinking changes its cell and the banks around it: xBR runs again on a small
-window around them only (`src/render/xbr.ts` xbrPatch, the same pixels as a whole run, tested),
-about a tenth of the cost of the whole board. The sprites that move (key, door, block, player) are smoothed one by one at start,
+is drawn (walls, water and floor continue from one cell to the next), and drawn one texture a
+cell (each with a 1-texel border from its neighbours: no seam). When the terrain changes (a block
+sinking, an undo, a replay's jump), it is patched in place: around each changed cell, xBR runs
+again over the pixels that really differ (`src/render/xbr.ts` xbrPatch, the same pixels as a
+whole run, tested), and only the cells those reach are sent to the GPU. Going back in a replay
+keeps the terrain's images and draws only the things on it again. The sprites that move (key, door, block, player) are smoothed one by one at start,
 inside a 2 px transparent border kept in their texture: xBR rounds the edges the art touches,
 and the smooth drawing of a sprite between two cells fades them out instead of cutting them flat.
 Smoothed textures are drawn with linear filtering (4 texels a pixel at most).

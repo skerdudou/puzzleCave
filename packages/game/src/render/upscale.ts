@@ -93,3 +93,21 @@ export function blit(
 
 /** A copy of an image (its own pixels). */
 export const copyRgba = (img: Rgba): Rgba => ({ w: img.w, h: img.h, data: img.data.slice() });
+
+/**
+ * The part of an image `w` × `h` from (x, y), which may reach past its edges: there, the edge's
+ * pixels repeat (a cell's texture with a border taken from its neighbours, or its own edge at the
+ * image's).
+ */
+export function cropClamped(img: Rgba, x: number, y: number, w: number, h: number): Rgba {
+  const data = new Uint8Array(w * h * 4);
+  for (let r = 0; r < h; r++) {
+    const sy = Math.min(img.h - 1, Math.max(0, y + r));
+    for (let c = 0; c < w; c++) {
+      const sx = Math.min(img.w - 1, Math.max(0, x + c));
+      const s = (sy * img.w + sx) * 4;
+      data.set(img.data.subarray(s, s + 4), (r * w + c) * 4);
+    }
+  }
+  return { w, h, data };
+}

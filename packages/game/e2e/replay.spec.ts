@@ -98,6 +98,8 @@ test('▶ held down: several moves, until released', async ({ page }) => {
   await page.mouse.down();
   await expect.poll(async () => (await debug(page)).replayIndex).toBeGreaterThanOrEqual(3);
   await page.mouse.up();
+  // the debug state is written once a frame: a move made just before the release shows on the next
+  await page.waitForTimeout(150);
   const stopped = (await debug(page)).replayIndex;
   await page.waitForTimeout(400);
   expect((await debug(page)).replayIndex).toBe(stopped);

@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import type { GameEvent, GameState, ObjKind, Pos, Terrain } from '@puzzlecave/core';
 import { shoreAt, shoreTexture } from './shore';
 import { SMOOTH_FACTOR, SPRITE_PAD, addPixels, smoothKey, texturePixels } from './smoothing';
-import { blit, copyRgba, type Rgba } from './upscale';
+import { cropClamped, type Rgba } from './upscale';
 import { xbr, xbrPatch } from './xbr';
 import { mixTowards } from './ambience';
 import { wallMask, wallTexture } from './autotile';
@@ -19,30 +19,30 @@ const TERRAIN_TEX: Record<Exclude<Terrain, 'wall'>, string> = {
 const OBJ_TEX: Record<ObjKind, string> = { key: 'KEY', door: 'DOOR', block: 'BLOCK' };
 
 /**
- * A terrain smoothed whole: its texture, and the pixels it was made from and of (`small` the art
- * assembled, `big` through xBR), from which the next one is patched when a block sinks.
+ * The terrain smoothed whole: the terrain it shows, its art assembled (`small`) and through xBR
+ * (`big`). A change (a block sinking, an undo, a replay's jump) is patched into it in place.
  */
 interface SmoothTerrain {
-  key: string;
+  terrain: Terrain[];
   small: Rgba;
   big: Rgba;
 }
-/** terrain smoothed whole: its description → it, the most recent last */
-const terrainCache = new Map<string, SmoothTerrain>();
-/** each texture's art pixels (assembling a terrain again around a sunk block) */
+/** each texture's art pixels (assembling a terrain again around a changed cell) */
 const tilePixels = new Map<string, Rgba>();
 /**
- * At most this many kept (one of the largest levels is 1536 × 1408 texels, 8.6 MB): the terrain
- * of a block sunk then undone, or restarted, comes back at once.
+ * The smoothed terrain is drawn one texture a cell: a change sends the GPU only the cells it
+ * touches. Each texture has a border of BORDER texels taken from its neighbours, so that the
+ * smooth drawing blends a cell's edge with its real neighbour (no seam); the frame CELL_FRAME is
+ * the cell itself.
  */
-const TERRAIN_CACHE = 3;
-let terrainSerial = 0;
-
-/** The smoothed terrains forgotten, their textures freed (the level is left). */
-export function clearTerrainCache(textures: Phaser.Textures.TextureManager): void {
-  for (const { key } of terrainCache.values()) if (textures.exists(key)) textures.remove(key);
-  terrainCache.clear();
-}
+const BORDER = 1;
+const CELL_FRAME = 'cell';
+/**
+ * Around the art pixels that changed, how far the smoothed ones may change, art px: xBR's reach
+ * (2), and the next cell's border texel (a quarter of an art px, so 1).
+ */
+const CELL_REACH = 3;
+let cellSerial = 0;
 
 interface Pending {
   stop: () => void;
@@ -54,6 +54,8 @@ export class BoardView {
   private readonly scene: Phaser.Scene;
   private layout: BoardLayout;
   private root: Phaser.GameObjects.Container | null = null;
+  /** the keys, doors, blocks and the player: drawn anew by rebuild, the terrain staying */
+  private items: Phaser.GameObjects.Container | null = null;
   private terrain: Phaser.GameObjects.Image[] = [];
   private objects: (Phaser.GameObjects.Image | null)[] = [];
   private player!: Phaser.GameObjects.Image;
@@ -63,16 +65,16 @@ export class BoardView {
   private terrainTint: number | null = null;
   /** the art smoothed (smoothing.ts) */
   private smoothing: boolean;
-  /** the terrain as one image, smoothed whole (xBR), instead of one image a cell */
-  private terrainImage: Phaser.GameObjects.Image | null = null;
+  /** the smoothed terrain the cells' textures show */
+  private smooth: SmoothTerrain | null = null;
+  /** each cell's texture of the smoothed terrain */
+  private cellKeys: string[] = [];
   /** the terrain that image shows (a block sinking changes it) */
   private terrainNow: Terrain[] = [];
   /** the smoothed terrain is to be drawn again before the next frame */
   private terrainQueued = false;
   /** the terrain the smoothed image shows (its description) */
   private shownTerrain: string | null = null;
-  /** the cells changed since (blocks sunk) */
-  private changedCells = new Set<number>();
   private height = 0;
 
   constructor(scene: Phaser.Scene, state: GameState, layout: BoardLayout, smoothing = false) {
@@ -105,23 +107,49 @@ export class BoardView {
 
   rebuild(state: GameState): void {
     this.finishAll();
-    this.root?.destroy();
+    // the same board (an undo, a restart, a replay's jump back): the terrain's images stay, only
+    // the cells that change are drawn again; the things on it are drawn anew
+    const same =
+      !!this.root?.active &&
+      state.width === this.width &&
+      state.height === this.height &&
+      this.terrain.length === state.terrain.length;
     this.width = state.width;
     this.height = state.height;
     this.terrainNow = state.terrain.slice();
     this.terrainQueued = false;
-    this.changedCells.clear();
+    if (same) {
+      this.items?.destroy();
+      if (this.smoothing) this.updateCells();
+      else
+        this.terrain.forEach((img, i) => {
+          const key = this.tex(this.terrainKey(i))[0];
+          if (img.texture.key !== key) img.setTexture(key);
+        });
+      this.drawItems(state);
+      return;
+    }
+    this.root?.destroy();
     const root = this.scene.add.container(this.layout.x, this.layout.y).setScale(this.layout.scale);
     this.root = root;
     this.terrain = [];
-    this.terrainImage = null;
     if (this.smoothing) {
-      // the terrain smoothed whole: walls, water and floor continue from one cell to the next
-      this.terrainImage = this.scene.add
-        .image(0, 0, this.terrainTexture())
-        .setOrigin(0)
-        .setScale(1 / SMOOTH_FACTOR);
-      root.add(this.terrainImage);
+      // the terrain smoothed whole (walls, water and floor continue from one cell to the next),
+      // drawn a texture a cell
+      this.updateCells();
+      this.terrain = state.terrain.map((_, i) => {
+        const img = this.scene.add
+          .image(
+            (i % state.width) * TILE,
+            Math.floor(i / state.width) * TILE,
+            this.cellKeys[i]!,
+            CELL_FRAME,
+          )
+          .setOrigin(0)
+          .setScale(1 / SMOOTH_FACTOR);
+        root.add(img);
+        return img;
+      });
     } else
       this.terrain = state.terrain.map((_, i) => {
         const img = this.image(
@@ -133,6 +161,14 @@ export class BoardView {
         return img;
       });
     this.applyTerrainTint();
+    this.drawItems(state);
+  }
+
+  /** The keys, doors, blocks and the player, over the terrain (a layer of their own). */
+  private drawItems(state: GameState): void {
+    const items = this.scene.add.container(0, 0);
+    this.items = items;
+    this.root!.add(items);
     this.objects = state.objects.map((o, i) => {
       if (!o) return null;
       const img = this.image(
@@ -140,14 +176,14 @@ export class BoardView {
         Math.floor(i / state.width) * TILE,
         OBJ_TEX[o],
       );
-      root.add(img);
+      items.add(img);
       return img;
     });
     // player.png is 16×18: it sticks out 2 px upward
     this.player = this.image(state.player.x * TILE, state.player.y * TILE, 'player', 2);
     this.player.setFlipX(state.facing === 'left');
     if (state.status === 'drowned') this.player.setAlpha(0.4);
-    root.add(this.player);
+    items.add(this.player);
     this.report();
   }
 
@@ -215,10 +251,9 @@ export class BoardView {
           const img = this.objects[i] ?? null;
           this.objects[i] = null;
           this.terrainNow[i] = 'floor';
-          this.changedCells.add(i);
           this.later(durationMs, () => {
             img?.destroy();
-            if (this.terrainImage) return this.refreshTerrain();
+            if (this.smoothing) return this.refreshTerrain();
             // the cell, and the banks of the water around it
             for (let dy = -1; dy <= 1; dy++)
               for (let dx = -1; dx <= 1; dx++) {
@@ -254,8 +289,12 @@ export class BoardView {
     this.finishAll();
     this.root?.destroy();
     this.root = null;
-    this.terrainImage = null;
-    clearTerrainCache(this.scene.textures);
+    this.items = null;
+    this.terrain = [];
+    for (const key of this.cellKeys)
+      if (this.scene.textures.exists(key)) this.scene.textures.remove(key);
+    this.cellKeys = [];
+    this.smooth = null;
   }
 
   /** The art of the terrain at cell `i` (a wall's after its neighbours). */
@@ -280,103 +319,181 @@ export class BoardView {
     this.terrainQueued = true;
     this.scene.events.once(Phaser.Scenes.Events.PRE_RENDER, () => {
       this.terrainQueued = false;
-      if (!this.root?.active || !this.terrainImage?.active) return;
-      this.terrainImage.setTexture(this.terrainTexture());
+      if (!this.root?.active) return;
+      this.updateCells();
       this.report();
     });
   }
 
-  /** For the e2e tests: the terrain's texture when smoothed, else each cell's. */
+  /** For the e2e tests: the smoothed terrain shown (its description), else each cell's art. */
   private report(): void {
     setDebug({
-      boardTerrain: this.terrainImage?.texture.key ?? null,
-      boardTiles: this.terrainImage ? null : this.terrain.map((img) => img.texture.key),
+      boardTerrain: this.smoothing ? this.shownTerrain : null,
+      boardTiles: this.smoothing ? null : this.terrain.map((img) => img.texture.key),
     });
   }
 
   /**
-   * The whole terrain, assembled from the art, through xBR: a texture made once for each terrain
-   * met (the same again after an undo or a restart).
+   * The cells' textures brought to the terrain now. The smoothed terrain shown is patched in
+   * place where the art changed (xbrPatch over the pixels that differ, not even whole cells), and
+   * only the cells those pixels reach are sent to the GPU: a block sinking costs a few cells, an
+   * undo as much the other way. The whole terrain is smoothed at first, for another level, or
+   * when many cells change at once (a replay's long jump).
    */
-  private terrainTexture(): string {
+  private updateCells(): void {
     const id = `${this.width}:${this.terrainNow.join(',')}`;
-    const textures = this.scene.textures;
-    const known = terrainCache.get(id);
-    const changed = this.changedCells;
-    this.changedCells = new Set();
-    if (known && textures.exists(known.key)) {
-      terrainCache.delete(id);
-      terrainCache.set(id, known);
-      this.shownTerrain = id;
-      return known.key;
-    }
-    const shown = this.shownTerrain === null ? undefined : terrainCache.get(this.shownTerrain);
-    const made = shown && changed.size ? this.patchTerrain(shown, changed) : this.wholeTerrain();
-    const key = `board-terrain-${++terrainSerial}`;
-    addPixels(textures, key, made.big, true);
-    terrainCache.set(id, { key, ...made });
+    const n = this.terrainNow.length;
+    const prev = this.smooth;
+    if (!prev || prev.terrain.length !== n || this.cellKeys.length !== n)
+      return this.wholeCells(id);
+    const changed = new Set<number>();
+    this.terrainNow.forEach((t, i) => t !== prev.terrain[i] && changed.add(i));
+    if (!changed.size) return void (this.shownTerrain = id);
+    // many changes at once (a replay's long jump): smoothed whole, faster than patch by patch
+    if (changed.size * 9 > n / 2) return this.wholeCells(id);
+    // around each changed cell, apart (two blocks sunk far apart are two small patches, not one
+    // box over the board between them): it and its neighbours (whose art follows it: the water's
+    // banks) painted again, all first; then xBR again over the box of the pixels that really
+    // differ there, and the cells it reaches sent, each once
+    const around = (i: number) => {
+      const [cx, cy] = [i % this.width, Math.floor(i / this.width)];
+      const cells: number[] = [];
+      for (let y = Math.max(0, cy - 1); y <= Math.min(this.height - 1, cy + 1); y++)
+        for (let x = Math.max(0, cx - 1); x <= Math.min(this.width - 1, cx + 1); x++)
+          cells.push(y * this.width + x);
+      return cells;
+    };
+    prev.terrain = this.terrainNow.slice();
     this.shownTerrain = id;
-    // the oldest go, never the one shown nor the one just made
-    const keep = new Set([key, this.terrainImage?.texture.key]);
-    for (const [oldId, old] of terrainCache) {
-      if (terrainCache.size <= TERRAIN_CACHE) break;
-      if (keep.has(old.key)) continue;
-      terrainCache.delete(oldId);
-      if (textures.exists(old.key)) textures.remove(old.key);
+    const boxes = new Map<number, ReturnType<BoardView['paintCell']>>();
+    for (const i of changed)
+      for (const j of around(i)) if (!boxes.has(j)) boxes.set(j, this.paintCell(prev.small, j));
+    const toSend = new Set<number>();
+    const cell = (v: number, max: number) => Math.min(max - 1, Math.max(0, Math.floor(v / TILE)));
+    for (const i of changed) {
+      let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+      for (const j of around(i)) {
+        const box = boxes.get(j);
+        if (box)
+          [x0, y0, x1, y1] = [
+            Math.min(x0, box.x0),
+            Math.min(y0, box.y0),
+            Math.max(x1, box.x1),
+            Math.max(y1, box.y1),
+          ];
+      }
+      if (x0 > x1) continue;
+      xbrPatch(prev.small, prev.big, { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 });
+      for (let y = cell(y0 - CELL_REACH, this.height); y <= cell(y1 + CELL_REACH, this.height); y++)
+        for (let x = cell(x0 - CELL_REACH, this.width); x <= cell(x1 + CELL_REACH, this.width); x++)
+          toSend.add(y * this.width + x);
     }
-    return key;
+    for (const i of toSend) this.sendCell(i, prev.big);
   }
 
-  /** The whole terrain assembled from the art, and through xBR. */
-  private wholeTerrain(): { small: Rgba; big: Rgba } {
+  /** The whole terrain assembled from the art, through xBR, and every cell sent. */
+  private wholeCells(id: string): void {
     const w = this.width * TILE;
     const h = this.height * TILE;
     const small: Rgba = { w, h, data: new Uint8Array(w * h * 4) };
     this.terrainNow.forEach((_, i) => this.paintCell(small, i));
-    return { small, big: xbr(small) };
+    const big = xbr(small);
+    // the same board before (a replay's long jump): only the cells that differ are sent
+    const old =
+      this.smooth &&
+      this.smooth.big.w === big.w &&
+      this.smooth.big.h === big.h &&
+      this.cellKeys.length === this.terrainNow.length
+        ? this.smooth.big
+        : null;
+    this.smooth = { terrain: this.terrainNow.slice(), small, big };
+    this.shownTerrain = id;
+    for (let i = 0; i < this.terrainNow.length; i++)
+      if (!old || this.cellDiffers(old, big, i)) this.sendCell(i, big);
+  }
+
+  /** Cell `i`'s smoothed pixels, its border included, differ between `a` and `b`. */
+  private cellDiffers(a: Rgba, b: Rgba, i: number): boolean {
+    const size = TILE * SMOOTH_FACTOR;
+    const [cx, cy] = [i % this.width, Math.floor(i / this.width)];
+    const x0 = Math.max(0, cx * size - BORDER);
+    const x1 = Math.min(a.w, (cx + 1) * size + BORDER);
+    for (
+      let y = Math.max(0, cy * size - BORDER);
+      y < Math.min(a.h, (cy + 1) * size + BORDER);
+      y++
+    ) {
+      const from = (y * a.w + x0) * 4;
+      const to = (y * a.w + x1) * 4;
+      for (let k = from; k < to; k++) if (a.data[k] !== b.data[k]) return true;
+    }
+    return false;
+  }
+
+  /** Cell `i` of the smoothed terrain `big` as its texture, with its border; its image follows. */
+  private sendCell(i: number, big: Rgba): void {
+    const textures = this.scene.textures;
+    const size = TILE * SMOOTH_FACTOR;
+    const [cx, cy] = [i % this.width, Math.floor(i / this.width)];
+    const key = `board-cell-${++cellSerial}`;
+    addPixels(
+      textures,
+      key,
+      cropClamped(
+        big,
+        cx * size - BORDER,
+        cy * size - BORDER,
+        size + 2 * BORDER,
+        size + 2 * BORDER,
+      ),
+      true,
+    );
+    textures.get(key).add(CELL_FRAME, 0, BORDER, BORDER, size, size);
+    this.terrain[i]?.setTexture(key, CELL_FRAME);
+    const old = this.cellKeys[i];
+    this.cellKeys[i] = key;
+    if (old && textures.exists(old)) textures.remove(old);
   }
 
   /**
-   * The terrain shown, with `changed` cells and their neighbours (whose art follows them: the
-   * water's banks) painted again, and xBR run again around them only (xbrPatch): a block sinking
-   * costs a few cells' xBR, not the whole board's.
+   * Cell `i`'s art into the assembled terrain `small`; the box of the pixels that changed (art
+   * px, inclusive), or null.
    */
-  private patchTerrain(shown: SmoothTerrain, changed: Set<number>): { small: Rgba; big: Rgba } {
-    const small = copyRgba(shown.small);
-    const big = copyRgba(shown.big);
-    let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
-    for (const i of changed) {
-      const cx = i % this.width;
-      const cy = Math.floor(i / this.width);
-      for (let y = Math.max(0, cy - 1); y <= Math.min(this.height - 1, cy + 1); y++)
-        for (let x = Math.max(0, cx - 1); x <= Math.min(this.width - 1, cx + 1); x++) {
-          this.paintCell(small, y * this.width + x);
-          [x0, y0, x1, y1] = [Math.min(x0, x), Math.min(y0, y), Math.max(x1, x), Math.max(y1, y)];
-        }
-    }
-    xbrPatch(small, big, {
-      x: x0 * TILE,
-      y: y0 * TILE,
-      w: (x1 - x0 + 1) * TILE,
-      h: (y1 - y0 + 1) * TILE,
-    });
-    return { small, big };
-  }
-
-  /** Cell `i`'s art into the assembled terrain `small`. */
-  private paintCell(small: Rgba, i: number): void {
+  private paintCell(
+    small: Rgba,
+    i: number,
+  ): { x0: number; y0: number; x1: number; y1: number } | null {
     const key = this.terrainKey(i);
     let art = tilePixels.get(key);
     if (!art) tilePixels.set(key, (art = texturePixels(this.scene.textures, key)));
-    blit(small, art, 0, 0, TILE, TILE, (i % this.width) * TILE, Math.floor(i / this.width) * TILE);
+    const [ox, oy] = [(i % this.width) * TILE, Math.floor(i / this.width) * TILE];
+    let box: { x0: number; y0: number; x1: number; y1: number } | null = null;
+    for (let y = 0; y < TILE; y++)
+      for (let x = 0; x < TILE; x++) {
+        const a = (y * TILE + x) * 4;
+        const b = ((oy + y) * small.w + ox + x) * 4;
+        if (
+          art.data[a] === small.data[b] &&
+          art.data[a + 1] === small.data[b + 1] &&
+          art.data[a + 2] === small.data[b + 2] &&
+          art.data[a + 3] === small.data[b + 3]
+        )
+          continue;
+        small.data.set(art.data.subarray(a, a + 4), b);
+        box = box
+          ? {
+              x0: Math.min(box.x0, ox + x),
+              y0: Math.min(box.y0, oy + y),
+              x1: Math.max(box.x1, ox + x),
+              y1: Math.max(box.y1, oy + y),
+            }
+          : { x0: ox + x, y0: oy + y, x1: ox + x, y1: oy + y };
+      }
+    return box;
   }
 
   private applyTerrainTint(): void {
     const c = this.terrainTint;
-    if (this.terrainImage) {
-      if (c === null) this.terrainImage.clearTint();
-      else this.terrainImage.setTint(mixTowards(c, 0.12));
-    }
     for (const img of this.terrain) {
       if (c === null) img.clearTint();
       else img.setTint(mixTowards(c, 0.12));
