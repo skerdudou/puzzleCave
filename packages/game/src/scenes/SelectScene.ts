@@ -74,7 +74,7 @@ export class SelectScene extends Phaser.Scene {
     this.sliding = false;
     this.pageShift = 0;
     this.grid = undefined;
-    this.neighbours = [];
+    this.neighbours = {};
     this.draw();
     const konami = new KonamiCode();
     onSceneKeyDown(this, (e) => {
@@ -276,15 +276,10 @@ export class SelectScene extends Phaser.Scene {
     this.pageW = pageW / dpr();
     const strip = this.add.container(this.pageShift * dpr(), 0);
     this.grid = strip;
-    strip.add(this.drawPage(this.ci, x0, y0, true));
-    this.neighbours = [];
-    for (const d of [-1, 1] as const) {
-      if (!this.canSwitch(d)) continue;
-      const page = this.drawPage(this.ci + d, x0 + d * pageW, y0, false);
-      page.setVisible(this.pageShift !== 0);
-      this.neighbours.push(page);
-      strip.add(page);
-    }
+    strip.add(this.drawPage(this.ci, x0, y0, this.li, true));
+    this.pageAt = { x0, y0, pageW };
+    this.neighbours = {};
+    for (const d of [-1, 1] as const) this.drawNeighbour(d, 0);
     this.clip?.destroy();
     this.clip = this.make.graphics({}, false);
     this.clip.fillStyle(0xffffff).fillRect(x0 - margin, 0, pageW, this.scale.height);
@@ -397,13 +392,29 @@ export class SelectScene extends Phaser.Scene {
   }
 
   /**
-   * A chapter's grid of levels at (x0, y0), or its lock, in a container; `current`: the one shown,
-   * whose tiles can be pressed (a neighbour, seen while swiping, shows its first level picked).
+   * The chapter `d` away in the strip, beside this one's grid, with level `li` picked (where a
+   * swipe or an arrow lands there); shown only while the strip moves.
+   */
+  private drawNeighbour(d: -1 | 1, li: number): void {
+    this.neighbours[d]?.destroy();
+    delete this.neighbours[d];
+    if (!this.canSwitch(d) || !this.grid || !this.pageAt) return;
+    const { x0, y0, pageW } = this.pageAt;
+    const page = this.drawPage(this.ci + d, x0 + d * pageW, y0, li, false);
+    page.setVisible(this.pageShift !== 0);
+    this.neighbours[d] = page;
+    this.grid.add(page);
+  }
+
+  /**
+   * A chapter's grid of levels at (x0, y0), or its lock, in a container, level `picked` lit;
+   * `current`: the one shown, whose tiles can be pressed.
    */
   private drawPage(
     ci: number,
     x0: number,
     y0: number,
+    picked: number,
     current: boolean,
   ): Phaser.GameObjects.Container {
     const ch = chapters[ci]!;
@@ -425,7 +436,6 @@ export class SelectScene extends Phaser.Scene {
       );
       return page;
     }
-    const picked = current ? this.li : 0;
     // by the progression rule alone (author mode opens every tile): read by the e2e tests
     if (current)
       setDebug({
@@ -499,7 +509,9 @@ export class SelectScene extends Phaser.Scene {
   /** the strip of grids of levels (or locks), the one part of the page a swipe moves */
   private grid?: Phaser.GameObjects.Container;
   /** the chapters beside this one in the strip, shown while it moves */
-  private neighbours: Phaser.GameObjects.Container[] = [];
+  private neighbours: Partial<Record<-1 | 1, Phaser.GameObjects.Container>> = {};
+  /** where this chapter's grid is (px), and from one grid to the next in the strip */
+  private pageAt?: { x0: number; y0: number; pageW: number };
   /** the strip is seen through the grid's width */
   private clip?: Phaser.GameObjects.Graphics;
   /** from one grid to the next in the strip, CSS px */
@@ -513,7 +525,7 @@ export class SelectScene extends Phaser.Scene {
     this.settle = undefined;
     this.pageShift = x;
     this.grid?.setX(x * dpr());
-    for (const n of this.neighbours) n.setVisible(x !== 0);
+    for (const n of Object.values(this.neighbours)) n.setVisible(x !== 0);
     setDebug({ pageShift: x });
   }
 
@@ -553,8 +565,10 @@ export class SelectScene extends Phaser.Scene {
     const to = -step * this.pageW;
     const from = this.pageShift;
     this.shiftPage(from);
-    // the chapter it goes to shows from the start (still at 0, the strip hid it)
-    for (const n of this.neighbours) n.setVisible(true);
+    // the chapter it goes to shows from the start (still at 0, the strip hid it), with the level
+    // it lands on picked (an arrow back: the last one, or the same column)
+    if (li !== 0) this.drawNeighbour(step, li);
+    for (const n of Object.values(this.neighbours)) n.setVisible(true);
     this.sliding = true;
     const s = { x: from };
     this.settle = this.tweens.add({
