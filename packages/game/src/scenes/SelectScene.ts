@@ -115,6 +115,16 @@ export class SelectScene extends Phaser.Scene {
     return { levelId: this.currentId() };
   }
 
+  /**
+   * A chapter's items for the arrow keys: its levels, or one only when it is locked (its lock: an
+   * arrow goes on to the chapter beside, no level picked behind it). undefined: no such chapter.
+   */
+  private keySize(ci: number): number | undefined {
+    const ch = chapters[ci];
+    if (!ch) return undefined;
+    return this.chapterOpen(ci) ? ch.levels.length : 1;
+  }
+
   private chapterOpen(ci: number): boolean {
     return app.author || isChapterUnlocked(chapters, ci, app.data.levels, app.allChaptersOpen);
   }
@@ -593,7 +603,7 @@ export class SelectScene extends Phaser.Scene {
     const ci = this.ci + delta;
     if (ci < 0 || ci >= chapters.length) return;
     this.ci = ci;
-    this.li = Math.min(li, chapters[ci]!.levels.length - 1);
+    this.li = Math.min(li, this.keySize(ci)! - 1);
     this.settle?.remove();
     this.settle = undefined;
     this.sliding = false;
@@ -665,10 +675,10 @@ export class SelectScene extends Phaser.Scene {
       const to = arrowTarget(
         e.key,
         this.li,
-        chapters[this.ci]!.levels.length,
+        this.keySize(this.ci)!,
         this.cols(),
-        chapters[this.ci - 1]?.levels.length,
-        chapters[this.ci + 1]?.levels.length,
+        this.keySize(this.ci - 1),
+        this.keySize(this.ci + 1),
       );
       if (!to) return;
       if (to.chapter !== 0) return this.slide(to.chapter, to.li);
