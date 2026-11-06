@@ -21,6 +21,7 @@ type Pc = {
   notice?: string;
   playButton?: [number, number];
   pageShift?: number;
+  versionLine?: string;
   selectTitle?: { x: number; y: number; w: number; h: number };
   selectArrows?: ({ x: number; y: number; w: number; h: number } | null)[];
   selectGrid?: { x: number; y: number; w: number };
@@ -41,6 +42,15 @@ const KONAMI = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown'].concat([
 ]);
 
 test.use({ locale: 'en-US' });
+
+test('the menu shows the version, from package.json', async ({ page }) => {
+  await page.goto('/');
+  await expect.poll(() => scene(page)).toBe('Menu');
+  const { version } = JSON.parse(
+    readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'),
+  ) as { version: string };
+  expect((await debug(page)).versionLine).toBe(`v${version}`);
+});
 
 test('the menu: its three buttons are as wide as each other', async ({ page }) => {
   await page.goto('/');
