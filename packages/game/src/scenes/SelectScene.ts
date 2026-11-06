@@ -146,6 +146,56 @@ export class SelectScene extends Phaser.Scene {
   private cols(): number {
     return Math.min(6, Math.max(3, Math.floor((this.gridAreaW() - px(32)) / px(64))));
   }
+  /**
+   * The grid's rows, the same for every chapter (the tallest one's, at least 3): what is under it
+   * stays in place from one chapter to the next.
+   */
+  private rows(): number {
+    const cols = this.cols();
+    return Math.max(3, ...chapters.map((ch) => Math.ceil(ch.levels.length / cols)));
+  }
+
+  /** the keys line's height for a wrap width, measured once (key: width + text) */
+  private keysHeights = new Map<string, number>();
+  private keysHeight(keys: string, width: number): number {
+    const key = `${width}|${keys}`;
+    let h = this.keysHeights.get(key);
+    if (h === undefined) {
+      const k = this.add.text(0, 0, keys, {
+        ...textStyle(11, COLORS.accent),
+        align: 'center',
+        wordWrap: { width },
+      });
+      h = k.height;
+      k.destroy();
+      this.keysHeights.set(key, h);
+    }
+    return h;
+  }
+
+  /**
+   * From a level's name to its Play button, px: the most any level of any chapter takes (keys
+   * line, thresholds, master line), so that the buttons stay in place while browsing.
+   */
+  private detailsHeight(infoW: number): number {
+    let most = 0;
+    for (const ch of chapters)
+      for (const id of ch.levels) {
+        const level = levelById(id);
+        const keys = keysLine(level.initialKeys);
+        const master = hasMaster(id);
+        const rows = thresholdRows(resolveThresholds(level.thresholds), master).length;
+        const h =
+          px(44) +
+          (keys ? this.keysHeight(keys, infoW - px(32)) + px(8) : 0) +
+          rows * px(18) +
+          (rows ? px(4) : 0) +
+          (master ? px(18) : 0) +
+          px(40);
+        most = Math.max(most, h);
+      }
+    return most;
+  }
 
   private redraw(): void {
     // destroyed, not just removed: a button's frame and its listeners go with it
@@ -245,7 +295,9 @@ export class SelectScene extends Phaser.Scene {
     // the details: under the grid, or in the right column on a low screen
     const infoW = side ? this.scale.width - this.gridAreaW() : this.scale.width;
     const icx = side ? this.gridAreaW() + infoW / 2 : cx;
-    let y = side ? y0 + px(8) : y0 + Math.ceil(ch.levels.length / cols) * (cell + gap) + px(16);
+    let y = side ? y0 + px(8) : y0 + this.rows() * (cell + gap) + px(16);
+    // the buttons' row: the same for every level
+    const buttonsY = y + this.detailsHeight(infoW);
     this.add.text(icx, y, level.name, textStyle(16)).setOrigin(0.5);
     y += px(22);
     if (level.author)
@@ -301,7 +353,7 @@ export class SelectScene extends Phaser.Scene {
       this.add.text(icx, y, masterText, textStyle(12, '#9be7ff')).setOrigin(0.5);
     }
     setDebug({ masterLine: masterText, masterMedal: rec?.medals.master ?? null });
-    y += px(40);
+    y = buttonsY;
     let playButton: Phaser.GameObjects.Text | undefined;
     if (this.levelOpen(this.ci, this.li)) {
       const open = master === 'open';
