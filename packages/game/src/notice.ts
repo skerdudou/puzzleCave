@@ -1,3 +1,4 @@
+import { t } from './i18n';
 import { setDebug } from './debug';
 import { COLORS, FONT, uiScale } from './ui';
 
@@ -29,6 +30,44 @@ export function showNotice(text: string, color: string = COLORS.text): void {
   setDebug({ notice: text });
   setTimeout(() => (el.style.opacity = '0'), 6000);
   setTimeout(() => el.remove(), 6600);
+}
+
+/**
+ * A small box in the middle of the screen while a new version is put in place: shown before the
+ * reload, and again by the new page until the screen it comes back to is drawn.
+ */
+export function showUpdating(): void {
+  if (document.getElementById('updating')) return;
+  const el = document.createElement('div');
+  el.id = 'updating';
+  el.textContent = t('updating');
+  el.setAttribute('role', 'status');
+  const s = (n: number) => `${Math.round(n * uiScale())}px`;
+  Object.assign(el.style, {
+    position: 'fixed',
+    top: '50%',
+    left: '50%',
+    transform: 'translate(-50%, -50%)',
+    maxWidth: 'calc(100vw - 32px)',
+    boxSizing: 'border-box',
+    padding: `${s(10)} ${s(16)}`,
+    borderRadius: s(6),
+    background: 'rgba(29, 27, 38, 0.92)',
+    border: `1px solid ${COLORS.focus}`,
+    color: COLORS.text,
+    font: `${s(13)} ${FONT}`,
+    textAlign: 'center',
+    pointerEvents: 'none',
+    zIndex: '20',
+  } satisfies Partial<CSSStyleDeclaration>);
+  document.body.append(el);
+  setDebug({ updating: true });
+}
+
+/** The box goes (the screen is drawn by the new version). */
+export function hideUpdating(): void {
+  document.getElementById('updating')?.remove();
+  setDebug({ updating: false });
 }
 
 /** The toasts waiting for the one on screen to go. */

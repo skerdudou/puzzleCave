@@ -137,19 +137,26 @@ very first launch after a deploy; it arrives this way:
    does not delay an update.
 2. **Download**: the new service worker precaches the new files in the background, then waits
    (it does not take over a page by itself).
-3. **Switch** (`UpdateGate`, `packages/game/src/updateGate.ts`): if the player is on the main
-   menu, the level list, the options or a result screen, the game lets the new worker take over
-   and reloads at once (nothing is lost: progress and settings are saved in `localStorage` as soon
-   as they change; since v0.3.1 in the export format, scrambled and with a hash, so that the
-   console cannot edit them, and a save stored as plain JSON by an older version is set aside as
-   unreadable: export from the old version, import into the new one). During a level (or a replay), nothing is interrupted: a short notice ("Update
-   available — it will be applied on the next menu") shows for a few seconds, and the reload
-   happens when the player next opens the main menu, the level list or the options (not the
-   result screen of that level, nor a level chained with Next).
+3. **Switch** (`UpdateGate`, `packages/game/src/updateGate.ts`; `pwa.ts`): never under the
+   player's fingers. The new version takes over (the page reloads) only:
+   - at start-up: the first screen waits for the check (at most 2.5 s; not on the first visit,
+     nor offline), and a new version found then is applied before anything shows;
+   - on going to a menu screen (main menu, level list, options, achievements) from another
+     screen: an "Updating…" box shows until that screen is drawn by the new version;
+   - when the game goes to the background (another app, the screen locked) on a menu screen.
+
+   Never during a level, a replay or a result screen, nor while a menu screen is in use. After the
+   reload the game comes back to the same screen (`sessionStorage`; the level list on the level
+   picked, the options where they were scrolled). Nothing is lost: progress and settings are
+   saved in `localStorage` as soon as they change (since v0.3.1 in the export format, scrambled
+   and with a hash, so that the console cannot edit them, and a save stored as plain JSON by an
+   older version is set aside as unreadable: export from the old version, import into the new
+   one).
 4. The previous version's precache is deleted (`cleanupOutdatedCaches`).
 
-In practice, a player who opens the game after a deploy sees the new version a few seconds after
-the start-up (one reload on the menu). On the dev server the service worker is disabled
+In practice, a player who opens the game after a deploy starts on the new version (one reload
+before the menu shows, if the check answers within 2.5 s), and a game left open switches the next
+time it goes to the background or to another menu screen. On the dev server the service worker is disabled
 (`registerSW` does nothing).
 
 ## Creating levels with Tiled

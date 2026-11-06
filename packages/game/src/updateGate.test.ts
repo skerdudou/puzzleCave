@@ -3,70 +3,84 @@ import { CHECK_INTERVAL_MS, MIN_CHECK_GAP_MS, UpdateGate, checkDue } from './upd
 
 const gate = () => {
   const apply = vi.fn();
-  const notify = vi.fn();
-  return { g: new UpdateGate(apply, notify), apply, notify };
+  return { g: new UpdateGate(apply), apply };
 };
 
-test.each(['Menu', 'Select', 'Options', 'Result', 'Boot'])(
-  'ready on %s: applied at once, no notice',
+test.each(['Menu', 'Select', 'Options', 'Achievements'])(
+  "ready while on %s: nothing happens under the player's fingers",
   (scene) => {
-    const { g, apply, notify } = gate();
+    const { g, apply } = gate();
     g.enter(scene);
     g.ready();
-    expect(apply).toHaveBeenCalledTimes(1);
-    expect(notify).not.toHaveBeenCalled();
-    expect(g.pending).toBe(false);
+    expect(apply).not.toHaveBeenCalled();
+    expect(g.pending).toBe(true);
+    // the same screen restarted (a resize): still nothing
+    g.enter(scene);
+    expect(apply).not.toHaveBeenCalled();
   },
 );
 
-test('ready before any scene (start-up): applied at once', () => {
+test('going to another menu screen: applied, coming back to that screen', () => {
   const { g, apply } = gate();
+  g.enter('Menu');
   g.ready();
-  expect(apply).toHaveBeenCalledTimes(1);
+  g.enter('Select');
+  expect(apply).toHaveBeenCalledWith('Select', true);
+  expect(g.pending).toBe(false);
 });
 
-test.each(['Game', 'Replay'])(
-  'ready during a level (%s): a notice, applied at the next menu',
+test.each(['Game', 'Replay', 'Result'])(
+  'ready on %s: waits through levels and results, applied at the next menu screen',
   (scene) => {
-    const { g, apply, notify } = gate();
+    const { g, apply } = gate();
     g.enter('Select');
     g.enter(scene);
     g.ready();
-    expect(apply).not.toHaveBeenCalled();
-    expect(notify).toHaveBeenCalledTimes(1);
-    expect(g.pending).toBe(true);
-    // restarting the level, then its result screen: still waiting (the medals are shown)
-    g.enter(scene);
-    g.enter('Result');
-    expect(apply).not.toHaveBeenCalled();
-    // the next level from the result screen: still waiting, no second notice
     g.enter('Game');
-    g.ready();
-    expect(notify).toHaveBeenCalledTimes(1);
+    g.enter('Result');
+    g.enter('Game');
     expect(apply).not.toHaveBeenCalled();
-    // back to the level list: applied
     g.enter('Select');
-    expect(apply).toHaveBeenCalledTimes(1);
-    expect(g.pending).toBe(false);
+    expect(apply).toHaveBeenCalledWith('Select', true);
   },
 );
 
-test('a waiting update is applied on the menu or the options too', () => {
-  for (const menu of ['Menu', 'Options']) {
+test('the game going to the background on a menu screen: applied there, nothing shown', () => {
+  const { g, apply } = gate();
+  g.enter('Options');
+  g.ready();
+  g.hidden();
+  expect(apply).toHaveBeenCalledWith('Options', false);
+});
+
+test.each(['Game', 'Replay', 'Result'])(
+  'the game going to the background on %s: still waiting',
+  (scene) => {
     const { g, apply } = gate();
-    g.enter('Game');
+    g.enter(scene);
     g.ready();
-    g.enter(menu);
-    expect(apply).toHaveBeenCalledTimes(1);
-  }
+    g.hidden();
+    expect(apply).not.toHaveBeenCalled();
+    expect(g.pending).toBe(true);
+  },
+);
+
+test('nothing waiting: going to the background or changing screen does nothing', () => {
+  const { g, apply } = gate();
+  g.enter('Menu');
+  g.hidden();
+  g.enter('Select');
+  expect(apply).not.toHaveBeenCalled();
 });
 
 test('applied once only', () => {
   const { g, apply } = gate();
   g.enter('Menu');
   g.ready();
-  g.ready();
   g.enter('Select');
+  g.ready();
+  g.enter('Options');
+  g.hidden();
   expect(apply).toHaveBeenCalledTimes(1);
 });
 

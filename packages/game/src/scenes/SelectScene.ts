@@ -109,6 +109,11 @@ export class SelectScene extends Phaser.Scene {
     setDebug({ scene: 'Select', chapter: chapters[this.ci]?.id, levelId: this.currentId() });
   }
 
+  /** After an update's reload: the level picked (pwa.ts). */
+  resumeData(): object {
+    return { levelId: this.currentId() };
+  }
+
   private chapterOpen(ci: number): boolean {
     return app.author || isChapterUnlocked(chapters, ci, app.data.levels, app.allChaptersOpen);
   }

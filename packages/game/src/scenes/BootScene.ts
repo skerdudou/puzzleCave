@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { levels } from '../levels';
+import { afterStartCheck, hideUpdatingAfter, startScreen } from '../pwa';
 import { SHORE_TEXTURES } from '../render/shore';
 import {
   SMOOTH_SPRITES,
@@ -74,6 +75,13 @@ export class BootScene extends Phaser.Scene {
       makeButton(this, cx, cy + px(10), t('retry'), () => location.reload());
       return;
     }
-    this.scene.start('Menu');
+    // a new version found at start-up is applied before any screen shows (the page reloads);
+    // else the screen the game was on before an update, or the main menu
+    void afterStartCheck().then((applying) => {
+      if (applying) return;
+      const { scene, data } = startScreen();
+      hideUpdatingAfter(this.scene.get(scene));
+      this.scene.start(scene, data);
+    });
   }
 }

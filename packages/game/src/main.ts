@@ -13,7 +13,7 @@ import { t } from './i18n';
 import { showNotice } from './notice';
 import { installBackButton } from './backButton';
 import { textBoxes, type TextBox } from './debug';
-import { startUpdates } from './pwa';
+import { showResumeBox, startUpdates } from './pwa';
 import { initSfx } from './sfx';
 import { COLORS } from './ui';
 
@@ -23,6 +23,8 @@ const ratio = () => window.devicePixelRatio || 1;
 const e2eFps = Number(import.meta.env.VITE_E2E_FPS) || 0;
 
 app.init();
+// back from an update's reload: "Updating…" until the screen it was on shows again
+showResumeBox();
 
 // Phaser rasterises text with whatever font exists when the Text is created: wait for the pixel
 // font (or 3 s) before creating the game

@@ -1,17 +1,16 @@
 /**
- * When a new version of the game (a new service worker) is ready: reload at once on a screen
- * where nothing is lost (menus, options, the result screen: progress and settings are saved as
- * they change), or wait for the player to leave the level in progress for a menu.
+ * When a new version of the game (a new service worker) is ready, it is applied only at moments
+ * when the player is not doing anything with the screen (the page reloads, then comes back to
+ * the same screen: see pwa.ts):
+ * - at start-up, before the first screen shows (pwa.ts, BootScene: the old version is never seen);
+ * - on going to a menu screen from another screen (an "Updating…" box shows until that screen is
+ *   drawn by the new version);
+ * - when the game goes to the background (another app, the screen locked) on a menu screen.
+ * Never in a level, a replay or a result screen, and never while a menu screen is in use.
  */
 
-/** Scenes where a new version is applied as soon as it is ready. */
-export const RELOAD_SCENES: readonly string[] = ['Boot', 'Menu', 'Options', 'Select', 'Result'];
-/**
- * Scenes where an update that had to wait is applied on arrival. Not the result screen: a level
- * just finished shows its medals there (and its Next button leads to the next level, not to a
- * menu); the update waits for the next menu, as the notice says.
- */
-export const APPLY_SCENES: readonly string[] = ['Boot', 'Menu', 'Options', 'Select'];
+/** The screens a reload loses nothing on, and comes back to (with what they show). */
+export const RESUME_SCENES: readonly string[] = ['Menu', 'Select', 'Options', 'Achievements'];
 
 /** Checks for a new version while the game stays open: every 30 minutes… */
 export const CHECK_INTERVAL_MS = 30 * 60 * 1000;
@@ -28,37 +27,38 @@ export class UpdateGate {
   private applied = false;
 
   /**
-   * `apply`: install the new version and reload (once); `notify`: tell the player that it will
-   * come at the next menu.
+   * `apply(scene, shown)`: install the new version and reload (once), coming back to `scene`;
+   * `shown`: the game is on the screen (an "Updating…" box is worth showing).
    */
-  constructor(
-    private readonly apply: () => void,
-    private readonly notify: () => void,
-  ) {}
+  constructor(private readonly apply: (scene: string, shown: boolean) => void) {}
 
-  /** A new version is ready. */
+  /** A new version is ready: it waits for one of the moments above. */
   ready(): void {
-    if (this.applied || this.waiting) return;
-    // before the first scene: nothing to lose either
-    if (this.scene === null || RELOAD_SCENES.includes(this.scene)) return this.applyNow();
-    this.waiting = true;
-    this.notify();
+    if (!this.applied) this.waiting = true;
   }
 
-  /** The game shows the scene `key`. */
+  /** The game shows the scene `key` (a scene restarted on itself, a resize, is no change). */
   enter(key: string): void {
+    const from = this.scene;
     this.scene = key;
-    if (this.waiting && APPLY_SCENES.includes(key)) this.applyNow();
+    if (this.waiting && from !== null && from !== key && RESUME_SCENES.includes(key))
+      this.applyNow(key, true);
   }
 
-  /** A new version waits for a menu. */
+  /** The game went to the background. */
+  hidden(): void {
+    if (this.waiting && this.scene !== null && RESUME_SCENES.includes(this.scene))
+      this.applyNow(this.scene, false);
+  }
+
+  /** A new version waits. */
   get pending(): boolean {
     return this.waiting;
   }
 
-  private applyNow(): void {
+  private applyNow(scene: string, shown: boolean): void {
     this.waiting = false;
     this.applied = true;
-    this.apply();
+    this.apply(scene, shown);
   }
 }

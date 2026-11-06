@@ -357,6 +357,11 @@ export class OptionsScene extends Phaser.Scene {
     setDebug({ scene: 'Options', lang: getLang(), langMenuOpen: false, settings: { ...s } });
   }
 
+  /** After an update's reload: where the options were scrolled to (pwa.ts). */
+  resumeData(): object {
+    return { scroll: this.scroll };
+  }
+
   override update(_time: number, delta: number): void {
     if (!this.velocity || this.drag) return;
     const step = inertiaStep(this.velocity, delta);
