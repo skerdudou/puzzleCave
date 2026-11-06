@@ -61,3 +61,35 @@ export function pad(img: Rgba, n: number): Rgba {
     data.set(img.data.subarray(y * img.w * 4, (y + 1) * img.w * 4), ((y + n) * w + n) * 4);
   return { w, h, data };
 }
+
+/** A copy of the part of an image `w` × `h` from (x, y). */
+export function crop(img: Rgba, x: number, y: number, w: number, h: number): Rgba {
+  const data = new Uint8Array(w * h * 4);
+  for (let r = 0; r < h; r++)
+    data.set(
+      img.data.subarray(((y + r) * img.w + x) * 4, ((y + r) * img.w + x + w) * 4),
+      r * w * 4,
+    );
+  return { w, h, data };
+}
+
+/** Copies `w` × `h` pixels of `src` from (sx, sy) into `dst` at (dx, dy). */
+export function blit(
+  dst: Rgba,
+  src: Rgba,
+  sx: number,
+  sy: number,
+  w: number,
+  h: number,
+  dx: number,
+  dy: number,
+): void {
+  for (let r = 0; r < h; r++)
+    dst.data.set(
+      src.data.subarray(((sy + r) * src.w + sx) * 4, ((sy + r) * src.w + sx + w) * 4),
+      ((dy + r) * dst.w + dx) * 4,
+    );
+}
+
+/** A copy of an image (its own pixels). */
+export const copyRgba = (img: Rgba): Rgba => ({ w: img.w, h: img.h, data: img.data.slice() });

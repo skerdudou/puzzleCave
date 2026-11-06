@@ -2,34 +2,13 @@
 // 4× larger through xBR — the terrain whole when a level is drawn (BoardView), the sprites that
 // move once at start (BootScene); off, the art as it is.
 import Phaser from 'phaser';
-import { xbr4x } from 'xbr-js/src/index.js';
-import { bleed, pad, type Rgba } from './upscale';
+import type { Rgba } from './upscale';
+export { SMOOTH_FACTOR, SPRITE_PAD, smoothSprite, xbr, xbrPatch } from './xbr';
 
-/** How many times larger than the art a smoothed texture is. */
-export const SMOOTH_FACTOR = 4;
 /** The textures that move on the board: smoothed one by one at start. */
 export const SMOOTH_SPRITES = ['KEY', 'DOOR', 'BLOCK', 'player'] as const;
-/** The transparent border around a smoothed sprite, art px (its texture: (w + 2 × it) × 4 wide). */
-export const SPRITE_PAD = 2;
-
 /** The texture of `key` drawn smoothed or not (the art itself). */
 export const smoothKey = (key: string, on: boolean): string => (on ? `smooth/${key}` : key);
-
-/** xBR 4× (SMOOTH_FACTOR); `alpha`: the transparency smoothed too (a sprite), else kept. */
-export function xbr(img: Rgba, alpha = false): Rgba {
-  const px = new Uint32Array(img.data.buffer, img.data.byteOffset, img.w * img.h);
-  const out = xbr4x(px, img.w, img.h, { scaleAlpha: alpha });
-  return { w: img.w * SMOOTH_FACTOR, h: img.h * SMOOTH_FACTOR, data: new Uint8Array(out.buffer) };
-}
-
-/**
- * A sprite smoothed: inside a transparent border of SPRITE_PAD px (kept), so that xBR rounds the
- * edges the art touches instead of taking them for a wall, and the smooth drawing of a sprite
- * between two cells fades them out instead of cutting them flat at the texture's edge; the
- * transparent pixels' colour bled from the visible ones first, so that xBR does not mix the
- * unseen colour under them into the edges (a pale fringe).
- */
-export const smoothSprite = (img: Rgba): Rgba => xbr(bleed(pad(img, SPRITE_PAD)), true);
 
 /** A loaded texture's pixels. */
 export function texturePixels(textures: Phaser.Textures.TextureManager, key: string): Rgba {
