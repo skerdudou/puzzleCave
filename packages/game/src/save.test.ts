@@ -563,3 +563,28 @@ test('smoothing: on by default; a saved value kept, anything else back to on', (
   expect(load({ smoothing: 'yes' }).smoothing).toBe(true);
   expect(load({}).smoothing).toBe(true);
 });
+
+test('loaded, a best time earns the time medal it is worth under the current thresholds, never less', () => {
+  const save = JSON.stringify({
+    version: 2,
+    settings: {},
+    levels: {
+      // 5.5 s was silver under a 4 s gold; gold is now 6 s
+      loosened: { completed: true, bestTimeMs: 5_500, medals: { time: 'silver' } },
+      // a gold kept though the thresholds say bronze now
+      tightened: { completed: true, bestTimeMs: 9_000, medals: { time: 'gold' } },
+      // no time medal before, a best time within bronze now
+      none: { completed: true, bestTimeMs: 9_000, medals: { moves: 'gold' } },
+      // no time medals on this level
+      untimed: { completed: true, bestTimeMs: 1_000, medals: {} },
+    },
+  });
+  const d = parseSave(save, {
+    masterThresholds: () => undefined,
+    timeTier: (id) => (id === 'untimed' ? undefined : { gold: 6, silver: 8, bronze: 10 }),
+  });
+  expect(d.levels.loosened!.medals.time).toBe('gold');
+  expect(d.levels.tightened!.medals.time).toBe('gold');
+  expect(d.levels.none!.medals).toEqual({ moves: 'gold', time: 'bronze' });
+  expect(d.levels.untimed!.medals).toEqual({});
+});

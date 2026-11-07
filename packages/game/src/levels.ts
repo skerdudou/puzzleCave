@@ -42,6 +42,7 @@ export function locate(id: string): { chapterIndex: number; levelIndex: number }
 export const saveContext: SaveContext = {
   masterThresholds: (id) =>
     byId.has(id) && hasMaster(id) ? resolveThresholds(levelById(id).thresholds) : undefined,
+  timeTier: (id) => (byId.has(id) ? resolveThresholds(levelById(id).thresholds).time : undefined),
 };
 
 /** The game's achievements (achievements.ts), for its levels. */

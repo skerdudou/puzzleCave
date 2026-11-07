@@ -60,6 +60,9 @@ export interface TimeRule {
   perTurn: number;
   /** floor: never less than this many seconds per move (human input rate) */
   minPerMove: number;
+  /** fatigue: the time grows by this fraction each time the turns double past `fatigueTurns` */
+  fatigue: number;
+  fatigueTurns: number;
 }
 
 /**
@@ -81,16 +84,30 @@ export interface TimeRule {
  * the input rate instead: 10 moves per second (our default key repeat; three quarters of the
  * record times on maps with many turns are slower than that). It only matters for levels made of
  * long straight runs.
+ *
+ * Touch play: a turn on a touch screen is a new gesture, slower than a key press, and gold proved
+ * barely reachable on the easy levels with the 0.3 s a turn fitted above: a turn counts 0.35 s.
+ * And a long level wears the player out (thumb, attention): the time grows by 5 % each time the
+ * turns double past 50 (+5 % at 50 turns, +10 % at 150, +20 % at 750), a margin the short levels
+ * hardly feel.
  */
 export const TIME_RULE: Readonly<TimeRule> = {
   perMove: 0.05,
-  perTurn: 0.3,
+  perTurn: 0.35,
   minPerMove: 0.1,
+  fatigue: 0.05,
+  fatigueTurns: 50,
 };
+
+/** the fatigue factor of a solution with `turns` direction changes (1 without any) */
+export function fatigueFactor(turns: number, rule: TimeRule = TIME_RULE): number {
+  return 1 + rule.fatigue * Math.log2(1 + turns / rule.fatigueTurns);
+}
 
 /** time (seconds, unrounded) of a good player on a level whose best solution has features `f` */
 export function estimateTime(f: SolutionFeatures, rule: TimeRule = TIME_RULE): number {
-  return Math.max(rule.perMove * f.moves + rule.perTurn * f.turns, rule.minPerMove * f.moves);
+  const pace = Math.max(rule.perMove * f.moves + rule.perTurn * f.turns, rule.minPerMove * f.moves);
+  return pace * fatigueFactor(f.turns, rule);
 }
 
 /** rounding to a readable threshold: whole seconds below a minute, 5 s steps above */

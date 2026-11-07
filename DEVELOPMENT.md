@@ -494,7 +494,7 @@ about a level without one.
 
 The rule (`TIME_RULE` in `packages/tools/src/times.ts`) is
 
-    goldTime ≈ max(0.05 s × moves + 0.3 s × turns, 0.1 s × moves)
+    goldTime ≈ max(0.05 s × moves + 0.35 s × turns, 0.1 s × moves) × (1 + 0.05 × log2(1 + turns / 50))
 
 rounded to the second (to 5 s above one minute), where turns are the direction changes of the
 solution. It comes from player statistics of an earlier version of the game (same rules, 18×18
@@ -510,8 +510,13 @@ puzzle levels; adjust a level by hand when play-testing says so (`times --apply`
 `--force` never overwrites it). Our game takes the next move while the previous one is still
 animated, so the floor is the human input rate (10 moves/s), not the animation.
 
-Touch play (continuous drag, or the D-pad with hold to repeat) is slower than the keyboard; the
-thresholds are calibrated for the keyboard.
+The fit gave 0.3 s a turn, for the keyboard. Touch play (continuous drag, or the D-pad with hold
+to repeat) is slower: a turn is a new gesture, and gold proved barely reachable on the easy levels
+on a phone. So a turn counts 0.35 s, and a fatigue factor gives the long levels some room: +5 %
+each time the turns double past 50 (+5 % at 50 turns, +10 % at 150, +20 % at 750). All levels
+were recomputed with it (`times --force`, from the gold references where they exist), except
+pc-07, whose earlier, larger goldTime was kept. A save's time medals follow new thresholds when
+loaded: its best time earns the medal it is now worth, never less than the one it had.
 
 ## Difficulty: `difficulty`
 

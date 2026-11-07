@@ -1,10 +1,13 @@
 import {
   bestMasterMedal,
+  bestMedal,
   masterMedalFor,
+  medalFor,
   type LevelRecord,
   type MasterMedal,
   type Medal,
   type Thresholds,
+  type Tier,
 } from '@puzzlecave/core';
 import { isLang, type Lang } from './i18n';
 import { DRAG_STEP_DEFAULT, OLD_DRAG_STEP_DEFAULT, nearestDragStep } from './input/drag';
@@ -71,6 +74,8 @@ export const SAVE_VERSION = 2;
 export interface SaveContext {
   /** a level's thresholds when it has master mode; undefined otherwise (or an unknown level) */
   masterThresholds(levelId: string): Thresholds | undefined;
+  /** a level's time medal thresholds (seconds); undefined without time medals (or unknown) */
+  timeTier?(levelId: string): Tier | undefined;
 }
 /** No level known: a migration derives nothing from the thresholds. */
 export const NO_LEVELS: SaveContext = { masterThresholds: () => undefined };
@@ -136,6 +141,26 @@ export function migrate(
   }
 }
 
+/**
+ * The time medals a save's best times are worth under the levels' current thresholds: when a
+ * level's times are loosened (a new version of the game), a best time already played earns the
+ * better medal at once. Never a lesser one than the save holds.
+ */
+export function refreshTimeMedals(
+  levels: Record<string, LevelRecord>,
+  ctx: SaveContext,
+): Record<string, LevelRecord> {
+  const out: Record<string, LevelRecord> = {};
+  for (const [id, rec] of Object.entries(levels)) {
+    const tier = ctx.timeTier?.(id);
+    const now =
+      tier && rec.bestTimeMs !== undefined ? medalFor(tier, rec.bestTimeMs / 1000) : undefined;
+    const time = bestMedal(rec.medals.time, now);
+    out[id] = time === rec.medals.time ? rec : { ...rec, medals: { ...rec.medals, time } };
+  }
+  return out;
+}
+
 /** A save read from its JSON text (stored, or a file the player imports); throws if unusable. */
 export function parseSave(raw: string, ctx: SaveContext = NO_LEVELS): SaveData {
   const parsed: unknown = JSON.parse(raw);
@@ -145,7 +170,7 @@ export function parseSave(raw: string, ctx: SaveContext = NO_LEVELS): SaveData {
   return {
     version: 2,
     settings: sanitiseSettings(obj.settings),
-    levels: sanitiseLevels(obj.levels),
+    levels: refreshTimeMedals(sanitiseLevels(obj.levels), ctx),
     achievements: sanitiseAchievements(obj.achievements),
   };
 }
