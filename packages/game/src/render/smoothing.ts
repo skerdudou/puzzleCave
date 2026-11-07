@@ -49,6 +49,27 @@ export function addPixels(
     img.data.byteOffset,
     img.data.length,
   );
-  canvas.getContext('2d')!.putImageData(new ImageData(data, img.w, img.h), 0, 0);
-  textures.addCanvas(key, canvas)?.setFilter(Phaser.Textures.FilterMode.LINEAR);
+  // in memory, not on the GPU (as Phaser's own canvas textures): a phone's browser, back from the
+  // background, may have wiped a GPU canvas drawn only once
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+  const draw = () => ctx.putImageData(new ImageData(data, img.w, img.h), 0, 0);
+  draw();
+  const tex = textures.addCanvas(key, canvas);
+  tex?.setFilter(Phaser.Textures.FilterMode.LINEAR);
+  const renderer = textures.game.renderer;
+  if (!tex || renderer.type !== Phaser.WEBGL) return;
+  // The WebGL context lost then restored (the GPU's memory dropped), Phaser uploads the texture
+  // again from the canvas: drawn again first, in case the browser wiped it all the same (and
+  // smooth again: a canvas texture refreshed is set back to the game's crisp filter).
+  const restore = () => {
+    draw();
+    tex.refresh().setFilter(Phaser.Textures.FilterMode.LINEAR);
+  };
+  renderer.on(Phaser.Renderer.Events.RESTORE_WEBGL, restore);
+  const forget = (removed: string) => {
+    if (removed !== key) return;
+    renderer.off(Phaser.Renderer.Events.RESTORE_WEBGL, restore);
+    textures.off(Phaser.Textures.Events.REMOVE, forget);
+  };
+  textures.on(Phaser.Textures.Events.REMOVE, forget);
 }

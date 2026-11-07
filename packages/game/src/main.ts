@@ -14,6 +14,7 @@ import { showNotice } from './notice';
 import { installBackButton } from './backButton';
 import { textBoxes, type TextBox } from './debug';
 import { showResumeBox, startUpdates } from './pwa';
+import { redrawTextsOnRestore } from './render/restoreTexts';
 import { initSfx } from './sfx';
 import { COLORS } from './ui';
 
@@ -58,6 +59,7 @@ const game = new Phaser.Game({
   ],
 });
 startUpdates(game);
+redrawTextsOnRestore(game);
 initSfx(game);
 // for the e2e tests: the texts of the scene on top (see textBoxes)
 (window as unknown as { __pcTexts: () => TextBox[] }).__pcTexts = () => {
