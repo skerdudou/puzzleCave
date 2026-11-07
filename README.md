@@ -78,8 +78,12 @@ level to unlock the one after next (a level you are stuck on can be skipped); fi
     one step each time your finger travels a short distance, so a long drag walks several cells;
     steer by dragging the other way (right, then up…) without lifting your finger. A simple tap
     does nothing. Set how sensitive it is in Options (**Drag: sensitivity**, shown in this mode
-    only): a gauge from *less sensitive* (a longer distance per step) to *very sensitive*; the
-    default sits in the middle, a step every fingertip or so. With **Keep going when held**
+    only): **Dynamic** (the default) takes a step each time your finger travels the size of a
+    cell of the board on the screen, so you drag the hero cell by cell, whatever the level's
+    zoom (never less than 16 px a step); **Fixed** shows a gauge from *less sensitive* (a
+    longer distance per step) to *very sensitive*, the same on every level (its middle notch: a
+    step every fingertip or so). One finger drags at a time, the last one down: a second finger
+    does not make you walk faster. With **Keep going when held**
     (off by default), a finger that rests after a step keeps walking that way, at the **Repeat**
     rate, until you lift it or drag another way: handy when the edge of the screen comes
     before the end of the corridor;

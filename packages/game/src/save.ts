@@ -10,7 +10,13 @@ import {
   type Tier,
 } from '@puzzlecave/core';
 import { isLang, type Lang } from './i18n';
-import { DRAG_STEP_DEFAULT, OLD_DRAG_STEP_DEFAULT, nearestDragStep } from './input/drag';
+import {
+  DRAG_STEP_DEFAULT,
+  OLD_DRAG_STEP_DEFAULT,
+  isDragMode,
+  nearestDragStep,
+  type DragMode,
+} from './input/drag';
 import { isTouchControl, type TouchControl } from './input/tapZones';
 
 export interface Settings {
@@ -19,7 +25,9 @@ export interface Settings {
   /** sound effects */
   sfx: boolean;
   lang: Lang | null;
-  /** continuous drag: CSS pixels per move (one of DRAG_STEPS) */
+  /** continuous drag: a move per board cell on the screen (dynamic), or per `dragStep` (fixed) */
+  dragMode: DragMode;
+  /** continuous drag, fixed mode: CSS pixels per move (one of DRAG_STEPS) */
   dragStep: number;
   /**
    * The default dragStep when this save was written: a dragStep still equal to it follows the
@@ -248,6 +256,7 @@ export function defaultSave(): SaveData {
       sound: true,
       sfx: true,
       lang: null,
+      dragMode: 'dynamic',
       dragStep: DRAG_STEP_DEFAULT,
       dragStepDefault: DRAG_STEP_DEFAULT,
       dragHold: false,
@@ -289,14 +298,16 @@ function sanitiseSettings(raw: unknown): Settings {
   const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
   // the default the save was written with (saves from before the field: the old one)
   const savedDefault = isNum(s.dragStepDefault) ? s.dragStepDefault : OLD_DRAG_STEP_DEFAULT;
+  const chosenStep = isNum(s.dragStep) && s.dragStep !== savedDefault;
   return {
     sound: typeof s.sound === 'boolean' ? s.sound : d.sound,
     sfx: typeof s.sfx === 'boolean' ? s.sfx : d.sfx,
     lang,
     // older saves had a swipe threshold instead: they get the default distance; a distance
     // left at the default of its time follows the current default
-    dragStep:
-      isNum(s.dragStep) && s.dragStep !== savedDefault ? nearestDragStep(s.dragStep) : d.dragStep,
+    dragStep: chosenStep ? nearestDragStep(s.dragStep as number) : d.dragStep,
+    // saves from before the mode: a distance the player chose stays (fixed), else dynamic
+    dragMode: isDragMode(s.dragMode) ? s.dragMode : chosenStep ? 'fixed' : d.dragMode,
     dragStepDefault: d.dragStepDefault,
     dragHold: typeof s.dragHold === 'boolean' ? s.dragHold : d.dragHold,
     repeatRate: clampNumber(s.repeatRate, 4, 20, d.repeatRate),

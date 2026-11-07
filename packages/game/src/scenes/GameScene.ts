@@ -25,7 +25,7 @@ import { AmbienceView, HUD_DEPTH } from '../render/AmbienceView';
 import { BoardView } from '../render/BoardView';
 import { boardLayout, fractionalZoom, type BoardLayout } from '../render/layout';
 import { HapticFeed, vibrate } from '../haptics';
-import { DragSteps } from '../input/drag';
+import { DragSteps, dynamicDragStep } from '../input/drag';
 import { HoldRepeat } from '../input/holdRepeat';
 import { boundsOf, centreOf, zoneArea, zoneAt, zonePolygon, type Box } from '../input/tapZones';
 import { DEEP_THOUGHT, Stillness } from '../achievements';
@@ -93,6 +93,8 @@ export class GameScene extends Phaser.Scene {
   private padDirAt: (x: number, y: number) => Dir | null | undefined = () => undefined;
   /** each d-pad button's frame, painted held or not */
   private readonly padPaint = new Map<Dir, (held: boolean) => void>();
+  /** a board cell on the screen, CSS px */
+  private cellCss = 0;
   /** continuous drags in progress, by pointer id */
   private readonly drags = new Map<number, DragSteps>();
   /** a drag has moved the player since the last press: its release is not a button click */
@@ -220,7 +222,12 @@ export class GameScene extends Phaser.Scene {
         }
         const [x, y] = [p.x / dpr(), p.y / dpr()];
         if (tapMode) this.pressZone(p, x, y);
-        else this.drags.set(p.id, new DragSteps(x, y, app.data.settings.dragStep));
+        else {
+          // one finger drags at a time, the last one down: two fingers never walk twice as fast
+          for (const id of this.drags.keys()) this.hold.release(id);
+          this.drags.clear();
+          this.drags.set(p.id, new DragSteps(x, y, this.dragStep()));
+        }
       },
     );
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
@@ -319,6 +326,9 @@ export class GameScene extends Phaser.Scene {
 
   /** For the e2e tests: the board's place and zoom, and the screen it was laid out for. */
   private showLayout(layout: BoardLayout): void {
+    // a board cell on the screen, CSS px (16 px tiles): the dynamic drag's distance per move
+    this.cellCss = (layout.scale * 16) / dpr();
+    setDebug({ dragStepPx: this.dragStep() });
     setDebug({ boardLayout: { ...layout, viewW: this.scale.width, viewH: this.scale.height } });
   }
 
@@ -940,6 +950,12 @@ export class GameScene extends Phaser.Scene {
   private padShow(dir: Dir | null): void {
     this.padDir = dir;
     for (const [d, paint] of this.padPaint) paint(d === dir);
+  }
+
+  /** The drag's distance per move, CSS px: a board cell (dynamic mode) or the gauge's (fixed). */
+  private dragStep(): number {
+    const s = app.data.settings;
+    return s.dragMode === 'fixed' ? s.dragStep : dynamicDragStep(this.cellCss);
   }
 
   /** The tap zone under a pointer (none outside their area). */
