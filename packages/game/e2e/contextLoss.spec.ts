@@ -1,4 +1,7 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
+import { parseMoves } from '@puzzlecave/core';
 import { SAVE_KEY } from '../src/save';
 import { encodedSave } from './storedSave';
 
@@ -7,7 +10,7 @@ import { encodedSave } from './storedSave';
 // 2D canvases on the GPU, unless read often). Phaser uploads its textures again from their
 // canvases: whatever was drawn once (the smoothed sprites, the texts) came back invisible.
 
-type Pc = { scene?: string };
+type Pc = { scene?: string; buttons?: Record<string, [number, number]>; replayPlaying?: boolean };
 const debug = (page: Page): Promise<Pc> =>
   page.evaluate(() => (window as unknown as { __pc?: Pc }).__pc ?? {});
 
@@ -15,7 +18,7 @@ const debug = (page: Page): Promise<Pc> =>
 type Wipe = 'none' | 'gpu' | 'painted';
 type Canvases = Record<Exclude<Wipe, 'none'>, Set<HTMLCanvasElement>>;
 
-async function open(page: Page, scene: 'Select' | 'Game', errors: string[]): Promise<void> {
+async function open(page: Page, scene: Scene, errors: string[]): Promise<void> {
   page.on('pageerror', (e) => errors.push(e.message));
   await page.addInitScript(
     ([k, v]) => {
@@ -58,14 +61,53 @@ async function open(page: Page, scene: 'Select' | 'Game', errors: string[]): Pro
     ],
   );
   await page.goto('/');
-  await expect.poll(async () => (await debug(page)).scene).toBe('Menu');
-  await page.keyboard.press('Enter');
-  await expect.poll(async () => (await debug(page)).scene).toBe('Select');
-  if (scene === 'Game') {
-    await page.keyboard.press('Enter');
-    await expect.poll(async () => (await debug(page)).scene).toBe('Game');
-  }
+  await sceneIs(page, 'Menu');
+  await REACH[scene](page);
+  await sceneIs(page, scene);
 }
+
+const sceneIs = (page: Page, scene: string) =>
+  expect.poll(async () => (await debug(page)).scene).toBe(scene);
+const click = async (page: Page, button: string) => {
+  const [x, y] = (await debug(page)).buttons![button]!;
+  await page.mouse.click(x, y);
+};
+const KEY = { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' } as const;
+const pc01 = parseMoves(
+  readFileSync(
+    fileURLToPath(new URL('../../../levels/solutions/pc-01.txt', import.meta.url)),
+    'utf8',
+  ),
+);
+
+/** From the menu to each screen. */
+const REACH = {
+  Menu: async () => {},
+  Options: (page: Page) => click(page, 'options'),
+  Achievements: (page: Page) => click(page, 'achievements'),
+  Select: (page: Page) => page.keyboard.press('Enter'),
+  Game: async (page: Page) => {
+    await page.keyboard.press('Enter');
+    await sceneIs(page, 'Select');
+    await page.keyboard.press('Enter');
+  },
+  Result: async (page: Page) => {
+    await REACH.Game(page);
+    await sceneIs(page, 'Game');
+    for (const d of pc01) await page.keyboard.press(KEY[d]);
+  },
+  Replay: async (page: Page) => {
+    await page.keyboard.press('Enter');
+    await sceneIs(page, 'Select');
+    await page.keyboard.press('KeyS');
+    await sceneIs(page, 'Replay');
+    // paused, for a still screen
+    await expect.poll(async () => (await debug(page)).replayPlaying).toBe(true);
+    await page.keyboard.press('Space');
+    await expect.poll(async () => (await debug(page)).replayPlaying).toBe(false);
+  },
+} as const;
+type Scene = keyof typeof REACH;
 
 /** The screen once still (a level's intro gone, a button's glow settled). */
 async function still(page: Page): Promise<Buffer> {
@@ -100,10 +142,15 @@ async function loseAndRestore(page: Page, wipe: Wipe): Promise<void> {
 }
 
 for (const [scene, wipe] of [
+  ['Menu', 'gpu'],
+  ['Options', 'gpu'],
+  ['Achievements', 'gpu'],
   ['Select', 'none'],
   ['Select', 'gpu'],
   ['Game', 'gpu'],
   ['Game', 'painted'],
+  ['Result', 'gpu'],
+  ['Replay', 'gpu'],
 ] as const)
   test(`${scene}: the WebGL context lost and restored, the ${wipe} 2D canvases wiped meanwhile: drawn as before`, async ({
     page,
