@@ -144,6 +144,7 @@ test('invalid settings replaced by defaults', () => {
     sound: true,
     sfx: true,
     lang: null,
+    dragMode: 'dynamic',
     dragStep: 40,
     dragStepDefault: 40,
     dragHold: false,
@@ -169,6 +170,7 @@ test('a save from before the drag, vibration and touch control options: defaults
     sound: false,
     sfx: true,
     lang: 'fr',
+    dragMode: 'dynamic',
     dragStep: 40,
     dragStepDefault: 40,
     dragHold: false,
@@ -589,4 +591,22 @@ test('loaded, a best time earns the time medal it is worth under the current thr
   expect(d.levels.tightened!.medals.time).toBe('gold');
   expect(d.levels.none!.medals).toEqual({ moves: 'gold', time: 'bronze' });
   expect(d.levels.untimed!.medals).toEqual({});
+});
+
+test('drag mode: dynamic by default; an older save whose distance was chosen stays fixed', () => {
+  const load = (settings: object) =>
+    new SaveStore(mem({ [SAVE_KEY]: stored({ version: 2, settings, levels: {} }) })).load()
+      .settings;
+  expect(load({}).dragMode).toBe('dynamic');
+  // left at the default of its time: dynamic
+  expect(load({ dragStep: 40, dragStepDefault: 40 }).dragMode).toBe('dynamic');
+  // chosen: fixed, with its distance
+  expect(load({ dragStep: 56, dragStepDefault: 40 })).toMatchObject({
+    dragMode: 'fixed',
+    dragStep: 56,
+  });
+  // a mode saved is kept
+  expect(load({ dragStep: 56, dragStepDefault: 40, dragMode: 'dynamic' }).dragMode).toBe('dynamic');
+  expect(load({ dragMode: 'fixed' }).dragMode).toBe('fixed');
+  expect(load({ dragMode: 'wobbly' }).dragMode).toBe('dynamic');
 });

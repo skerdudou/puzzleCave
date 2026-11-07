@@ -334,12 +334,12 @@ test('options: the touch control switches, hides the drag distance, is saved and
   await page.touchscreen.tap(390 / 2, 740 / 2 + 56); // Options, under Play
   await expect.poll(async () => (await debug(page)).scene).toBe('Options');
   const buttons = async () => (await debug(page)).buttons!;
-  expect(await buttons()).toHaveProperty('drag');
+  expect(await buttons()).toHaveProperty('dragMode');
   const [x, y] = (await buttons()).touchControl!;
   await page.touchscreen.tap(x, y);
   await expect.poll(async () => (await savedSettings(page)).touchControl).toBe('tap');
   // the drag distance only matters to the drag: not shown in tap mode
-  await expect.poll(async () => Object.keys(await buttons())).not.toContain('drag');
+  await expect.poll(async () => Object.keys(await buttons())).not.toContain('dragMode');
   await page.reload();
   await expect.poll(async () => (await debug(page)).scene).toBe('Menu');
   expect((await savedSettings(page)).touchControl).toBe('tap');

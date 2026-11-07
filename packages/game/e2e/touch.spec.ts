@@ -74,10 +74,15 @@ async function startPc01(page: Page): Promise<Finger> {
   expect(await field(page, 'levelId')).toBe('pc-01');
   // the d-pad is shown: the page is seen as a touch device
   await expect.poll(() => field(page, 'dpad')).toBeTruthy();
+  STEP = (await field(page, 'dragStepPx')) as number;
   return Finger.on(page);
 }
 
-const STEP = 40; // default distance per move, CSS px
+/**
+ * The distance per move, CSS px: by default (dynamic) a cell of pc-01's board on this screen,
+ * read when the level starts
+ */
+let STEP = 0;
 // a point on the play area, away from the buttons and the d-pad
 const X0 = 150;
 const Y0 = 300;
@@ -99,9 +104,7 @@ test('a drag of N steps makes N moves and pushes the block on its way', async ({
   expect(await vibrations(page)).toEqual([]);
 });
 
-test('a drag shorter than the default step (the old 24 px default) makes no move', async ({
-  page,
-}) => {
+test('a drag shorter than a step makes no move', async ({ page }) => {
   const f = await startPc01(page);
   await f.down(X0, Y0);
   await f.by(STEP - 4, 0);
@@ -213,10 +216,21 @@ test('options: drag distance and vibrations are saved and used', async ({ page }
     await page.touchscreen.tap(x, y);
   };
   const saved = async () => (await storedSave(page))!.settings;
+  // dynamic by default: no gauge; fixed shows it
+  expect(Object.keys((await field(page, 'buttons')) as object)).not.toContain('drag');
+  await tap('dragMode');
+  await expect.poll(async () => (await saved()).dragMode).toBe('fixed');
+  await expect.poll(async () => button('drag')).toBeTruthy();
   // the sensitivity gauge: notch 4 of 9 (40 px), then less sensitive: 48 → 56 → 64 px per move
   for (let i = 0; i < 3; i++) {
     await tap(`drag-${3 - i}`);
     await expect.poll(async () => (await saved()).dragStep).toBe([48, 56, 64][i]);
+  }
+  // further down, under the drag's options: scrolled to
+  await page.mouse.move(195, 370);
+  for (let i = 0; i < 20 && (await button('vibration'))[1] > 700; i++) {
+    await page.mouse.wheel(0, 120);
+    await page.waitForTimeout(50);
   }
   await tap('vibration');
   await expect.poll(async () => (await saved()).vibration).toBe(false);
@@ -224,7 +238,7 @@ test('options: drag distance and vibrations are saved and used', async ({ page }
   // after a reload: still there, and used by the game
   await page.reload();
   await expect.poll(() => field(page, 'scene')).toBe('Menu');
-  expect(await saved()).toMatchObject({ dragStep: 64, vibration: false });
+  expect(await saved()).toMatchObject({ dragMode: 'fixed', dragStep: 64, vibration: false });
   await page.keyboard.press('Enter');
   await expect.poll(() => field(page, 'scene')).toBe('Select');
   await page.keyboard.press('Enter');
@@ -295,4 +309,37 @@ test('options: keep going when held, off by default; on, a drag held still goes 
   const n = await field(page, 'moves');
   await page.waitForTimeout(500);
   expect(await field(page, 'moves')).toBe(n);
+});
+
+test('dynamic drag: a move per board cell on the screen', async ({ page }) => {
+  await startPc01(page);
+  const layout = (await field(page, 'boardLayout')) as { scale: number };
+  // a 16 px tile at the board's zoom, in CSS px (2 device px each here)
+  expect(STEP).toBe(Math.max(16, Math.round((layout.scale * 16) / 2)));
+});
+
+test('two fingers dragging walk no faster than one: the last one down drags', async ({ page }) => {
+  await startPc01(page);
+  const cdp = await page.context().newCDPSession(page);
+  const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', pts: [number, number][]) =>
+    cdp.send('Input.dispatchTouchEvent', {
+      type,
+      touchPoints: pts.map(([x, y], id) => ({ x, y, id: id + 1 })),
+    });
+  // two fingers down, then both slide right by a step and a half, together
+  await touch('touchStart', [[X0, Y0]]);
+  await touch('touchStart', [
+    [X0, Y0],
+    [X0, Y0 + 80],
+  ]);
+  for (let i = 1; i <= 8; i++) {
+    const dx = (STEP * 1.5 * i) / 8;
+    await touch('touchMove', [
+      [X0 + dx, Y0],
+      [X0 + dx, Y0 + 80],
+    ]);
+  }
+  await touch('touchEnd', []);
+  await page.waitForTimeout(300);
+  expect(await field(page, 'moves')).toBe(1);
 });

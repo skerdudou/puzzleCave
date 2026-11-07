@@ -8,6 +8,23 @@ export const DRAG_STEPS = [16, 20, 24, 32, 40, 48, 56, 64, 80] as const;
  * default) proved too sensitive in play: short corrections took an extra step.
  */
 export const DRAG_STEP_DEFAULT = 40;
+/**
+ * How the drag's distance per move is set: `dynamic` (the default), the size of a cell of the
+ * board on the screen, so the finger drags the hero cell by cell; `fixed`, the gauge's distance.
+ */
+export const DRAG_MODES = ['dynamic', 'fixed'] as const;
+export type DragMode = (typeof DRAG_MODES)[number];
+export const isDragMode = (v: unknown): v is DragMode =>
+  (DRAG_MODES as readonly unknown[]).includes(v);
+
+/**
+ * Dynamic mode: the distance per move for a board cell `cell` CSS px wide, never under the most
+ * sensitive notch of the gauge (16 px): a big board on a small screen does not walk at a quiver.
+ */
+export function dynamicDragStep(cell: number): number {
+  return Math.max(DRAG_STEPS[0], Math.round(cell));
+}
+
 /** The default of saves written before `dragStepDefault` existed. */
 export const OLD_DRAG_STEP_DEFAULT = 24;
 

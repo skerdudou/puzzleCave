@@ -5,6 +5,7 @@ import {
   DRAG_STEPS,
   DRAG_STEP_DEFAULT,
   DragSteps,
+  dynamicDragStep,
   nearestDragStep,
   notchAt,
   notchOfStep,
@@ -151,4 +152,10 @@ test('sensitivity gauge: the notch nearest to a finger, kept on the gauge', () =
   expect(notchAt(260, 100, 160)).toBe(8);
   expect(notchAt(20, 100, 160)).toBe(0);
   expect(notchAt(900, 100, 160)).toBe(8);
+});
+
+test('dynamic drag: a board cell on the screen, never under the most sensitive notch', () => {
+  expect(dynamicDragStep(38.4)).toBe(38);
+  expect(dynamicDragStep(21.7)).toBe(22);
+  expect(dynamicDragStep(9)).toBe(16);
 });
