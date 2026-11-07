@@ -90,6 +90,20 @@ export class AmbienceView {
       glow: `ambience-glow-${id}`,
       vignette: `ambience-vignette-${id}`,
     };
+    scene.game.renderer.on(Phaser.Renderer.Events.RESTORE_WEBGL, this.restore, this);
+  }
+
+  /**
+   * The WebGL context lost then restored (a phone's browser back from the background): Phaser
+   * uploads the textures again from their canvases, which the browser may have wiped meanwhile.
+   * The layers drawn once per layout are drawn again; the light and the dust, at the next frame.
+   */
+  private restore(): void {
+    if (!this.overlayTex) return;
+    this.drawRock();
+    this.drawGlow();
+    this.drawVignette();
+    this.overlayBlank = false;
   }
 
   /**
@@ -204,6 +218,7 @@ export class AmbienceView {
   }
 
   destroy(): void {
+    this.scene.game.renderer.off(Phaser.Renderer.Events.RESTORE_WEBGL, this.restore, this);
     for (const o of [this.rock, this.overlay, this.warm, this.glow, this.vignette, this.band])
       o?.destroy();
     this.rock = this.overlay = this.warm = this.glow = this.vignette = null;

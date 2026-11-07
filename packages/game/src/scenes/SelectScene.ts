@@ -101,10 +101,18 @@ export class SelectScene extends Phaser.Scene {
     this.input.on('pointerupoutside', release);
     const onResize = () => this.scene.restart({ levelId: this.currentId() });
     this.scale.on('resize', onResize);
+    // The WebGL context lost then restored (a phone's browser back from the background), the
+    // mask's texture comes back empty, hiding the whole strip: drawn again.
+    const onRestore = () => {
+      if (this.clipMask) this.clipMask.needsUpdate = true;
+    };
+    this.game.renderer.on(Phaser.Renderer.Events.RESTORE_WEBGL, onRestore);
     this.events.once('shutdown', () => {
       this.scale.off('resize', onResize);
+      this.game.renderer.off(Phaser.Renderer.Events.RESTORE_WEBGL, onRestore);
       this.clip?.destroy();
       this.clip = undefined;
+      this.clipMask = undefined;
     });
     syncMusic(this, app.data.settings.sound, 'music-menu');
     setDebug({ scene: 'Select', chapter: chapters[this.ci]?.id, levelId: this.currentId() });
@@ -299,6 +307,7 @@ export class SelectScene extends Phaser.Scene {
       .filters?.external.addMask(this.clip, false, undefined, 'world');
     // the clip never changes: drawn into the mask once, not every frame
     if (mask) mask.autoUpdate = false;
+    this.clipMask = mask;
     if (!this.chapterOpen(this.ci)) return;
 
     const level = levelById(this.currentId());
@@ -524,6 +533,8 @@ export class SelectScene extends Phaser.Scene {
   private pageAt?: { x0: number; y0: number; pageW: number };
   /** the strip is seen through the grid's width */
   private clip?: Phaser.GameObjects.Graphics;
+  /** the clip drawn into the strip's mask (WebGL) */
+  private clipMask?: Phaser.Filters.Mask;
   /** from one grid to the next in the strip, CSS px */
   private pageW = 0;
   /** the strip is sliding to the next chapter: the finger does not move it meanwhile */
