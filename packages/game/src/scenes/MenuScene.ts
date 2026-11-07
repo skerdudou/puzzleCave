@@ -6,6 +6,7 @@ import { t } from '../i18n';
 import { onSceneKeyDown } from '../input/sceneKeys';
 import { konamiEntered } from '../konami';
 import { syncMusic } from '../music';
+import { showJournal } from '../journalPage';
 import { PREVIEW, PREVIEW_SHA } from '../preview';
 import { COLORS, KeyFocus, dpr, makeButton, px, sameWidth, textStyle } from '../ui';
 import { version } from '../../package.json';
@@ -28,7 +29,7 @@ export class MenuScene extends Phaser.Scene {
     const play = () => this.scene.start('Select');
     const trophies = () => this.scene.start('Achievements');
     const options = () => this.scene.start('Options');
-    const items = [
+    const items: { id: string; button: Phaser.GameObjects.Text; press: () => void }[] = [
       { id: 'play', button: makeButton(this, cx, cy, t('play'), play, 20), press: play },
       {
         id: 'options',
@@ -43,6 +44,13 @@ export class MenuScene extends Phaser.Scene {
     ];
     // one column of buttons as wide as the widest
     sameWidth(items.map((i) => i.button));
+    // the preview only: its update journal (updateLog.ts), on a page of its own
+    if (PREVIEW)
+      items.push({
+        id: 'journal',
+        button: makeButton(this, cx, cy + px(160), 'Journal', showJournal, 12),
+        press: showJournal,
+      });
     const focus = new KeyFocus(items);
     const konami = new KonamiCode();
     // arrows or Tab, then Enter; Enter alone plays
