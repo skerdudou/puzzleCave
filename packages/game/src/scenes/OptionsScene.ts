@@ -225,8 +225,11 @@ export class OptionsScene extends Phaser.Scene {
       const left = cx - width / 2;
       const xOf = (i: number) => left + (i * width) / (DRAG_NOTCHES - 1);
       let notch = notchOfStep(s.dragStep);
+      // the gauge's row: `y` goes on down the screen while the gauge stays (redrawn on a move)
+      const gy = y;
       const track = this.add.graphics();
       const draw = () => {
+        const y = gy;
         const h = px(4);
         track.clear();
         track.fillStyle(0x15131c, 1).fillRect(left, y - h / 2, width, h);
@@ -239,7 +242,6 @@ export class OptionsScene extends Phaser.Scene {
         }
       };
       const knob = makeButton(this, xOf(notch), y, ' ', () => {}, 14);
-      const gy = y;
       const moveTo = (i: number) => {
         notch = i;
         knob.setX(xOf(i));
@@ -267,7 +269,9 @@ export class OptionsScene extends Phaser.Scene {
         .rectangle(left - hitH / 2, y - hitH / 2, width + hitH, hitH, 0, 0)
         .setOrigin(0)
         .setInteractive({ useHandCursor: true });
-      knob.setDepth(1);
+      // the knob (and its frame, a depth under it) over the track
+      track.setDepth(1);
+      knob.setDepth(3);
       const grab = (p: Phaser.Input.Pointer) => {
         this.gaugePointer = p.id;
         this.drag = null;
@@ -361,7 +365,12 @@ export class OptionsScene extends Phaser.Scene {
     y += rowStep;
     if (s.touchControl === 'drag') {
       label(t('drag'));
-      gauge();
+      const modes = { dynamic: t('dragDynamic'), fixed: t('dragFixed') };
+      button('dragMode', cx, y, modes[s.dragMode], () =>
+        change(() => (s.dragMode = s.dragMode === 'dynamic' ? 'fixed' : 'dynamic')),
+      );
+      y += rowStep;
+      if (s.dragMode === 'fixed') gauge();
       const hold = t('labelValue', {
         label: t('dragHold'),
         value: s.dragHold ? t('on') : t('off'),
