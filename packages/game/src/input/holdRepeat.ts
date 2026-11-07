@@ -41,6 +41,16 @@ export class HoldRepeat {
     this.schedule(repeatDelays(this.rate()).initial);
   }
 
+  /**
+   * Like `press`, but the first move is already made (a drag just took a step): only the repeat,
+   * after the initial delay. Called again at each step of the drag, it starts over, so the
+   * repeat only comes once the finger rests.
+   */
+  follow(id: number, dir: Dir, stillHeld: () => boolean = () => true): void {
+    this.held = { id, dir, stillHeld, emit: this.emit };
+    this.schedule(repeatDelays(this.rate()).initial);
+  }
+
   /** Finger `id` lifted, slid off the button or was cancelled (other fingers: no effect). */
   release(id: number): void {
     if (this.held?.id === id) this.reset();

@@ -26,6 +26,8 @@ export interface Settings {
    * default when it changes (a value the player chose stays).
    */
   dragStepDefault: number;
+  /** continuous drag: a finger held still after a move keeps moving that way (key repeat) */
+  dragHold: boolean;
   vibration: boolean;
   repeatRate: number;
   /** touch control: continuous drag (default) or tap zones; the d-pad works with both */
@@ -248,6 +250,7 @@ export function defaultSave(): SaveData {
       lang: null,
       dragStep: DRAG_STEP_DEFAULT,
       dragStepDefault: DRAG_STEP_DEFAULT,
+      dragHold: false,
       repeatRate: 10,
       vibration: true,
       touchControl: 'drag',
@@ -295,6 +298,7 @@ function sanitiseSettings(raw: unknown): Settings {
     dragStep:
       isNum(s.dragStep) && s.dragStep !== savedDefault ? nearestDragStep(s.dragStep) : d.dragStep,
     dragStepDefault: d.dragStepDefault,
+    dragHold: typeof s.dragHold === 'boolean' ? s.dragHold : d.dragHold,
     repeatRate: clampNumber(s.repeatRate, 4, 20, d.repeatRate),
     vibration: typeof s.vibration === 'boolean' ? s.vibration : d.vibration,
     touchControl: touchControlOf(s),

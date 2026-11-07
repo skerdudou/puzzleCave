@@ -77,8 +77,12 @@ level to unlock the one after next (a level you are stuck on can be skipped); fi
   - **Drag** (the default): drag anywhere on the play area and keep your finger down: you take
     one step each time your finger travels a short distance, so a long drag walks several cells;
     steer by dragging the other way (right, then up…) without lifting your finger. A simple tap
-    does nothing. Set the distance per step in Options (**Drag: distance per move**, shown in
-    this mode only; 40 px by default, about a fingertip; lower is more sensitive);
+    does nothing. Set how sensitive it is in Options (**Drag: sensitivity**, shown in this mode
+    only): a gauge from *less sensitive* (a longer distance per step) to *very sensitive*; the
+    default sits in the middle, a step every fingertip or so. With **Keep going when held**
+    (off by default), a finger that rests after a step keeps walking that way, at the **Repeat**
+    rate, until you lift it or drag another way: handy when the edge of the screen comes
+    before the end of the corridor;
   - **Tap zones**: the play area is cut in an X into four triangles, up, down, left and right,
     which work like the buttons of the d-pad: touch a triangle for one step that way (at once,
     as your finger lands), keep your finger on it to keep walking (after the same delay and at
@@ -88,7 +92,9 @@ level to unlock the one after next (a level you are stuck on can be skipped); fi
     them, a finger that just missed Undo or a d-pad button does not walk): the X is centred on
     what remains of the play area, and the lit triangle never covers them;
   - in both modes, the on-screen **d-pad**: tap for one step, hold a button to keep walking (at
-    the **Repeat** rate set in Options);
+    the **Repeat** rate set in Options). Its touch area is a little bigger than its buttons and
+    cut in an X from its centre, corners included; slide your finger to another direction to
+    turn without lifting it;
   - the undo and restart buttons are on screen;
   - on phones that support it (not iPhone), a short **vibration** tells you a move did not
     happen (a wall, a stuck block, a door without a key; once per press, not at every repeat);
