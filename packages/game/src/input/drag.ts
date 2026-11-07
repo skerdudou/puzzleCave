@@ -22,6 +22,31 @@ export function shiftDragStep(v: number, by: 1 | -1): number {
   return DRAG_STEPS[Math.min(DRAG_STEPS.length - 1, Math.max(0, i + by))]!;
 }
 
+/**
+ * The sensitivity gauge in Options: one notch per offered distance, from the least sensitive
+ * (notch 0, the longest distance) to the most sensitive (the last notch, the shortest).
+ */
+export const DRAG_NOTCHES = DRAG_STEPS.length;
+
+/** The gauge's notch of a distance per move (the offered one closest to it). */
+export function notchOfStep(step: number): number {
+  return (
+    DRAG_NOTCHES - 1 - DRAG_STEPS.indexOf(nearestDragStep(step) as (typeof DRAG_STEPS)[number])
+  );
+}
+
+/** The distance per move of a notch of the gauge (kept within it). */
+export function stepOfNotch(notch: number): number {
+  const i = Math.min(DRAG_NOTCHES - 1, Math.max(0, Math.round(notch)));
+  return DRAG_STEPS[DRAG_NOTCHES - 1 - i]!;
+}
+
+/** The notch nearest to `x` on a gauge drawn from `left`, `width` wide (notches at both ends). */
+export function notchAt(x: number, left: number, width: number): number {
+  const i = Math.round(((x - left) / width) * (DRAG_NOTCHES - 1));
+  return Math.min(DRAG_NOTCHES - 1, Math.max(0, i));
+}
+
 const OPPOSITE: Record<Dir, Dir> = { up: 'down', down: 'up', left: 'right', right: 'left' };
 const horizontal = (d: Dir) => d === 'left' || d === 'right';
 /** +1 for right/down (growing coordinates), −1 for left/up */

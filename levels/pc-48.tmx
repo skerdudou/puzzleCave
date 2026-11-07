@@ -6,7 +6,7 @@
   <property name="initialKeys" type="int" value="2"/>
   <property name="goldMoves" type="int" value="335"/>
   <property name="platinumMoves" type="int" value="304"/>
-  <property name="goldTime" type="int" value="52"/>
+  <property name="goldTime" type="int" value="65"/>
  </properties>
  <tileset firstgid="1" source="tileset.tsx"/>
  <layer id="1" name="terrain" width="23" height="22">

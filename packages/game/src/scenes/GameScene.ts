@@ -32,7 +32,14 @@ import { DEEP_THOUGHT, Stillness } from '../achievements';
 import { RunClock, countdown } from '../runClock';
 import { showNotice } from '../notice';
 import { SfxFeed, playSfx, type Sfx } from '../sfx';
-import { dpadLayout, dpadLayoutSide, isLandscape, isTouchDevice } from '../touch';
+import {
+  dpadDirAt,
+  dpadHitBox,
+  dpadLayout,
+  dpadLayoutSide,
+  isLandscape,
+  isTouchDevice,
+} from '../touch';
 import { arrowPixels, iconPixels } from '../render/frame';
 import {
   COLORS,
@@ -79,6 +86,13 @@ export class GameScene extends Phaser.Scene {
   private controls!: InputController;
   /** hold to repeat on the on-screen d-pad */
   private hold!: HoldRepeat;
+  /** the finger on the d-pad (it went down there), and the direction it holds (null: none) */
+  private padPointer: number | null = null;
+  private padDir: Dir | null = null;
+  /** the d-pad direction under (x, y), game px: null at its centre, undefined off it */
+  private padDirAt: (x: number, y: number) => Dir | null | undefined = () => undefined;
+  /** each d-pad button's frame, painted held or not */
+  private readonly padPaint = new Map<Dir, (held: boolean) => void>();
   /** continuous drags in progress, by pointer id */
   private readonly drags = new Map<number, DragSteps>();
   /** a drag has moved the player since the last press: its release is not a button click */
@@ -195,8 +209,11 @@ export class GameScene extends Phaser.Scene {
       (p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
         this.dragMoved = false;
         this.zonePress = false;
-        this.haptics.reset();
-        this.sounds.reset();
+        // a press on the d-pad has already started its feed (its first bump has vibrated)
+        if (p.id !== this.padPointer) {
+          this.haptics.reset();
+          this.sounds.reset();
+        }
         if (over.length) {
           this.drags.delete(p.id);
           return;
@@ -207,6 +224,8 @@ export class GameScene extends Phaser.Scene {
       },
     );
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
+      // the d-pad: the finger slides from one direction to another, or off it
+      if (p.id === this.padPointer) this.padFollow(p);
       // a finger that slides off its tap zone stops, like one sliding off a d-pad button
       if (this.zoneHeld?.id === p.id && (!p.isDown || this.zoneUnder(p) !== this.zoneHeld.dir))
         this.releaseZone(p.id);
@@ -216,13 +235,20 @@ export class GameScene extends Phaser.Scene {
         this.drags.delete(p.id);
         return;
       }
+      let last: Dir | undefined;
       for (const dir of drag.move(p.x / dpr(), p.y / dpr())) {
         this.dragMoved = true;
         this.handle({ type: 'move', dir });
+        last = dir;
       }
+      // Options › keep going when held: once the finger rests after a step, the moves go on
+      // that way at the key repeat rate, until it is lifted or the drag takes another step
+      if (last && app.data.settings.dragHold && !this.finished && !this.timedOut)
+        this.hold.follow(p.id, last, () => p.isDown && this.drags.get(p.id) === drag);
     });
     // touchend and touchcancel both come as a pointer up (outside: released off the canvas)
     const release = (p: Phaser.Input.Pointer) => {
+      if (p.id === this.padPointer) this.padEnd();
       this.drags.delete(p.id);
       this.hold.release(p.id);
       this.releaseZone(p.id);
@@ -262,6 +288,8 @@ export class GameScene extends Phaser.Scene {
       this.hold.reset();
       this.drags.clear();
       this.zoneHeld = null;
+      this.padPointer = null;
+      this.padDir = null;
       this.ambience.destroy();
       this.board.destroy();
     });
@@ -316,6 +344,7 @@ export class GameScene extends Phaser.Scene {
     this.timedOut = true;
     this.hold.reset();
     this.releaseZone();
+    this.padEnd();
     this.drags.clear();
     this.timeText?.setText(`${t('timeLeft')} ${formatTime(0)}`).setColor(WARN_COLOR);
     vibrate('fail', app.data.settings.vibration);
@@ -560,6 +589,7 @@ export class GameScene extends Phaser.Scene {
     });
     this.hold.reset();
     this.releaseZone();
+    this.padEnd();
     // the bottom of the header: every text drawn so far (buttons, counters, name, MASTER) and
     // the key's icon
     const header = boundsOf(
@@ -588,38 +618,31 @@ export class GameScene extends Phaser.Scene {
       const pad = side
         ? dpadLayoutSide(w, this.scale.height, px(DPAD), px(16))
         : dpadLayout(w, this.scale.height, px(DPAD));
-      const padBox = boundsOf(
-        Object.values(pad).map((r) => ({
-          x: r.x / dpr(),
-          y: r.y / dpr(),
-          w: r.w / dpr(),
-          h: r.h / dpr(),
-        })),
-      );
+      // one touch area for the whole d-pad, a little bigger than its buttons and cut in an X
+      // from its centre (dpadDirAt): corners count, and a finger slides from one direction to
+      // another without lifting
+      const hit = dpadHitBox(pad, w, this.scale.height);
+      const padBox = { x: hit.x / dpr(), y: hit.y / dpr(), w: hit.w / dpr(), h: hit.h / dpr() };
       this.zoneArea = besideColumn(zoneArea(viewW, viewH, headerBottom, { box: padBox, side }));
+      this.padEnd();
+      const zone = this.add
+        .rectangle(hit.x, hit.y, hit.w, hit.h, hex(COLORS.panel), 0)
+        .setOrigin(0)
+        .setInteractive();
+      this.padDirAt = (x, y) => (zone.active ? dpadDirAt(pad, hit, x, y) : undefined);
+      zone.on('pointerdown', (p: Phaser.Input.Pointer) => {
+        this.padPointer = p.id;
+        this.padFollow(p);
+      });
+      this.hud.push(zone);
+      this.padPaint.clear();
       for (const dir of ['up', 'down', 'left', 'right'] as const) {
         const r = pad[dir];
-        const box = this.add
-          .rectangle(r.x, r.y, r.w, r.h, hex(COLORS.panel), 0)
-          .setOrigin(0)
-          .setInteractive();
-        // the frame is drawn apart: the invisible rectangle stays the hit area
+        // the frame lights up while its direction is held
         const frame = this.add.graphics().setPosition(r.x, r.y);
-        let held = false;
-        const paint = () => paintFrame(frame, Math.round(r.w), Math.round(r.h), held);
-        paint();
-        box.on('pointerdown', () => ((held = true), paint()));
-        box.on('pointerout', () => ((held = false), paint()));
-        box.on('pointerup', () => ((held = false), paint()));
-        box.on('pointerupoutside', () => ((held = false), paint()));
-        // hold to repeat; stops on release, when the finger slides off or the touch is cancelled
-        const onBox = (p: Phaser.Input.Pointer) =>
-          p.isDown && box.active && p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h;
-        box.on('pointerdown', (p: Phaser.Input.Pointer) =>
-          this.hold.press(p.id, dir, () => onBox(p)),
-        );
-        box.on('pointerout', (p: Phaser.Input.Pointer) => this.hold.release(p.id));
-        box.on('pointerup', (p: Phaser.Input.Pointer) => this.hold.release(p.id));
+        const paint = (held: boolean) => paintFrame(frame, Math.round(r.w), Math.round(r.h), held);
+        paint(false);
+        this.padPaint.set(dir, paint);
         // a pixel arrow on a 7×7 grid, about 42 % of the button, centred
         const cell = Math.max(1, Math.round((0.42 * Math.min(r.w, r.h)) / 7 / px(2))) * px(2);
         const gx = r.x + (r.w - 7 * cell) / 2;
@@ -627,7 +650,7 @@ export class GameScene extends Phaser.Scene {
         const arrow = this.add.graphics().fillStyle(hex(COLORS.text), 1);
         for (const [c, row] of arrowPixels(dir))
           arrow.fillRect(Math.round(gx + c * cell), Math.round(gy + row * cell), cell, cell);
-        this.hud.push(box, frame, arrow);
+        this.hud.push(frame, arrow);
       }
       // the sound button: under the d-pad column (landscape), or at the left edge on the
       // d-pad's bottom row (portrait)
@@ -890,6 +913,35 @@ export class GameScene extends Phaser.Scene {
     setDebug({ settings: { ...s } });
   }
 
+  /**
+   * The finger on the d-pad moved (or went down): the direction under it is held, with the hold
+   * to repeat, a new one at once (no lift needed); none at the centre; off the d-pad it stops.
+   */
+  private padFollow(p: Phaser.Input.Pointer): void {
+    const dir = p.isDown ? this.padDirAt(p.x, p.y) : undefined;
+    if (dir === undefined) return this.padEnd();
+    if (dir === this.padDir) return;
+    this.padShow(dir);
+    if (!dir) return this.hold.release(p.id);
+    // a new direction: a bump vibrates (and sounds) again
+    this.haptics.reset();
+    this.sounds.reset();
+    this.hold.press(p.id, dir, () => p.isDown && this.padPointer === p.id && this.padDir === dir);
+  }
+
+  /** The finger on the d-pad is lifted, cancelled or slid off: it stops. */
+  private padEnd(): void {
+    if (this.padPointer !== null) this.hold.release(this.padPointer);
+    this.padPointer = null;
+    this.padShow(null);
+  }
+
+  /** The d-pad's frames: `dir`'s held, the others not. */
+  private padShow(dir: Dir | null): void {
+    this.padDir = dir;
+    for (const [d, paint] of this.padPaint) paint(d === dir);
+  }
+
   /** The tap zone under a pointer (none outside their area). */
   private zoneUnder(p: Phaser.Input.Pointer): Dir | null {
     return zoneAt(p.x / dpr(), p.y / dpr(), this.zoneArea);
@@ -905,6 +957,7 @@ export class GameScene extends Phaser.Scene {
     const dir = zoneAt(x, y, this.zoneArea);
     if (!dir) return;
     this.releaseZone();
+    this.padEnd();
     this.zonePress = true;
     this.zoneHeld = { id: p.id, dir };
     this.lightZone(dir);
@@ -1071,6 +1124,7 @@ export class GameScene extends Phaser.Scene {
     this.controls.reset();
     this.hold.reset();
     this.releaseZone();
+    this.padEnd();
     const result: RunResult = {
       moves: this.session.state.moves,
       timeMs: Math.round(this.clock.elapsed(now)),

@@ -113,12 +113,16 @@ const zoneMoves = async (page: Page) => (await debug(page)).zoneMoves;
 const player = async (page: Page) => (await debug(page)).player;
 /** the d-pad's whole bounds, CSS px (its buttons are 56 px squares) */
 async function dpadBox(page: Page): Promise<Box> {
-  const c = Object.values((await debug(page)).dpad!);
+  const pad = (await debug(page)).dpad!;
+  const c = Object.values(pad);
   const xs = c.map(([x]) => x);
   const ys = c.map(([, y]) => y);
-  const x = Math.min(...xs) - 28;
-  const y = Math.min(...ys) - 28;
-  return { x, y, w: Math.max(...xs) + 28 - x, h: Math.max(...ys) + 28 - y };
+  // the touch area: the buttons (a size apart) and a fifth of a button around them
+  const size = pad.right![0] - pad.up![0];
+  const m = size / 2 + 0.2 * size;
+  const x = Math.min(...xs) - m;
+  const y = Math.min(...ys) - m;
+  return { x, y, w: Math.max(...xs) + m - x, h: Math.max(...ys) + m - y };
 }
 /** the bottom of the header (the key's icon included), CSS px */
 async function headerBottom(page: Page): Promise<number> {
@@ -330,12 +334,12 @@ test('options: the touch control switches, hides the drag distance, is saved and
   await page.touchscreen.tap(390 / 2, 740 / 2 + 56); // Options, under Play
   await expect.poll(async () => (await debug(page)).scene).toBe('Options');
   const buttons = async () => (await debug(page)).buttons!;
-  expect(await buttons()).toHaveProperty('drag-plus');
+  expect(await buttons()).toHaveProperty('drag');
   const [x, y] = (await buttons()).touchControl!;
   await page.touchscreen.tap(x, y);
   await expect.poll(async () => (await savedSettings(page)).touchControl).toBe('tap');
   // the drag distance only matters to the drag: not shown in tap mode
-  await expect.poll(async () => Object.keys(await buttons())).not.toContain('drag-plus');
+  await expect.poll(async () => Object.keys(await buttons())).not.toContain('drag');
   await page.reload();
   await expect.poll(async () => (await debug(page)).scene).toBe('Menu');
   expect((await savedSettings(page)).touchControl).toBe('tap');

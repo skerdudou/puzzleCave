@@ -1,6 +1,16 @@
 import { expect, test } from 'vitest';
 import type { Dir } from '@puzzlecave/core';
-import { DRAG_STEPS, DRAG_STEP_DEFAULT, DragSteps, nearestDragStep, shiftDragStep } from './drag';
+import {
+  DRAG_NOTCHES,
+  DRAG_STEPS,
+  DRAG_STEP_DEFAULT,
+  DragSteps,
+  nearestDragStep,
+  notchAt,
+  notchOfStep,
+  shiftDragStep,
+  stepOfNotch,
+} from './drag';
 
 /** the moves emitted by a finger going down at the first point then through the others */
 function drag(points: [number, number][], step = 10): Dir[] {
@@ -119,4 +129,26 @@ test('the offered distances: nearest and ± one notch, kept within range', () =>
   expect(shiftDragStep(24, -1)).toBe(20);
   expect(shiftDragStep(16, -1)).toBe(16);
   expect(shiftDragStep(80, 1)).toBe(80);
+});
+
+test('sensitivity gauge: notch 0 the least sensitive (80 px), the last the most (16 px)', () => {
+  expect(DRAG_NOTCHES).toBe(DRAG_STEPS.length);
+  expect(stepOfNotch(0)).toBe(80);
+  expect(stepOfNotch(DRAG_NOTCHES - 1)).toBe(16);
+  // the default sits in the middle
+  expect(notchOfStep(DRAG_STEP_DEFAULT)).toBe(4);
+  for (let i = 0; i < DRAG_NOTCHES; i++) expect(notchOfStep(stepOfNotch(i))).toBe(i);
+  // out of range: kept on the gauge
+  expect(stepOfNotch(-3)).toBe(80);
+  expect(stepOfNotch(42)).toBe(16);
+});
+
+test('sensitivity gauge: the notch nearest to a finger, kept on the gauge', () => {
+  // 9 notches over 160 px: one every 20 px
+  expect(notchAt(100, 100, 160)).toBe(0);
+  expect(notchAt(129, 100, 160)).toBe(1);
+  expect(notchAt(180, 100, 160)).toBe(4);
+  expect(notchAt(260, 100, 160)).toBe(8);
+  expect(notchAt(20, 100, 160)).toBe(0);
+  expect(notchAt(900, 100, 160)).toBe(8);
 });

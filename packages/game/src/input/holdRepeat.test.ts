@@ -89,3 +89,25 @@ test('a press can bring its own emit (a tap zone): used for its move and its rep
   expect(moves).toEqual(['left', 'left']);
   h.reset();
 });
+
+test('follow: no move at once, the repeat after the initial delay, started over by each step', () => {
+  h.follow(1, 'right');
+  expect(moves).toEqual([]);
+  vi.advanceTimersByTime(150);
+  // the drag takes another step: the delay starts over
+  h.follow(1, 'right');
+  vi.advanceTimersByTime(150);
+  expect(moves).toEqual([]);
+  vi.advanceTimersByTime(50);
+  expect(moves).toEqual(['right']);
+  vi.advanceTimersByTime(300);
+  expect(moves).toHaveLength(4);
+  // a turn of the drag: the repeat goes the new way
+  h.follow(1, 'up');
+  vi.advanceTimersByTime(200);
+  expect(moves.at(-1)).toBe('up');
+  h.release(1);
+  const n = moves.length;
+  vi.advanceTimersByTime(1000);
+  expect(moves).toHaveLength(n);
+});

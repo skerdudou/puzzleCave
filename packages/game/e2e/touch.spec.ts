@@ -213,9 +213,9 @@ test('options: drag distance and vibrations are saved and used', async ({ page }
     await page.touchscreen.tap(x, y);
   };
   const saved = async () => (await storedSave(page))!.settings;
-  // 40 → 48 → 56 → 64 px per move
+  // the sensitivity gauge: notch 4 of 9 (40 px), then less sensitive: 48 → 56 → 64 px per move
   for (let i = 0; i < 3; i++) {
-    await tap('drag-plus');
+    await tap(`drag-${3 - i}`);
     await expect.poll(async () => (await saved()).dragStep).toBe([48, 56, 64][i]);
   }
   await tap('vibration');
@@ -237,4 +237,62 @@ test('options: drag distance and vibrations are saved and used', async ({ page }
   await page.waitForTimeout(200);
   expect(await field(page, 'player')).toEqual({ x: 3, y: 1 });
   expect(await vibrations(page)).toEqual([]); // vibrations off
+});
+
+test('d-pad: a corner between two buttons counts; sliding to another direction turns without lifting', async ({
+  page,
+}) => {
+  const f = await startPc01(page);
+  const pad = (await field(page, 'dpad')) as Record<string, [number, number]>;
+  const [rx] = pad.right!;
+  const [, uy] = pad.up!;
+  const [dx, dy] = pad.down!;
+  // the corner between up and right, nearer the right button's axis: right
+  await f.down(rx - 4, uy + 20);
+  await f.up();
+  await expect.poll(() => field(page, 'player')).toEqual({ x: 2, y: 1 });
+  // hold right, then slide down to the down button, still pressed: the repeat turns down (a
+  // wall: bumps), and stops when lifted
+  await f.down(...pad.right!);
+  await expect.poll(() => field(page, 'moves'), { timeout: 2000 }).toBeGreaterThanOrEqual(3);
+  await f.to(dx, dy, 8);
+  const moved = (await field(page, 'moves')) as number;
+  const tries = async () => ((await field(page, 'attempts')) as number) - moved;
+  await expect.poll(tries).toBeGreaterThanOrEqual(3);
+  expect(await field(page, 'moves')).toBe(moved);
+  await f.up();
+  await page.waitForTimeout(150);
+  const after = await tries();
+  await page.waitForTimeout(500);
+  expect(await tries()).toBe(after);
+});
+
+test('options: keep going when held, off by default; on, a drag held still goes on', async ({
+  page,
+}) => {
+  // off: a drag of one step held still makes one move
+  let f = await startPc01(page);
+  await f.down(X0, Y0);
+  await f.by(STEP + 4, 0);
+  await page.waitForTimeout(800);
+  expect(await field(page, 'moves')).toBe(1);
+  await f.up();
+  // on (Options)
+  await page.goto('/');
+  await expect.poll(() => field(page, 'scene')).toBe('Menu');
+  await page.touchscreen.tap(390 / 2, 740 / 2 + 56); // Options, under Play
+  await expect.poll(() => field(page, 'scene')).toBe('Options');
+  const [hx, hy] = ((await field(page, 'buttons')) as Record<string, [number, number]>).dragHold!;
+  await page.touchscreen.tap(hx, hy);
+  await expect.poll(async () => (await storedSave(page))!.settings.dragHold).toBe(true);
+  f = await startPc01(page);
+  await f.down(X0, Y0);
+  await f.by(STEP + 4, 0);
+  // the finger rests: the moves go on along the corridor, until lifted
+  await expect.poll(() => field(page, 'moves'), { timeout: 3000 }).toBeGreaterThanOrEqual(4);
+  await f.up();
+  await page.waitForTimeout(150);
+  const n = await field(page, 'moves');
+  await page.waitForTimeout(500);
+  expect(await field(page, 'moves')).toBe(n);
 });

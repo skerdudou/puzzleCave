@@ -7,6 +7,7 @@ import { TILE_ORDER, setMapProperty, writeTmx } from '@puzzlecave/tiled';
 import {
   TIME_RULE,
   estimateTime,
+  fatigueFactor,
   goldTimeFor,
   niceSeconds,
   parseTimesArgs,
@@ -42,7 +43,7 @@ test('features: a refused move or a losing solution is an error', () => {
 });
 
 test('rule: per move plus per turn, never under the input-rate floor', () => {
-  const rule = { perMove: 0.1, perTurn: 0.2, minPerMove: 0 };
+  const rule = { perMove: 0.1, perTurn: 0.2, minPerMove: 0, fatigue: 0, fatigueTurns: 50 };
   const f = feat({ moves: 10, turns: 4, interactions: 2 });
   expect(estimateTime(f, rule)).toBeCloseTo(0.1 * 10 + 0.2 * 4);
   // floor: 10 moves × 0.5 s
@@ -50,8 +51,17 @@ test('rule: per move plus per turn, never under the input-rate floor', () => {
   // the fitted rule: a straight corridor is bounded by the input rate
   expect(estimateTime(feat({ moves: 100 }))).toBeCloseTo(100 * TIME_RULE.minPerMove);
   expect(estimateTime(feat({ moves: 100, turns: 40 }))).toBeCloseTo(
-    100 * TIME_RULE.perMove + 40 * TIME_RULE.perTurn,
+    (100 * TIME_RULE.perMove + 40 * TIME_RULE.perTurn) * fatigueFactor(40),
   );
+});
+
+test('fatigue: +5 % each time the turns double past 50', () => {
+  expect(fatigueFactor(0)).toBe(1);
+  expect(fatigueFactor(50)).toBeCloseTo(1.05);
+  expect(fatigueFactor(150)).toBeCloseTo(1.1);
+  expect(fatigueFactor(750)).toBeCloseTo(1.2);
+  // a long level: 0.35 s a turn, then the fatigue
+  expect(estimateTime(feat({ moves: 400, turns: 150 }))).toBeCloseTo((20 + 52.5) * 1.1);
 });
 
 test('rounding: whole seconds below a minute, 5 s steps above', () => {
