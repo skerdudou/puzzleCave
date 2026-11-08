@@ -371,12 +371,6 @@ export class OptionsScene extends Phaser.Scene {
       );
       y += rowStep;
       if (s.dragMode === 'fixed') gauge();
-      const hold = t('labelValue', {
-        label: t('dragHold'),
-        value: s.dragHold ? t('on') : t('off'),
-      });
-      button('dragHold', cx, y, hold, () => change(() => (s.dragHold = !s.dragHold)));
-      y += rowStep;
     }
     label(t('repeat'));
     stepper(

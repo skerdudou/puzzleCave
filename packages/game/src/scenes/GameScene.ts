@@ -242,16 +242,10 @@ export class GameScene extends Phaser.Scene {
         this.drags.delete(p.id);
         return;
       }
-      let last: Dir | undefined;
       for (const dir of drag.move(p.x / dpr(), p.y / dpr())) {
         this.dragMoved = true;
         this.handle({ type: 'move', dir });
-        last = dir;
       }
-      // Options › keep going when held: once the finger rests after a step, the moves go on
-      // that way at the key repeat rate, until it is lifted or the drag takes another step
-      if (last && app.data.settings.dragHold && !this.finished && !this.timedOut)
-        this.hold.follow(p.id, last, () => p.isDown && this.drags.get(p.id) === drag);
     });
     // touchend and touchcancel both come as a pointer up (outside: released off the canvas)
     const release = (p: Phaser.Input.Pointer) => {
