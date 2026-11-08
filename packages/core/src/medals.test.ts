@@ -42,11 +42,11 @@ test.each([
 });
 
 test.each([
-  // [goldMoves, goldTime, silver s, bronze s]: g × (moves ratio) × 1.25 / 1.8, minimum gaps 3 / 6 s
+  // [goldMoves, goldTime, silver s, bronze s]: g × (moves ratio) × 1.25 / 1.8, minimum gaps 3 / 6 s, up to the next tenth
   [40, 20, 27.5, 45],
   [10, 4, 7, 10.8],
-  [610, 85, 116.88, 191.38],
-  [100, 10, 13.75, 22.5],
+  [610, 85, 116.9, 191.4],
+  [100, 10, 13.8, 22.5],
 ])(
   'time with moves: %i moves, gold %d s → silver %d s, bronze %d s',
   (gm, gold, silver, bronze) => {
@@ -61,8 +61,8 @@ test.each([
 test('time follows a silverMoves override (Twins: 25 moves, silverMoves 29, goldTime 5)', () => {
   const t = resolveThresholds({ goldMoves: 25, silverMoves: 29, goldTime: 5 });
   expect(t.moves).toEqual({ gold: 25, silver: 29, bronze: 32 });
-  // silver 5 × 29/25 × 1.25 = 7.25 < gold + 3: the minimum gap applies; bronze 5 × 32/25 × 1.8
-  expect(t.time).toEqual({ gold: 5, silver: 8, bronze: 11.52 });
+  // silver 5 × 29/25 × 1.25 = 7.25 < gold + 3: the minimum gap applies; bronze 5 × 32/25 × 1.8 = 11.52, up to 11.6
+  expect(t.time).toEqual({ gold: 5, silver: 8, bronze: 11.6 });
 });
 
 test('explicit silverTime / bronzeTime are kept whatever the moves', () => {
@@ -73,8 +73,8 @@ test('explicit silverTime / bronzeTime are kept whatever the moves', () => {
 test('overrides take precedence', () => {
   const t = resolveThresholds({ goldMoves: 40, silverMoves: 41, bronzeTime: 99, goldTime: 20 });
   expect(t.moves).toEqual({ gold: 40, silver: 41, bronze: 50 });
-  // silver time follows the silverMoves override: 20 × 41/40 × 1.25
-  expect(t.time).toEqual({ gold: 20, silver: 25.63, bronze: 99 });
+  // silver time follows the silverMoves override: 20 × 41/40 × 1.25 = 25.625, up to 25.7
+  expect(t.time).toEqual({ gold: 20, silver: 25.7, bronze: 99 });
 });
 
 test('without gold: no tier, no master limits', () => {
@@ -105,10 +105,10 @@ test('masterMedalFor: grand master within platinumMoves, master within goldMoves
 });
 
 test('masterMedalFor: grand master also within the silver time, master whatever the time', () => {
-  // goldTime 85 s with goldMoves 610 (silver 671 moves, bronze 763): silver 116.88 s, bronze 191.38 s
+  // goldTime 85 s with goldMoves 610 (silver 671 moves, bronze 763): silver 116.9 s, bronze 191.4 s
   const th = resolveThresholds({ goldMoves: 610, platinumMoves: 538, goldTime: 85 });
   expect(masterMedalFor(th, 538, 116_880)).toBe('grandMaster');
-  expect(masterMedalFor(th, 538, 116_890)).toBe('master');
+  expect(masterMedalFor(th, 538, 116_910)).toBe('master');
   expect(masterMedalFor(th, 500, 150_000)).toBe('master');
   expect(masterMedalFor(th, 538, Infinity)).toBe('master');
   expect(masterMedalFor(th, 610, 1_000)).toBe('master');
@@ -125,9 +125,9 @@ test('without platinumMoves (or platinumMoves = goldMoves) the two limits coinci
   }
   // with time medals, a slower finish within the same move limit is master only
   const timed = resolveThresholds({ goldMoves: 20, goldTime: 10 });
-  // (silver time: 10 × 22/20 × 1.25 = 13.75 s)
-  expect(masterMedalFor(timed, 20, 13_750)).toBe('grandMaster');
-  expect(masterMedalFor(timed, 20, 13_760)).toBe('master');
+  // (silver time: 10 × 22/20 × 1.25 = 13.75, up to 13.8 s)
+  expect(masterMedalFor(timed, 20, 13_800)).toBe('grandMaster');
+  expect(masterMedalFor(timed, 20, 13_810)).toBe('master');
 });
 
 test('medalFor : value ≤ threshold', () => {

@@ -62,7 +62,7 @@ test('master mode: locked before gold, no undo, water drowns, grand master', asy
   expect(rows[0]!.tiers.map((t) => t.medal)).toEqual(['gold', 'silver', 'bronze']);
   const grandMaster = level.thresholds.platinumMoves!;
   expect(rows[2]!.tiers).toEqual([
-    { medal: 'master', text: `≤ ${gold} moves · time ≤ 0:27.11` },
+    { medal: 'master', text: `≤ ${gold} moves · time ≤ 0:27.20` },
     { medal: 'grandMaster', text: `≤ ${grandMaster} moves · time ≤ 0:16.60` },
   ]);
   expect(await field(page, 'masterLine')).toBe('');
@@ -216,9 +216,9 @@ test('master mode: a countdown to the bronze time, paused while hidden; past it 
   page,
 }) => {
   // pc-31: goldTime 12 s and 47 gold moves (bronze 59 moves), so the bronze time is
-  // 12 × 59/47 × 1.8 = 27.11 s
+  // 12 × 59/47 × 1.8 = 27.11, up to the next tenth: 27.2 s
   expect(level.thresholds.goldTime).toBe(12);
-  const LIMIT = 27_110;
+  const LIMIT = 27_200;
   await page.clock.install();
   await withMasterOpen(page);
   await page.goto('/');
@@ -255,7 +255,7 @@ test('master mode: a countdown to the bronze time, paused while hidden; past it 
   await left(LIMIT - 18_000 - RUN);
   expect(await field(page, 'timeWarn')).toBe(false);
   await after(3000);
-  // the last quarter of a 27.11 s limit: the countdown warns
+  // the last quarter of a 27.2 s limit: the countdown warns
   await left(LIMIT - 21_000 - 2 * RUN);
   expect(await field(page, 'timeWarn')).toBe(true);
 
@@ -298,7 +298,7 @@ test('normal mode: no time limit, the clock does not count while hidden', async 
   expect(await field(page, 'timeLeftMs')).toBeNull();
   await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
   await play(page, solution.slice(0, 1));
-  // past pc-31's bronze time (27.11 s): nothing happens in normal mode
+  // past pc-31's bronze time (27.2 s): nothing happens in normal mode
   await page.clock.fastForward(30_000);
   await page.clock.runFor(50);
   await setHidden(page, true);
@@ -310,7 +310,7 @@ test('normal mode: no time limit, the clock does not count while hidden', async 
   await page.clock.runFor(500);
   await expect.poll(() => field(page, 'scene')).toBe('Result');
   // 25.1 s of play: the hidden minute is not in the time
-  expect(((await field(page, 'lastResult')) as { timeMs: number }).timeMs).toBe(25_100);
+  expect(((await field(page, 'lastResult')) as { timeMs: number }).timeMs).toBe(30_100);
   await page.clock.resume();
 });
 
@@ -372,7 +372,7 @@ test('master mode: within the grand master moves but slower than the silver time
   page,
 }) => {
   // pc-31: goldTime 12 s, and 47 gold moves, so the silver time (grand master) is
-  // 12 × 52/47 × 1.25 = 16.60 s and master mode's limit (the bronze time) 27.11 s
+  // 12 × 52/47 × 1.25 = 16.6 s and master mode's limit (the bronze time) 27.2 s
   expect(level.thresholds.goldTime).toBe(12);
   expect(solution.length).toBeLessThanOrEqual(level.thresholds.platinumMoves!);
   await page.clock.install();
@@ -395,7 +395,7 @@ test('master mode: within the grand master moves but slower than the silver time
   const last = (await field(page, 'lastResult')) as { mode: string; timeMs: number };
   expect(last.mode).toBe('master');
   expect(last.timeMs).toBeGreaterThan(16_600);
-  expect(last.timeMs).toBeLessThan(27_110);
+  expect(last.timeMs).toBeLessThan(27_200);
   // the moves of grand master, the time of bronze: master
   expect(await field(page, 'lastAward')).toEqual({
     moves: 'gold',
@@ -404,14 +404,14 @@ test('master mode: within the grand master moves but slower than the silver time
   });
   expect(await field(page, 'resultReveal')).toContain('master:master:new');
   expect(await field(page, 'resultMasterLine')).toMatch(
-    new RegExp(`^Master: ${solution.length} · 0:14\\.\\d\\d$`),
+    new RegExp(`^Master: ${solution.length} · 0:20\\.\\d\\d$`),
   );
   await page.clock.resume();
   await page.keyboard.press('Escape');
   await expect.poll(() => field(page, 'scene')).toBe('Select');
   expect(await field(page, 'masterMedal')).toBe('master');
   expect(await field(page, 'masterLine')).toMatch(
-    new RegExp(`^Master: ${solution.length} moves · 0:14\\.\\d\\d$`),
+    new RegExp(`^Master: ${solution.length} moves · 0:20\\.\\d\\d$`),
   );
 });
 

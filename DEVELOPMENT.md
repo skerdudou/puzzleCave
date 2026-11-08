@@ -187,7 +187,8 @@ time it goes to the background or to another menu screen. On the dev server the 
   and bronze = `max(t × (B/g) × 1.8, t + 6)`, where `t` = `goldTime`, `g` = `goldMoves` and `S` / `B`
   = the silver / bronze move limits (`silverMoves` / `bronzeMoves` overrides included): a player
   who earns silver or bronze plays more moves and plays them more slowly. Without `goldMoves`
-  the old rule applies (`t × 1.25` and `t × 1.5`, same minimum gaps). `silverTime` / `bronzeTime`
+  the old rule applies (`t × 1.25` and `t × 1.5`, same minimum gaps). Both are rounded up to the
+  next tenth of a second (16.5957 → 16.6). `silverTime` / `bronzeTime`
   override them. Master mode's time limit (bronze) and grand master's time (silver) follow.
 - `platinumMoves`: the best known solution length (master class, often another route), the
   **grand master** move limit (the "platinum limit" of the tools below); `goldMoves` when it is
@@ -224,10 +225,10 @@ time it goes to the background or to another menu screen. On the dev server the 
   first move and does not count while the page is hidden — the same clock measures the time
   medals). A platinum route is often longer to find than to play, but it must be played within
   the silver time for grand master: keep `silverTime` (or `goldTime`) above the time the platinum
-  solution takes. The master row of the threshold lines (`thresholdRows`) reads "Master ≤ 610 ·
-  Grand master ≤ 538 & ≤ 1:56.88 · limit ≤ 3:11.38"; where that does not fit (`drawThresholdLine`)
-  it falls back to "Master ♛ ≤ 610 ✦ ≤ 538 & …", then, on a narrow phone, to the marks alone
-  ("♛ ≤ 610 ✦ ≤ 538 & ≤ 1:56.88 · limit ≤ 3:11.38"). The save keeps the best master run apart
+  solution takes. The master row of the threshold lines (`thresholdRows`) is drawn one line per
+  medal: "Master ≤ 610 moves · time ≤ 3:11.40" (master mode's time limit, the bronze time), then
+  "Grand master ≤ 538 moves · time ≤ 1:56.90" (the silver time); where a name does not fit
+  (`drawThresholdLine`) the line keeps the mark alone ("♛ ≤ 610 moves · …"). The save keeps the best master run apart
   (`masterBestMoves`, `masterBestTimeMs`, two separate minima, maybe of different runs), shown on
   its own line (`masterLineText`) under the name of the medal saved ("Grand master: 538 moves ·
   1:40.12"), never one worked out from those minima, or of the mode without a medal ("Master

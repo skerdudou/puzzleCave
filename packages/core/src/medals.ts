@@ -42,7 +42,9 @@ export const MASTER_RANK: Record<MasterMedal, number> = { grandMaster: 2, master
 const SILVER_PACE = 1.25;
 const BRONZE_PACE = 1.8;
 
-const centi = (x: number) => Math.round(x * 100) / 100;
+// up to the next tenth of a second (16.5957 → 16.6, 27.1149 → 27.2); the product rounded to
+// the microsecond first, so that a float a hair above a tenth (13.750000001) stays on it
+const tenthUp = (x: number) => Math.ceil(Math.round(x * 1e6) / 1e5) / 10;
 
 export function resolveThresholds(o: ThresholdOverrides): Thresholds {
   const t: Thresholds = {};
@@ -62,8 +64,8 @@ export function resolveThresholds(o: ThresholdOverrides): Thresholds {
     const bronzeFactor = t.moves ? (t.moves.bronze / t.moves.gold) * BRONZE_PACE : 1.5;
     t.time = {
       gold: g,
-      silver: o.silverTime ?? centi(Math.max(g * silverFactor, g + 3)),
-      bronze: o.bronzeTime ?? centi(Math.max(g * bronzeFactor, g + 6)),
+      silver: o.silverTime ?? tenthUp(Math.max(g * silverFactor, g + 3)),
+      bronze: o.bronzeTime ?? tenthUp(Math.max(g * bronzeFactor, g + 6)),
     };
   }
   if (o.goldMoves !== undefined) {

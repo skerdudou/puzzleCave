@@ -20,7 +20,7 @@ test('moves row: gold, silver, bronze limits derived from goldMoves', () => {
 test('time row is formatted like the clock, after the moves row', () => {
   const rows = thresholdRows(resolveThresholds({ goldMoves: 52, goldTime: 12.5, bronzeTime: 30 }));
   expect(rows.map((r) => r.kind)).toEqual(['moves', 'time']);
-  expect(rows[1]!.tiers.map((t) => t.text)).toEqual(['≤ 0:12.50', '≤ 0:17.43', '≤ 0:30.00']);
+  expect(rows[1]!.tiers.map((t) => t.text)).toEqual(['≤ 0:12.50', '≤ 0:17.50', '≤ 0:30.00']);
 });
 
 test('no gold threshold: no row', () => {
@@ -35,7 +35,7 @@ test('master mode: its own third row (master, grand master, time limit), only wh
   // master within gold and master mode's time limit (bronze time), grand master within
   // platinumMoves and the silver time
   expect(rows[2]!.tiers).toEqual([
-    { medal: 'master', text: '≤ 430 moves · time ≤ 2:15.13' },
+    { medal: 'master', text: '≤ 430 moves · time ≤ 2:15.20' },
     { medal: 'grandMaster', text: '≤ 278 moves · time ≤ 1:22.50' },
   ]);
   expect(thresholdRows(th, false).map((r) => r.kind)).toEqual(['moves', 'time']);
@@ -47,7 +47,7 @@ test('master mode: its own third row (master, grand master, time limit), only wh
   const timed = thresholdRows(resolveThresholds({ goldMoves: 20, goldTime: 10 }), true);
   expect(timed[2]!.tiers).toEqual([
     { medal: 'master', text: '≤ 20 moves · time ≤ 0:22.50' },
-    { medal: 'grandMaster', text: '≤ 20 moves · time ≤ 0:13.75' },
+    { medal: 'grandMaster', text: '≤ 20 moves · time ≤ 0:13.80' },
   ]);
 });
 
