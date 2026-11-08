@@ -158,7 +158,7 @@ test('pc-01: a longer saved solution is beaten, saved and applied with its lower
   // the 26-move optimum with a detour (right and back again)
   writeFileSync(
     file,
-    '# best known — not proven optimal (proven lower bound ≥ 24)\nRLRRRRRRRRDDLLLLLLDRDLLDLUUL\n',
+    '# best known — not proven optimal (proven lower bound ≥ 24)\nRLRRRRRRLDDDRRLLLLLLDDRRRRRR\n',
   );
   const out = join(tmp, 'out');
   const r = await exploreCommand(dir, ['pc-01'], { ...opts, save: out, apply: true });
@@ -195,10 +195,10 @@ test('--from: starts from the shortest winning <id>-<n>.txt that beats the saved
   const dir = join(tmp, 'levels-from');
   mkdirSync(join(dir, 'solutions'), { recursive: true });
   for (const f of ['pc-01.tmx', 'tileset.tsx']) copyFileSync(join(LEVELS_DIR, f), join(dir, f));
-  writeFileSync(join(dir, 'solutions', 'pc-01.txt'), 'RLRRRRRRRRDDLLLLLLDRDLLDLUUL\n');
+  writeFileSync(join(dir, 'solutions', 'pc-01.txt'), 'RLRRRRRRLDDDRRLLLLLLDDRRRRRR\n');
   const from = join(tmp, 'from');
   mkdirSync(from);
-  writeFileSync(join(from, 'pc-01-26.txt'), 'RRRRRRRRDDLLLLLLDRDLLDLUUL\n');
+  writeFileSync(join(from, 'pc-01-26.txt'), 'RRRRRRLDDDRRLLLLLLDDRRRRRR\n');
   writeFileSync(join(from, 'pc-01-3.txt'), 'RRR\n'); // does not win: ignored
   const lines: string[] = [];
   const r = await exploreCommand(dir, ['pc-01'], { ...opts, from, log: (l) => lines.push(l) });

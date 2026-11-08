@@ -49,21 +49,21 @@ test.describe('small phone, 320 px', () => {
   test("the level's name is shown in full beside the buttons", async ({ page }) => {
     const pc = await startPc01(page);
     expect(pc.levelId).toBe('pc-01');
-    expect(pc.hudName).toBe('Five Lessons');
+    expect(pc.hudName).toBe('First Lesson');
     checkLayout(pc, 320);
   });
 });
 
-test.describe('narrow screen, 280 px', () => {
-  test.use({ viewport: { width: 280, height: 640 }, hasTouch: true, deviceScaleFactor: 2 });
+test.describe('narrow screen, 270 px', () => {
+  test.use({ viewport: { width: 270, height: 640 }, hasTouch: true, deviceScaleFactor: 2 });
   test('Undo and Restart become icons to leave the name its room, nothing overlaps', async ({
     page,
   }) => {
     const pc = await startPc01(page);
-    expect(pc.hudName).toBe('Five Lessons');
+    expect(pc.hudName).toBe('First Lesson');
     // the words are kept (the buttons' names)
     expect(pc.hudIcons).toEqual({ undo: 'Undo', restart: 'Restart' });
-    checkLayout(pc, 280);
+    checkLayout(pc, 270);
   });
 });
 
@@ -74,7 +74,7 @@ test.describe('very narrow screen, 220 px', () => {
   }) => {
     const pc = await startPc01(page);
     expect(pc.hudName).toMatch(/…$/);
-    expect('Five Lessons'.startsWith(pc.hudName!.slice(0, -1))).toBe(true);
+    expect('First Lesson'.startsWith(pc.hudName!.slice(0, -1))).toBe(true);
     expect(pc.hudName!.length).toBeGreaterThan(1);
     checkLayout(pc, 220);
   });
@@ -84,7 +84,7 @@ test.describe('landscape phone, 740 × 360', () => {
   test.use({ viewport: { width: 740, height: 360 }, hasTouch: true, deviceScaleFactor: 2 });
   test('a column on the left: name, counters and buttons one under the other', async ({ page }) => {
     const pc = await startPc01(page);
-    expect(pc.hudName).toBe('Five Lessons');
+    expect(pc.hudName).toBe('First Lesson');
     expect(pc.hudSide).toBe(true);
     checkLayout(pc, 740);
     // all of it in the column, the board right of it (device px over 2)
