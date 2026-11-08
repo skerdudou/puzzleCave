@@ -7,7 +7,7 @@ collect keys, open doors… and find your way to the exit in as few moves as pos
 once loaded, and can be installed as an app on Android.
 
 <p align="center">
-  <img src="docs/screenshots/gold-teeth-start.png" alt="The level Gold Teeth: a cave full of doors, keys and two ponds, the hero in the middle" width="800">
+  <img src="docs/screenshots/no-way-down-start.png" alt="The level No Way Down: a tall cave surrounded by water, full of barrels, keys and doors, the hero at the bottom and the exit at the top" width="480">
 </p>
 
 ## How to play
@@ -36,9 +36,9 @@ running out (except in master mode, below) — take your time, every move counts
 </table>
 
 <p align="center">
-  <img src="docs/screenshots/gold-teeth-doors.png" alt="Gold Teeth after 70 moves: a row of doors opened, two keys in hand" width="640"><br>
-  <b>Gold Teeth</b> starts you two keys in debt: pick up keys to pay it back before a door opens,
-  then spend them on the right doors.
+  <img src="docs/screenshots/no-way-down-doors.png" alt="No Way Down after 182 moves: the hero has climbed near the top with three keys, a column of doors between them and the exit" width="400"><br>
+  <b>No Way Down</b>, 182 moves in: three keys in hand, and a column of doors between you and
+  the exit.
 </p>
 
 Made a mistake? **Undo** as many moves as you like, or **restart** the level (master mode, below,
@@ -54,8 +54,8 @@ route, or about 10 % more moves than the best one; on the Hard and Expert levels
 25 % more moves than the best known solution).
 
 <p align="center">
-  <img src="docs/screenshots/gold-teeth-select.png" alt="The selection screen of the Hard chapter, Gold Teeth selected: its move and time limits for each medal, and its master mode limits" width="480"><br>
-  The selection screen: the limits of each medal for Gold Teeth.
+  <img src="docs/screenshots/no-way-down-select.png" alt="The selection screen of the Hard chapter, No Way Down selected: its move and time limits for each medal, and its master mode limits" width="480"><br>
+  The selection screen: the limits of each medal for No Way Down.
 </p>
 
 ### Master mode: master and grand master
