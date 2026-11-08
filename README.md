@@ -83,10 +83,7 @@ level to unlock the one after next (a level you are stuck on can be skipped); fi
     zoom (never less than 16 px a step); **Fixed** shows a gauge from *less sensitive* (a
     longer distance per step) to *very sensitive*, the same on every level (its middle notch: a
     step every fingertip or so). One finger drags at a time, the last one down: a second finger
-    does not make you walk faster. With **Keep going when held**
-    (off by default), a finger that rests after a step keeps walking that way, at the **Repeat**
-    rate, until you lift it or drag another way: handy when the edge of the screen comes
-    before the end of the corridor;
+    does not make you walk faster;
   - **Tap zones**: the play area is cut in an X into four triangles, up, down, left and right,
     which work like the buttons of the d-pad: touch a triangle for one step that way (at once,
     as your finger lands), keep your finger on it to keep walking (after the same delay and at

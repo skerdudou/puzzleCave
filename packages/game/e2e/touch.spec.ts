@@ -281,36 +281,6 @@ test('d-pad: a corner between two buttons counts; sliding to another direction t
   expect(await tries()).toBe(after);
 });
 
-test('options: keep going when held, off by default; on, a drag held still goes on', async ({
-  page,
-}) => {
-  // off: a drag of one step held still makes one move
-  let f = await startPc01(page);
-  await f.down(X0, Y0);
-  await f.by(STEP + 4, 0);
-  await page.waitForTimeout(800);
-  expect(await field(page, 'moves')).toBe(1);
-  await f.up();
-  // on (Options)
-  await page.goto('/');
-  await expect.poll(() => field(page, 'scene')).toBe('Menu');
-  await page.touchscreen.tap(390 / 2, 740 / 2 + 56); // Options, under Play
-  await expect.poll(() => field(page, 'scene')).toBe('Options');
-  const [hx, hy] = ((await field(page, 'buttons')) as Record<string, [number, number]>).dragHold!;
-  await page.touchscreen.tap(hx, hy);
-  await expect.poll(async () => (await storedSave(page))!.settings.dragHold).toBe(true);
-  f = await startPc01(page);
-  await f.down(X0, Y0);
-  await f.by(STEP + 4, 0);
-  // the finger rests: the moves go on along the corridor, until lifted
-  await expect.poll(() => field(page, 'moves'), { timeout: 3000 }).toBeGreaterThanOrEqual(4);
-  await f.up();
-  await page.waitForTimeout(150);
-  const n = await field(page, 'moves');
-  await page.waitForTimeout(500);
-  expect(await field(page, 'moves')).toBe(n);
-});
-
 test('dynamic drag: a move per board cell on the screen', async ({ page }) => {
   await startPc01(page);
   const layout = (await field(page, 'boardLayout')) as { scale: number };
