@@ -424,6 +424,8 @@ export class GameScene extends Phaser.Scene {
   protected buildHud(): void {
     for (const o of this.hud) o.destroy();
     this.hud = [];
+    // the d-pad's frames went with the HUD: nothing left to repaint
+    this.padPaint.clear();
     const w = this.scale.width;
     const narrow = this.narrow();
     const y = px(26);
@@ -635,11 +637,13 @@ export class GameScene extends Phaser.Scene {
         .setInteractive();
       this.padDirAt = (x, y) => (zone.active ? dpadDirAt(pad, hit, x, y) : undefined);
       zone.on('pointerdown', (p: Phaser.Input.Pointer) => {
+        // a new finger takes over the d-pad, and presses even the direction already held (a
+        // second thumb's tap on it is a move)
         this.padPointer = p.id;
+        this.padDir = null;
         this.padFollow(p);
       });
       this.hud.push(zone);
-      this.padPaint.clear();
       for (const dir of ['up', 'down', 'left', 'right'] as const) {
         const r = pad[dir];
         // the frame lights up while its direction is held

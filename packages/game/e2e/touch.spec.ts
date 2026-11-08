@@ -313,3 +313,23 @@ test('two fingers dragging walk no faster than one: the last one down drags', as
   await page.waitForTimeout(300);
   expect(await field(page, 'moves')).toBe(1);
 });
+
+test('d-pad: a second thumb tapping the direction already held moves too', async ({ page }) => {
+  await startPc01(page);
+  const [rx, ry] = ((await field(page, 'dpad')) as Record<string, [number, number]>).right!;
+  const cdp = await page.context().newCDPSession(page);
+  const touch = (type: 'touchStart' | 'touchEnd', pts: [number, number][]) =>
+    cdp.send('Input.dispatchTouchEvent', {
+      type,
+      touchPoints: pts.map(([x, y], id) => ({ x, y, id: id + 1 })),
+    });
+  // thumb A on "right" (a move at once), then thumb B on "right" too before A lifts: a move
+  await touch('touchStart', [[rx, ry]]);
+  await expect.poll(() => field(page, 'moves')).toBe(1);
+  await touch('touchStart', [
+    [rx, ry],
+    [rx + 6, ry + 4],
+  ]);
+  await expect.poll(() => field(page, 'moves')).toBe(2);
+  await touch('touchEnd', []);
+});
