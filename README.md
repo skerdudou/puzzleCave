@@ -6,6 +6,10 @@ collect keys, open doors… and find your way to the exit in as few moves as pos
 **▶ [Play puzzleCave](https://skerdudou.github.io/puzzleCave/)** — free, no account, works offline
 once loaded, and can be installed as an app on Android.
 
+<p align="center">
+  <img src="docs/screenshots/gold-teeth-start.png" alt="The level Gold Teeth: a cave full of doors, keys and two ponds, the hero in the middle" width="800">
+</p>
+
 ## How to play
 
 You are trapped in a cave: reach the **exit** to finish the level. There are no enemies and no clock
@@ -20,6 +24,23 @@ running out (except in master mode, below) — take your time, every move counts
   Some levels give you more doors than keys, or start you in debt: choose which doors to open.
 - **Exit** — step onto it to win.
 
+<table>
+  <tr>
+    <td><img src="docs/screenshots/castaway-start.png" alt="Castaway at the start: the hero and three barrels on an island ringed by water"></td>
+    <td><img src="docs/screenshots/castaway-bridges.png" alt="Castaway after 26 moves: the barrels have sunk into the water and become bridges"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Castaway</b> — stranded on an island with three barrels…</td>
+    <td align="center">…push them into the water to build your way out, and save some for the pond around the exit.</td>
+  </tr>
+</table>
+
+<p align="center">
+  <img src="docs/screenshots/gold-teeth-doors.png" alt="Gold Teeth after 70 moves: a row of doors opened, two keys in hand" width="640"><br>
+  <b>Gold Teeth</b> starts you two keys in debt: pick up keys to pay it back before a door opens,
+  then spend them on the right doors.
+</p>
+
 Made a mistake? **Undo** as many moves as you like, or **restart** the level (master mode, below,
 has no undo).
 
@@ -31,6 +52,11 @@ medal. Gold means a good, honest solution; you do not need to find the cleverest
 from the Medium chapter on, the gold limit is always above the best solution (a good alternative
 route, or about 10 % more moves than the best one; on the Hard and Expert levels, between 10 % and
 25 % more moves than the best known solution).
+
+<p align="center">
+  <img src="docs/screenshots/gold-teeth-select.png" alt="The selection screen of the Hard chapter, Gold Teeth selected: its move and time limits for each medal, and its master mode limits" width="480"><br>
+  The selection screen: the limits of each medal for Gold Teeth.
+</p>
 
 ### Master mode: master and grand master
 
@@ -70,6 +96,8 @@ The levels are grouped into chapters — **Easy**, **Medium**, **Hard** and **Ex
 level to unlock the one after next (a level you are stuck on can be skipped); finish a few levels of a chapter to open the next chapter.
 
 ## Controls
+
+<img src="docs/screenshots/castaway-phone.png" alt="Castaway on a phone: the board, with the d-pad below it" width="260" align="right">
 
 - **Keyboard**: arrows or ZQSD (WASD on a QWERTY keyboard, detected automatically) to move, **U** to
   undo, **R** to restart, **Esc** for the menu.
