@@ -58,6 +58,11 @@ export function thresholdRows(th: Thresholds, master = false): ThresholdRow[] {
   return rows;
 }
 
+/** The lines `rows` take on screen: one per row, but master mode's row has one per medal. */
+export function thresholdLines(rows: readonly ThresholdRow[]): number {
+  return rows.reduce((n, r) => n + (r.kind === 'master' ? r.tiers.length : 1), 0);
+}
+
 /** Where the player stands in master mode on a level, for its own line under the records. */
 export type MasterStatus =
   | { kind: 'none' }

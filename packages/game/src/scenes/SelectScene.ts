@@ -15,6 +15,7 @@ import {
   masterLineText,
   masterMedalName,
   masterStatus,
+  thresholdLines,
   thresholdRows,
   type MedalKind,
 } from '../medalInfo';
@@ -203,12 +204,12 @@ export class SelectScene extends Phaser.Scene {
         const level = levelById(id);
         const keys = keysLine(level.initialKeys);
         const master = hasMaster(id);
-        const rows = thresholdRows(resolveThresholds(level.thresholds), master).length;
+        const rows = thresholdRows(resolveThresholds(level.thresholds), master);
         const h =
           px(44) +
           (keys ? this.keysHeight(keys, infoW - px(32)) + px(8) : 0) +
-          rows * px(18) +
-          (rows ? px(4) : 0) +
+          thresholdLines(rows) * px(18) +
+          (rows.length ? px(4) : 0) +
           (master ? px(18) : 0) +
           px(40);
         most = Math.max(most, h);
@@ -343,13 +344,19 @@ export class SelectScene extends Phaser.Scene {
     const rows = thresholdRows(th, master !== 'none');
     const tg = this.add.graphics();
     for (const r of rows) {
-      // master mode's row names its medals when the line has room ("Master ≤ 610 · Grand
-      // master ≤ 538 & ≤ 1:56.88 · limit ≤ 3:11.38"), else "Master ♛ ≤ 610 ✦ ≤ 538 & …", else
-      // (a narrow phone) "♛ ≤ 610 ✦ ≤ 538 & ≤ 1:56.88 · limit ≤ 3:11.38"
-      drawThresholdLine(this, tg, icx, y, t(r.kind), r.tiers, {
-        maxWidth: infoW - px(16),
-        ...(r.kind === 'master' ? { named: masterMedalName } : {}),
-      });
+      if (r.kind === 'master') {
+        // master mode: one line per medal, named when it has room ("Master ≤ 610", then
+        // "Grand master ≤ 538 & ≤ 1:56.88 · limit ≤ 3:11.38"), else "♛ ≤ 610" (a narrow phone)
+        for (const tier of r.tiers) {
+          drawThresholdLine(this, tg, icx, y, '', [tier], {
+            maxWidth: infoW - px(16),
+            named: masterMedalName,
+          });
+          y += px(18);
+        }
+        continue;
+      }
+      drawThresholdLine(this, tg, icx, y, t(r.kind), r.tiers, { maxWidth: infoW - px(16) });
       y += px(18);
     }
     setDebug({ thresholds: rows, master });
