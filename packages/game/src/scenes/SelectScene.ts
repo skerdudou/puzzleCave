@@ -345,8 +345,8 @@ export class SelectScene extends Phaser.Scene {
     const tg = this.add.graphics();
     for (const r of rows) {
       if (r.kind === 'master') {
-        // master mode: one line per medal, named when it has room ("Master ≤ 610", then
-        // "Grand master ≤ 538 & ≤ 1:56.88 · limit ≤ 3:11.38"), else "♛ ≤ 610" (a narrow phone)
+        // master mode: one line per medal, named when it has room ("Master ≤ 610 moves · time
+        // ≤ 3:11.38", then "Grand master ≤ 538 moves · time ≤ 1:56.88"), else "♛ ≤ 610 moves · …"
         for (const tier of r.tiers) {
           drawThresholdLine(this, tg, icx, y, '', [tier], {
             maxWidth: infoW - px(16),

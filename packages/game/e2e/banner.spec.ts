@@ -66,7 +66,7 @@ test('master mode: the whole rules (and the key of pc-31), hidden by a click', a
     .poll(async () => (await debug(page)).banner)
     .toEqual([
       'Master mode: no undo, water is deadly',
-      'Finish within 0:22.60 (bronze time)',
+      'Finish within 0:27.11 (bronze time)',
       'Keys at start: 1',
     ]);
   const [x, y] = (await debug(page)).bannerAt!;
@@ -86,7 +86,7 @@ test('master mode, for a player who has won a master run: the rules on one short
   await expect.poll(() => scene(page)).toBe('Game');
   await expect
     .poll(async () => (await debug(page)).banner)
-    .toEqual(['♛ No undo · deadly water · ≤ 0:22.60', 'Keys at start: 1']);
+    .toEqual(['♛ No undo · deadly water · ≤ 0:27.11', 'Keys at start: 1']);
   // the first move hides it too
   await page.keyboard.press('ArrowRight');
   await expect.poll(async () => (await debug(page)).banner).toBeNull();

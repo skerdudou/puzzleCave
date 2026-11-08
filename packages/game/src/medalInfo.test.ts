@@ -32,30 +32,30 @@ test('master mode: its own third row (master, grand master, time limit), only wh
   const rows = thresholdRows(th, true);
   expect(rows.map((r) => r.kind)).toEqual(['moves', 'time', 'master']);
   expect(rows[0]!.tiers.map((t) => t.medal)).toEqual(['gold', 'silver', 'bronze']);
-  // master within gold, grand master within platinumMoves and the silver time; then master
-  // mode's time limit (bronze time)
+  // master within gold and master mode's time limit (bronze time), grand master within
+  // platinumMoves and the silver time
   expect(rows[2]!.tiers).toEqual([
-    { medal: 'master', text: '≤ 430' },
-    { medal: 'grandMaster', text: '≤ 278 & ≤ 1:22.50 · limit ≤ 2:15.13' },
+    { medal: 'master', text: '≤ 430 moves · time ≤ 2:15.13' },
+    { medal: 'grandMaster', text: '≤ 278 moves · time ≤ 1:22.50' },
   ]);
   expect(thresholdRows(th, false).map((r) => r.kind)).toEqual(['moves', 'time']);
   // without platinumMoves nor goldTime both limits are gold, no time: grand master alone
   const plain = thresholdRows(resolveThresholds({ goldMoves: 20 }), true);
   expect(plain.map((r) => r.kind)).toEqual(['moves', 'master']);
-  expect(plain[1]!.tiers).toEqual([{ medal: 'grandMaster', text: '≤ 20' }]);
+  expect(plain[1]!.tiers).toEqual([{ medal: 'grandMaster', text: '≤ 20 moves' }]);
   // the same move limits with goldTime: a slower finish is master only, so both are shown
   const timed = thresholdRows(resolveThresholds({ goldMoves: 20, goldTime: 10 }), true);
   expect(timed[2]!.tiers).toEqual([
-    { medal: 'master', text: '≤ 20' },
-    { medal: 'grandMaster', text: '≤ 20 & ≤ 0:13.75 · limit ≤ 0:22.50' },
+    { medal: 'master', text: '≤ 20 moves · time ≤ 0:22.50' },
+    { medal: 'grandMaster', text: '≤ 20 moves · time ≤ 0:13.75' },
   ]);
 });
 
-test('master row in French: the limit word is translated', () => {
+test('master row in French: the moves and time words are translated', () => {
   setLang('fr');
   try {
     const th = resolveThresholds({ goldMoves: 430, platinumMoves: 278, goldTime: 60 });
-    expect(thresholdRows(th, true)[2]!.tiers[1]!.text).toBe('≤ 278 & ≤ 1:22.50 · limite ≤ 2:15.13');
+    expect(thresholdRows(th, true)[2]!.tiers[1]!.text).toBe('≤ 278 coups · temps ≤ 1:22.50');
   } finally {
     setLang('en');
   }

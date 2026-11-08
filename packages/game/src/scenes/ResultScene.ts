@@ -189,7 +189,7 @@ export class ResultScene extends Phaser.Scene {
           wordWrap: { width: Math.min(px(250), this.scale.width - (cx - px(110)) - px(8)) },
         })
         .setOrigin(0, 0.5);
-      // one line per master medal: "Master ≤ 610", then "Grand master ≤ 538 & ≤ 1:56.88 · …"
+      // one line per master medal: "Master ≤ 610 moves · time ≤ …", then "Grand master …"
       const row = rows.find((r) => r.kind === 'master');
       for (const tier of row?.tiers ?? []) {
         drawThresholdLine(this, g, cx, y + px(32), '', [tier], {

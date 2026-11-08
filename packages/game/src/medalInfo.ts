@@ -34,9 +34,10 @@ function row(kind: ThresholdRow['kind'], tier: Tier, fmt: (v: number) => string)
 /**
  * One row per criterion that has a gold threshold: moves first, then time. With `master` (the
  * level's chapter has master mode), a third row for master mode, a separate achievement: the
- * master move limit (gold), the grand master one (platinumMoves) and its time (the silver time),
- * then master mode's time limit (the bronze time), when the level has time medals: "≤ 610",
- * "≤ 538 & ≤ 1:56.88 · limit ≤ 3:11.38". Where the two move limits are equal (no platinumMoves)
+ * master move limit (gold) with master mode's time limit (the bronze time), then the grand master
+ * move limit (platinumMoves) with its time (the silver time), the times when the level has time
+ * medals: "≤ 610 moves · time ≤ 3:11.38", "≤ 538 moves · time ≤ 1:56.88". Where the two move
+ * limits are equal (no platinumMoves)
  * and the level has no time medals, only grand master is shown: such a finish earns it.
  */
 export function thresholdRows(th: Thresholds, master = false): ThresholdRow[] {
@@ -47,12 +48,14 @@ export function thresholdRows(th: Thresholds, master = false): ThresholdRow[] {
     const gmTime = grandMasterTimeMs(th);
     const limit = masterTimeLimitMs(th);
     const tiers: ThresholdRow['tiers'] = [];
+    const text = (moves: number, timeMs: number | undefined) =>
+      [
+        t('masterMovesLimit', { moves }),
+        ...(timeMs !== undefined ? [t('masterTimeLimit', { time: formatTime(timeMs) })] : []),
+      ].join(' · ');
     if (th.masterMoves !== th.grandMasterMoves || gmTime !== undefined)
-      tiers.push({ medal: 'master', text: `≤ ${th.masterMoves}` });
-    let gm = `≤ ${th.grandMasterMoves}`;
-    if (gmTime !== undefined) gm += ` & ≤ ${formatTime(gmTime)}`;
-    if (limit !== undefined) gm += ` · ${t('masterLimit', { time: formatTime(limit) })}`;
-    tiers.push({ medal: 'grandMaster', text: gm });
+      tiers.push({ medal: 'master', text: text(th.masterMoves, limit) });
+    tiers.push({ medal: 'grandMaster', text: text(th.grandMasterMoves, gmTime) });
     rows.push({ kind: 'master', tiers });
   }
   return rows;
