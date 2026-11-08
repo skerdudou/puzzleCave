@@ -7,7 +7,7 @@ import { LOG_KEY, logText } from './updateLog';
  * first, to read or screenshot; Share sends them as text (to oneself by mail, a message…), to
  * pass them on from a phone. Escape or Close goes back to the menu.
  */
-export function showJournal(): void {
+export function showJournal(close: () => void): void {
   if (document.getElementById('journal')) return;
   const page = document.createElement('div');
   page.id = 'journal';
@@ -71,19 +71,6 @@ export function showJournal(): void {
     bar.append(b);
     return b;
   };
-  const close = () => {
-    page.remove();
-    window.removeEventListener('keydown', keys, true);
-    setDebug({ journalOpen: false });
-  };
-  // the game hears no key while the page is open; Escape closes it
-  const keys = (e: KeyboardEvent) => {
-    e.stopPropagation();
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      close();
-    }
-  };
   if (typeof navigator.share === 'function')
     button('Partager', () => {
       void navigator.share({ title: 'puzzleCave preview — journal', text: logText() }).catch(() => {
@@ -103,6 +90,11 @@ export function showJournal(): void {
   fill();
   page.append(bar, text);
   document.body.append(page);
-  window.addEventListener('keydown', keys, true);
   setDebug({ journalOpen: true });
+}
+
+/** The page goes (the Journal screen is left). */
+export function hideJournal(): void {
+  document.getElementById('journal')?.remove();
+  setDebug({ journalOpen: false });
 }

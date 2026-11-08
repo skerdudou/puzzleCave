@@ -8,6 +8,7 @@ import { OptionsScene } from './scenes/OptionsScene';
 import { SelectScene } from './scenes/SelectScene';
 import { ResultScene } from './scenes/ResultScene';
 import { ReplayScene } from './scenes/ReplayScene';
+import { JournalScene } from './scenes/JournalScene';
 import { app } from './app';
 import { t } from './i18n';
 import { showNotice } from './notice';
@@ -56,6 +57,7 @@ const game = new Phaser.Game({
     GameScene,
     ResultScene,
     ReplayScene,
+    JournalScene,
   ],
 });
 startUpdates(game);
