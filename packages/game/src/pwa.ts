@@ -4,13 +4,15 @@ import { registerSW } from 'virtual:pwa-register';
 import { app } from './app';
 import { setDebug } from './debug';
 import { hideUpdating, showUpdating } from './notice';
-import { CHECK_INTERVAL_MS, RESUME_SCENES, UpdateGate, checkDue } from './updateGate';
+import { PREVIEW } from './preview';
+import { RESUME_SCENES, UpdateGate, checkDue, checkInterval } from './updateGate';
 import { logScene, logUpdate } from './updateLog';
 
 /**
  * The service worker (offline play, published build only: a no-op on the dev server) and the
- * updates. A new version is looked for at start-up, every 30 minutes and when the game comes back
- * to the screen; once downloaded, it is applied at one of UpdateGate's moments: the page reloads
+ * updates. A new version is looked for at start-up, then once an hour in the release (once a
+ * minute in the preview), on a timer and when the game comes back to the screen; once
+ * downloaded, it is applied at one of UpdateGate's moments: the page reloads
  * and comes back to the screen it was on (RESUME_KEY), behind an "Updating…" box when the game is
  * on the screen. At start-up the first screen waits for the check (at most START_CHECK_MS): a new
  * version found then is applied before anything shows.
@@ -194,16 +196,18 @@ export function startUpdates(game: Phaser.Game): void {
 /** Asks the server for a new service worker now and then while the game stays open. */
 function watchForUpdates(registration: ServiceWorkerRegistration): void {
   let last = Date.now();
+  const every = checkInterval(PREVIEW);
   const check = () => {
     const now = Date.now();
-    if (!checkDue(now, last) || registration.installing || !navigator.onLine) return;
+    // a little slack: a timer may fire a hair early
+    if (!checkDue(now, last, every - 1000) || registration.installing || !navigator.onLine) return;
     last = now;
     logUpdate('check for a new version');
     registration.update().catch(() => {
       /* offline, server unreachable: next time */
     });
   };
-  setInterval(check, CHECK_INTERVAL_MS);
+  setInterval(check, every);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') check();
   });

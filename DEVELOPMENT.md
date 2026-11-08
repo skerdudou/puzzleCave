@@ -129,9 +129,10 @@ registered by `packages/game/src/pwa.ts` through `virtual:pwa-register`) precach
 so the game starts from the cache, offline included. A new release therefore cannot show on the
 very first launch after a deploy; it arrives this way:
 
-1. **Detection**: the browser fetches `sw.js` again at start-up (the registration), every 30
-   minutes while the game stays open, and when it comes back to the screen (at most once a minute;
-   an installed app left open in the background is covered). The service worker script is fetched
+1. **Detection**: the browser fetches `sw.js` again at start-up (the registration), then
+   once an hour in the release and once a minute in the preview while the game stays open, on a
+   timer and when it comes back to the screen (an installed app left open in the background is
+   covered). The service worker script is fetched
    past the HTTP cache, and Workbox fetches the files it lists past it too (hashed names, or a
    `__WB_REVISION__` parameter for `index.html` and the manifest): GitHub Pages' `max-age=600`
    does not delay an update.

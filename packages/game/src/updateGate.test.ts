@@ -1,5 +1,11 @@
 import { expect, test, vi } from 'vitest';
-import { CHECK_INTERVAL_MS, MIN_CHECK_GAP_MS, UpdateGate, checkDue } from './updateGate';
+import {
+  PREVIEW_CHECK_MS,
+  RELEASE_CHECK_MS,
+  UpdateGate,
+  checkDue,
+  checkInterval,
+} from './updateGate';
 
 const gate = () => {
   const apply = vi.fn();
@@ -84,9 +90,12 @@ test('applied once only', () => {
   expect(apply).toHaveBeenCalledTimes(1);
 });
 
-test('checks: every 30 minutes, and on return at most once a minute', () => {
-  expect(CHECK_INTERVAL_MS).toBe(30 * 60 * 1000);
-  expect(checkDue(1000 + MIN_CHECK_GAP_MS, 1000)).toBe(true);
-  expect(checkDue(1000 + MIN_CHECK_GAP_MS - 1, 1000)).toBe(false);
-  expect(checkDue(5000, 0, 1000)).toBe(true);
+test('checks: the released game once an hour, the preview once a minute (timer and return)', () => {
+  // the released game once an hour, the preview once a minute
+  expect(RELEASE_CHECK_MS).toBe(60 * 60 * 1000);
+  expect(PREVIEW_CHECK_MS).toBe(60 * 1000);
+  expect(checkInterval(false)).toBe(RELEASE_CHECK_MS);
+  expect(checkInterval(true)).toBe(PREVIEW_CHECK_MS);
+  expect(checkDue(1000 + RELEASE_CHECK_MS, 1000, RELEASE_CHECK_MS)).toBe(true);
+  expect(checkDue(RELEASE_CHECK_MS, 1000, RELEASE_CHECK_MS)).toBe(false);
 });
