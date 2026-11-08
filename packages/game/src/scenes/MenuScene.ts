@@ -44,11 +44,19 @@ export class MenuScene extends Phaser.Scene {
     ];
     // one column of buttons as wide as the widest
     sameWidth(items.map((i) => i.button));
-    // the preview only: its update journal (updateLog.ts), on a page of its own
+    // the preview only: its update journal (updateLog.ts), on a page of its own, behind a small
+    // icon in the bottom right corner (off the menu's column)
     if (PREVIEW)
       items.push({
         id: 'journal',
-        button: makeButton(this, cx, cy + px(160), 'Journal', showJournal, 12),
+        button: makeButton(
+          this,
+          this.scale.width - px(12),
+          this.scale.height - px(12),
+          '📜',
+          showJournal,
+          14,
+        ).setOrigin(1, 1),
         press: showJournal,
       });
     const focus = new KeyFocus(items);
@@ -65,7 +73,10 @@ export class MenuScene extends Phaser.Scene {
     syncMusic(this, app.data.settings.sound, 'music-menu');
     // button centres and widths in CSS pixels, for the e2e tests
     const buttons = Object.fromEntries(
-      items.map(({ id, button: b }) => [id, [b.x / dpr(), b.y / dpr()]]),
+      items.map(({ id, button: b }) => {
+        const c = b.getBounds();
+        return [id, [c.centerX / dpr(), c.centerY / dpr()]];
+      }),
     );
     const buttonWidths = Object.fromEntries(
       items.map(({ id, button: b }) => [id, b.width / dpr()]),
