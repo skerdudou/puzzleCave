@@ -51,6 +51,7 @@ export default defineConfig({
     // E2E_FPS frames a second (e2e/fps.ts, src/main.ts): a page in a level then costs 4.5 CPU
     // cores instead of 11 when WebGL is drawn in software. VITE_E2E_FPS=0 runs uncapped. Added
     // to the server's environment by Playwright, so no shell syntax is needed.
-    env: { VITE_E2E_FPS: String(E2E_FPS) },
+    // VITE_E2E=1: the game shows what the release shows (no level ids after the names).
+    env: { VITE_E2E_FPS: String(E2E_FPS), VITE_E2E: '1' },
   },
 });

@@ -4,7 +4,7 @@ import { app } from '../app';
 import { setDebug } from '../debug';
 import { ellipsize } from '../format';
 import { t } from '../i18n';
-import { levelById } from '../levels';
+import { levelById, levelTitle } from '../levels';
 import { Playback } from '../author/playback';
 import { HoldRepeat } from '../input/holdRepeat';
 import { onSceneKeyDown } from '../input/sceneKeys';
@@ -222,7 +222,7 @@ export class ReplayScene extends Phaser.Scene {
     const h = this.scale.height;
     // the title on one line, cut with "…" when too long for the screen
     const title = this.add.text(px(12), px(14), '', textStyle(14, COLORS.accent)).setOrigin(0, 0);
-    const full = `${this.level.name} — ${this.info.label}`;
+    const full = `${levelTitle(this.level)} — ${this.info.label}`;
     title.setText(ellipsize(full, (s) => title.setText(s).width <= w - px(24)));
     this.hud.push(title);
     // "Move 3/12 · ", then the key's art and "Keys 1" (placed again as the move count grows)

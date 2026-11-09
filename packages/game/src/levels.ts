@@ -7,9 +7,23 @@ import {
   type LevelRecord,
 } from '@puzzlecave/core';
 import { achievementList } from './achievements';
+import { PREVIEW } from './preview';
 import type { SaveContext } from './save';
 
 export { chapters, levels };
+
+/**
+ * A level's name as shown; out of the release (the preview, the dev server — not for the e2e
+ * tests, run as the release: VITE_E2E=1), its id after it
+ * ("Pick a Door (pc-31)").
+ */
+export function levelTitle(
+  level: Pick<LevelData, 'id' | 'name'>,
+  showId = PREVIEW || (import.meta.env.DEV && import.meta.env.VITE_E2E !== '1'),
+): string {
+  return showId ? `${level.name} (${level.id})` : level.name;
+}
+
 const byId = new Map(levels.map((l) => [l.id, l]));
 
 export function levelById(id: string): LevelData {

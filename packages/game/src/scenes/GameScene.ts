@@ -16,7 +16,7 @@ import { ellipsize, formatTime } from '../format';
 import { t } from '../i18n';
 import { InputController, type Action } from '../input/InputController';
 import { directionLabels } from '../input/keyboardLabels';
-import { hasMaster, levelById } from '../levels';
+import { hasMaster, levelById, levelTitle } from '../levels';
 import { introLines } from '../levelIntro';
 import { syncMusic } from '../music';
 import { chapterTint } from '../render/ambience';
@@ -569,7 +569,7 @@ export class GameScene extends Phaser.Scene {
       let name: Phaser.GameObjects.Text | null = null;
       for (let size = 13; size >= 10 && !name; size--) {
         const txt = this.add
-          .text(nameX, y, this.level.name, textStyle(size, COLORS.accent))
+          .text(nameX, y, levelTitle(this.level), textStyle(size, COLORS.accent))
           .setOrigin(0, 0.5);
         if (txt.width > room && room > 0) txt.setWordWrapWidth(room);
         const wrapped = txt.getWrappedText().length;
@@ -579,7 +579,7 @@ export class GameScene extends Phaser.Scene {
       if (!name && last) {
         name = this.add.text(nameX, y, '', textStyle(10, COLORS.accent)).setOrigin(0, 0.5);
         const cut = name;
-        cut.setText(ellipsize(this.level.name, (s) => cut.setText(s).width <= room));
+        cut.setText(ellipsize(levelTitle(this.level), (s) => cut.setText(s).width <= room));
       }
       if (!name) {
         for (const o of made) o.destroy();
@@ -762,13 +762,13 @@ export class GameScene extends Phaser.Scene {
     let y = px(10);
     // the name: up to 3 lines, cut with "…" past them
     const name = this.add
-      .text(x, y, this.level.name, {
+      .text(x, y, levelTitle(this.level), {
         ...textStyle(12, COLORS.accent),
         wordWrap: { width: room },
       })
       .setOrigin(0, 0);
     if (name.getWrappedText().length > 3) {
-      const full = this.level.name;
+      const full = levelTitle(this.level);
       name.setText(ellipsize(full, (s) => name.setText(s).getWrappedText().length <= 3));
     }
     made.push(name);

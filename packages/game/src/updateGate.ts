@@ -14,11 +14,11 @@ export const RESUME_SCENES: readonly string[] = ['Menu', 'Select', 'Options', 'A
 
 /**
  * Checks for a new version besides the one at start-up, while the game stays open: the released
- * game once an hour (on a phone it comes back to the screen all the time, and a new version is
+ * game once a day (on a phone it comes back to the screen all the time, and a new version is
  * rare), the preview once a minute (to get each deploy soon). Both on a timer and when the game
  * comes back to the screen, once that much time has passed since the last check.
  */
-export const RELEASE_CHECK_MS = 60 * 60 * 1000;
+export const RELEASE_CHECK_MS = 24 * 60 * 60 * 1000;
 export const PREVIEW_CHECK_MS = 60 * 1000;
 export const checkInterval = (preview: boolean): number =>
   preview ? PREVIEW_CHECK_MS : RELEASE_CHECK_MS;

@@ -130,7 +130,7 @@ so the game starts from the cache, offline included. A new release therefore can
 very first launch after a deploy; it arrives this way:
 
 1. **Detection**: the browser fetches `sw.js` again at start-up (the registration), then
-   once an hour in the release and once a minute in the preview while the game stays open, on a
+   once a day in the release and once a minute in the preview while the game stays open, on a
    timer and when it comes back to the screen (an installed app left open in the background is
    covered). The service worker script is fetched
    past the HTTP cache, and Workbox fetches the files it lists past it too (hashed names, or a

@@ -21,8 +21,9 @@ export const SOUNDS = {
   win: [0.8, 0, 523, 0.02, 0.25, 0.35, 1, 1, 0, 0, 262, 0.08, 0.16],
   achievement: [0.6, 0, 784, 0.01, 0.12, 0.3, 1, 1, 0, 0, 392, 0.07, 0.14],
   // master mode's last seconds: a heartbeat, "lub" then "dub", on each second of the countdown
-  beat: [1, 0, 62, 0.005, 0.03, 0.1, 0, 2, -2],
-  beatSoft: [0.6, 0, 52, 0.005, 0.02, 0.09, 0, 2, -2],
+  // (around 100–130 Hz, triangle: lower, a phone's or a laptop's speaker plays nothing)
+  beat: [1, 0, 130, 0.004, 0.04, 0.12, 1, 1.5, -4],
+  beatSoft: [0.7, 0, 100, 0.004, 0.03, 0.1, 1, 1.5, -4],
 } as const satisfies Record<string, readonly number[]>;
 export type Sfx = keyof typeof SOUNDS;
 

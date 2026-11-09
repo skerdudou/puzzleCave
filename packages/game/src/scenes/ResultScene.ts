@@ -14,7 +14,7 @@ import { setDebug } from '../debug';
 import { formatTime } from '../format';
 import { t } from '../i18n';
 import { onSceneKeyDown } from '../input/sceneKeys';
-import { chapters, hasMaster, levelById, locate, masterState } from '../levels';
+import { chapters, hasMaster, levelById, levelTitle, locate, masterState } from '../levels';
 import {
   masterLineText,
   masterMedalName,
@@ -96,7 +96,11 @@ export class ResultScene extends Phaser.Scene {
     const title = this.add.text(cx, y, t('won'), textStyle(26, COLORS.accent)).setOrigin(0.5);
     shrinkToFit(title, 26, lineWidth, 16);
     y += px(36);
-    shrinkToFit(this.add.text(cx, y, level.name, textStyle(16)).setOrigin(0.5), 16, lineWidth);
+    shrinkToFit(
+      this.add.text(cx, y, levelTitle(level), textStyle(16)).setOrigin(0.5),
+      16,
+      lineWidth,
+    );
     // the mode, "Master mode" (not "MASTER", the name of a medal too, above the medal won)
     if (mode === 'master')
       this.add.text(cx, y + px(22), t('masterModeName'), textStyle(12, '#9be7ff')).setOrigin(0.5);

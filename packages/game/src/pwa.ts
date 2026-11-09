@@ -10,7 +10,7 @@ import { logScene, logUpdate } from './updateLog';
 
 /**
  * The service worker (offline play, published build only: a no-op on the dev server) and the
- * updates. A new version is looked for at start-up, then once an hour in the release (once a
+ * updates. A new version is looked for at start-up, then once a day in the release (once a
  * minute in the preview), on a timer and when the game comes back to the screen; once
  * downloaded, it is applied at one of UpdateGate's moments: the page reloads
  * and comes back to the screen it was on (RESUME_KEY), behind an "Updating…" box when the game is

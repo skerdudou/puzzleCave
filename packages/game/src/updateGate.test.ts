@@ -92,7 +92,7 @@ test('applied once only', () => {
 
 test('checks: the released game once an hour, the preview once a minute (timer and return)', () => {
   // the released game once an hour, the preview once a minute
-  expect(RELEASE_CHECK_MS).toBe(60 * 60 * 1000);
+  expect(RELEASE_CHECK_MS).toBe(24 * 60 * 60 * 1000);
   expect(PREVIEW_CHECK_MS).toBe(60 * 1000);
   expect(checkInterval(false)).toBe(RELEASE_CHECK_MS);
   expect(checkInterval(true)).toBe(PREVIEW_CHECK_MS);

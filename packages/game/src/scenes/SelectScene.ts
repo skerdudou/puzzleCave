@@ -10,7 +10,7 @@ import { keysLine } from '../levelIntro';
 import { formatTime } from '../format';
 import { getLang, t } from '../i18n';
 import { onSceneKeyDown } from '../input/sceneKeys';
-import { chapters, hasMaster, levelById, locate, masterState } from '../levels';
+import { chapters, hasMaster, levelById, levelTitle, locate, masterState } from '../levels';
 import {
   masterLineText,
   masterMedalName,
@@ -33,6 +33,7 @@ import {
   strokeMasterBox,
   headerBand,
   makeButton,
+  shrinkToFit,
   px,
   textStyle,
 } from '../ui';
@@ -41,6 +42,8 @@ import { savedSolution, savedSolutionsAvailable } from '../author/client';
 
 /** Below the band at the top (back to the menu, the game's name), base px. */
 const BAND = HEADER_BAND;
+/** From the level's name to the line under it, base px. */
+const NAME_GAP = 26;
 
 export class SelectScene extends Phaser.Scene {
   private ci = 0;
@@ -245,7 +248,7 @@ export class SelectScene extends Phaser.Scene {
             )
           : 0;
         const h =
-          px(44) +
+          px(NAME_GAP) +
           (keys ? this.keysHeight(keys, infoW - px(32)) + px(8) : 0) +
           thresholdLines(rows.filter((r) => r.kind !== 'master')) * px(18) +
           (rows.length ? px(4) : 0) +
@@ -357,13 +360,10 @@ export class SelectScene extends Phaser.Scene {
     let y = side ? y0 + px(8) : y0 + this.rows() * (cell + gap) + px(16);
     // the buttons' row: the same for every level
     const buttonsY = y + this.detailsHeight(infoW);
-    this.add.text(icx, y, level.name, textStyle(16)).setOrigin(0.5);
-    y += px(22);
-    if (level.author)
-      this.add
-        .text(icx, y, t('by', { author: level.author }), textStyle(12, COLORS.dim))
-        .setOrigin(0.5);
-    y += px(22);
+    // the name alone: the author is not shown (all the levels are by the same one for now)
+    const levelName = this.add.text(icx, y, levelTitle(level), textStyle(16)).setOrigin(0.5);
+    shrinkToFit(levelName, 16, infoW - px(16));
+    y += px(NAME_GAP);
     // the keys at start, when not 0 (as the level's banner says them)
     const keys = keysLine(level.initialKeys);
     setDebug({ keysLine: keys });
