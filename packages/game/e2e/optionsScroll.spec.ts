@@ -99,26 +99,34 @@ test.describe('phone in landscape', () => {
     expect((await button(page, 'back'))[1]).toBeLessThan(48);
     const settings = pc.settings;
     const before = await saved(page);
-    const [sx, sy] = await button(page, 'sound');
+    // the language button (under the volumes' gauges, which a finger moves instead of the page):
+    // brought up to the middle of the screen with the wheel first
+    const [, ly] = await button(page, 'lang');
+    await page.mouse.move(370, 180);
+    await page.mouse.wheel(0, Math.max(0, ly - 200));
+    const start = await restingScroll(page);
+    const [sx, sy] = await button(page, 'lang');
+    expect(sy).toBeLessThan(300);
 
-    // a drag starting on the Sound button scrolls, and Sound is not toggled
+    // a drag starting on the language button scrolls, and opens no list
     await dragFrom(page, sx, sy, -60);
     const y = await restingScroll(page);
-    expect(y).toBeGreaterThan(40);
+    expect(y - start).toBeGreaterThan(40);
     const after = await debug(page);
     expect(after.scene).toBe('Options');
+    expect(after.langMenuOpen ?? false).toBe(false);
     expect(after.settings).toEqual(settings);
     expect(await saved(page)).toBe(before);
     // the reported positions follow the scroll
-    expect((await button(page, 'sound'))[1]).toBeCloseTo(sy - y, 0);
+    expect((await button(page, 'lang'))[1]).toBeCloseTo(sy - (y - start), 0);
 
-    // a drag starting on the sound effects button does not change them either (and comes back
-    // up: down past the top, the finger staying on the screen, 360 px high)
-    const [px_, py] = await button(page, 'sfx');
+    // a drag down starting on it again opens nothing either, and scrolls back up (the finger
+    // staying on the screen, 360 px high)
+    const [px_, py] = await button(page, 'lang');
     const down = 350 - py;
-    expect(down).toBeGreaterThan(y);
     await dragFrom(page, px_, py, down);
-    expect(await restingScroll(page)).toBe(0);
+    expect(await restingScroll(page)).toBeCloseTo(Math.max(0, y - down), 0);
+    expect((await debug(page)).langMenuOpen ?? false).toBe(false);
     expect((await debug(page)).settings).toEqual(settings);
     expect(await saved(page)).toBe(before);
   });
@@ -208,7 +216,7 @@ test.describe('phone in landscape', () => {
     // the arrows go from button to button: the first ones are on the screen, nothing scrolls;
     // going back from the first wraps to Back, in the band at the top: nothing scrolls either
     await page.keyboard.press('ArrowDown');
-    await expect.poll(async () => (await debug(page)).focus).toBe('sound');
+    await expect.poll(async () => (await debug(page)).focus).toBe('music');
     expect((await debug(page)).scrollY).toBe(0);
     await page.keyboard.press('ArrowUp');
     await expect.poll(async () => (await debug(page)).focus).toBe('back');
@@ -231,12 +239,12 @@ test.describe('phone in landscape', () => {
   });
 });
 
-test('desktop: everything fits, nothing scrolls', async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 720 });
+test('desktop (900 px high): everything fits, nothing scrolls', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
   await openOptions(page);
   expect((await debug(page)).maxScrollY).toBe(0);
   const [, by] = await button(page, 'back');
-  await page.mouse.move(640, 360);
+  await page.mouse.move(640, 450);
   await page.mouse.wheel(0, 200);
   await page.keyboard.press('End');
   await page.waitForTimeout(100);

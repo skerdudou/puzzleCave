@@ -47,11 +47,12 @@ async function openOptionsByKeyboard(page: Page): Promise<void> {
 test('menu and options from the keyboard: focus, toggles, language', async ({ page }) => {
   await openOptionsByKeyboard(page);
   expect(await field(page, 'focus')).toBeUndefined();
-  // Tab: Music, then Sound effects; Enter toggles them, the focus stays on the button
+  // Tab: the music volume's gauge, then the effects'; ← moves its knob a notch down, the focus
+  // stays on it
   await press(page, 'Tab', 'Tab');
   await expect.poll(() => field(page, 'focus')).toBe('sfx');
-  await press(page, 'Enter');
-  await expect.poll(async () => (await stored(page))?.settings.sfx).toBe(false);
+  await press(page, 'ArrowLeft');
+  await expect.poll(async () => (await stored(page))?.settings.sfxVolume).toBe(90);
   await expect.poll(() => field(page, 'focus')).toBe('sfx');
   // next: the language list, opened on the current language; the arrows pick another one
   await press(page, 'Tab', 'Enter');
@@ -68,7 +69,7 @@ test('menu and options from the keyboard: focus, toggles, language', async ({ pa
 
 test('progress: erased only on a second press', async ({ page }) => {
   await withProgress(page);
-  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.setViewportSize({ width: 1280, height: 900 });
   await openOptionsByKeyboard(page);
   const [ex, ey] = await button(page, 'erase');
   const [ix, iy] = await button(page, 'import');
@@ -89,7 +90,7 @@ test('progress: exported to an encoded file, imported back after a confirmation;
   page,
 }) => {
   await withProgress(page);
-  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.setViewportSize({ width: 1280, height: 900 });
   await openOptionsByKeyboard(page);
 
   const download = page.waitForEvent('download');
@@ -151,9 +152,9 @@ test('a save that cannot be written is told once', async ({ page }) => {
       return set.call(this, k, v);
     };
   }, SAVE_KEY);
-  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.setViewportSize({ width: 1280, height: 900 });
   await openOptionsByKeyboard(page);
-  await press(page, 'Tab', 'Enter'); // music off: saved, or not
+  await press(page, 'Tab', 'ArrowLeft'); // the music a notch down: saved, or not
   await expect.poll(() => field(page, 'saveFailed')).toBe(true);
   expect(await field(page, 'notice')).toMatch(/^Cannot save on this device/);
 });

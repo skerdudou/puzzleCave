@@ -136,12 +136,21 @@ test('invalid settings replaced by defaults', () => {
   const kv = mem({
     [SAVE_KEY]: stored({
       version: 1,
-      settings: { sound: 'yes', lang: 'xx', dragStep: 'far', vibration: 0, touchControl: 'x' },
+      settings: {
+        sound: 'yes',
+        lang: 'xx',
+        dragStep: 'far',
+        vibration: 0,
+        touchControl: 'x',
+        musicVolume: 'loud',
+      },
       levels: {},
     }),
   });
   expect(new SaveStore(kv).load().settings).toEqual({
     sound: true,
+    musicVolume: 100,
+    sfxVolume: 100,
     sfx: true,
     lang: null,
     dragMode: 'dynamic',
@@ -167,6 +176,8 @@ test('a save from before the drag, vibration and touch control options: defaults
   });
   expect(new SaveStore(kv).load().settings).toEqual({
     sound: false,
+    musicVolume: 100,
+    sfxVolume: 100,
     sfx: true,
     lang: 'fr',
     dragMode: 'dynamic',

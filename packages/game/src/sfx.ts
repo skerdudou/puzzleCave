@@ -21,9 +21,10 @@ export const SOUNDS = {
   win: [0.8, 0, 523, 0.02, 0.25, 0.35, 1, 1, 0, 0, 262, 0.08, 0.16],
   achievement: [0.6, 0, 784, 0.01, 0.12, 0.3, 1, 1, 0, 0, 392, 0.07, 0.14],
   // master mode's last seconds: a heartbeat, "lub" then "dub", on each second of the countdown
-  // (around 100–130 Hz, triangle: lower, a phone's or a laptop's speaker plays nothing)
-  beat: [1, 0, 130, 0.004, 0.04, 0.12, 1, 1.5, -4],
-  beatSoft: [0.7, 0, 100, 0.004, 0.03, 0.1, 1, 1.5, -4],
+  // (115–150 Hz, triangle: lower, a phone's or a laptop's speaker plays nothing; volume 2, above
+  // the other sounds, to be heard over the music)
+  beat: [2, 0, 150, 0.004, 0.06, 0.14, 1, 1.5, -5],
+  beatSoft: [1.4, 0, 115, 0.004, 0.04, 0.12, 1, 1.5, -5],
 } as const satisfies Record<string, readonly number[]>;
 export type Sfx = keyof typeof SOUNDS;
 
@@ -64,6 +65,16 @@ export class SfxFeed {
 
 let zzfx: (typeof import('zzfx'))['ZZFX'] | null = null;
 let context: AudioContext | null = null;
+/** The effects' volume at 100 % in the options (ZzFX's master volume). */
+const SFX_FULL = 0.3;
+/** the options' effects volume, 0–1 */
+let sfxLevel = 1;
+
+/** The options' sound effects volume (%), for the next sounds. */
+export function setSfxVolume(percent: number): void {
+  sfxLevel = percent / 100;
+  if (zzfx) zzfx.volume = SFX_FULL * sfxLevel;
+}
 
 /**
  * Loads ZzFX and plays it through Phaser's audio context, which Phaser unlocks on the first
@@ -77,7 +88,7 @@ export function initSfx(game: Phaser.Game): void {
     const own = ZZFX.audioContext;
     ZZFX.audioContext = ctx;
     void own.close().catch(() => {});
-    ZZFX.volume = 0.3;
+    ZZFX.volume = SFX_FULL * sfxLevel;
     zzfx = ZZFX;
   });
 }

@@ -59,9 +59,14 @@ export function stepOfNotch(notch: number): number {
 }
 
 /** The notch nearest to `x` on a gauge drawn from `left`, `width` wide (notches at both ends). */
-export function notchAt(x: number, left: number, width: number): number {
-  const i = Math.round(((x - left) / width) * (DRAG_NOTCHES - 1));
-  return Math.min(DRAG_NOTCHES - 1, Math.max(0, i));
+export function notchAt(
+  x: number,
+  left: number,
+  width: number,
+  count: number = DRAG_NOTCHES,
+): number {
+  const i = Math.round(((x - left) / width) * (count - 1));
+  return Math.min(count - 1, Math.max(0, i));
 }
 
 const OPPOSITE: Record<Dir, Dir> = { up: 'down', down: 'up', left: 'right', right: 'left' };

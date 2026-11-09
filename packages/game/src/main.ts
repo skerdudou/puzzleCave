@@ -16,7 +16,8 @@ import { installBackButton } from './backButton';
 import { textBoxes, type TextBox } from './debug';
 import { showResumeBox, startUpdates } from './pwa';
 import { redrawTextsOnRestore } from './render/restoreTexts';
-import { initSfx } from './sfx';
+import { setMusicVolume } from './music';
+import { initSfx, setSfxVolume } from './sfx';
 import { COLORS } from './ui';
 
 const ratio = () => window.devicePixelRatio || 1;
@@ -63,6 +64,9 @@ const game = new Phaser.Game({
 startUpdates(game);
 redrawTextsOnRestore(game);
 initSfx(game);
+// the options' volumes
+setMusicVolume(app.data.settings.musicVolume);
+setSfxVolume(app.data.settings.sfxVolume);
 // for the e2e tests: the texts of the scene on top (see textBoxes)
 (window as unknown as { __pcTexts: () => TextBox[] }).__pcTexts = () => {
   const top = game.scene.getScenes(true).at(-1);

@@ -17,12 +17,17 @@ import {
   type DragMode,
 } from './input/drag';
 import { isTouchControl, type TouchControl } from './input/tapZones';
+import { cleanVolume } from './volume';
 
 export interface Settings {
   /** the music (the name is older than the sound effects) */
   sound: boolean;
+  /** the music's volume when on, % (10–100, by tens) */
+  musicVolume: number;
   /** sound effects */
   sfx: boolean;
+  /** the sound effects' volume when on, % (10–100, by tens) */
+  sfxVolume: number;
   lang: Lang | null;
   /** continuous drag: a move per board cell on the screen (dynamic), or per `dragStep` (fixed) */
   dragMode: DragMode;
@@ -259,6 +264,8 @@ export function defaultSave(): SaveData {
     settings: {
       sound: true,
       sfx: true,
+      musicVolume: 100,
+      sfxVolume: 100,
       lang: null,
       dragMode: 'dynamic',
       dragStep: DRAG_STEP_DEFAULT,
@@ -305,6 +312,8 @@ function sanitiseSettings(raw: unknown): Settings {
   return {
     sound: typeof s.sound === 'boolean' ? s.sound : d.sound,
     sfx: typeof s.sfx === 'boolean' ? s.sfx : d.sfx,
+    musicVolume: cleanVolume(s.musicVolume),
+    sfxVolume: cleanVolume(s.sfxVolume),
     lang,
     // older saves had a swipe threshold instead: they get the default distance; a distance
     // left at the default of its time follows the current default

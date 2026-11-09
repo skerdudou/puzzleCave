@@ -8,7 +8,8 @@ import { FocusList, focusKey } from '../input/focusList';
 import { saveContext } from '../levels';
 import { showNotice } from '../notice';
 import { exportSave, importSave } from '../save';
-import { playSfx } from '../sfx';
+import { playSfx, setSfxVolume } from '../sfx';
+import { VOLUME_NOTCHES, channelOfNotch, notchOfVolume, type Channel } from '../volume';
 import { onSceneKeyDown } from '../input/sceneKeys';
 import { nextTouchControl } from '../input/tapZones';
 import {
@@ -20,7 +21,7 @@ import {
   releaseSpeed,
   scrollThumb,
 } from '../input/scroll';
-import { syncMusic } from '../music';
+import { setMusicVolume, syncMusic } from '../music';
 import {
   COLORS,
   HEADER_BAND,
@@ -80,11 +81,12 @@ export class OptionsScene extends Phaser.Scene {
   private langFocus = new FocusList(0);
   /** the finger moving the sensitivity gauge's knob (it scrolls nothing meanwhile) */
   private gaugePointer: number | null = null;
-  /** the sensitivity gauge's knob, focused like a button: ← and → move it a notch */
-  private static readonly GAUGE = 'drag';
   /** Import or Erase pressed once (the button now asks "Sure?"): its next press acts */
-  /** moves the sensitivity gauge by `by` notches (set while it is shown) */
-  private gaugeShift: ((by: number) => void) | null = null;
+  /**
+   * The gauges shown (the drag's sensitivity, the volumes) by their knob's id: moves one by `by`
+   * notches. A gauge's knob is focused like a button; ← and → move it a notch.
+   */
+  private gaugeShifts: Record<string, (by: number) => void> = {};
   private armed: { id: string; button: Phaser.GameObjects.Text; label: string } | null = null;
 
   constructor() {
@@ -131,7 +133,7 @@ export class OptionsScene extends Phaser.Scene {
     this.langItems = [];
     this.focusables = [];
     this.armed = null;
-    this.gaugeShift = null;
+    this.gaugeShifts = {};
     this.drag = null;
     this.dragged = false;
     this.velocity = 0;
@@ -216,15 +218,25 @@ export class OptionsScene extends Phaser.Scene {
       y += rowStep;
     };
 
-    // The drag's sensitivity: a gauge with a notch per distance, from "less sensitive" (the
-    // longest distance per move) to "very sensitive"; the knob is dragged (or a notch touched),
-    // or focused with the keys and moved a notch by ← and →
+    // A gauge with `count` notches (the drag's sensitivity, the volumes): the knob is dragged (or
+    // a notch touched), or focused with the keys and moved a notch by ← and →; `commit(i)` when
+    // the knob is let go on notch i; `ends`: what each end means, under it; `live(i)`, if any,
+    // on each notch the knob passes (the volumes are heard while the knob moves)
     this.gaugePointer = null;
-    const gauge = () => {
-      const width = Math.min(wrap, px(280));
+    const gauge = (
+      id: string,
+      count: number,
+      current: number,
+      commitNotch: (i: number) => void,
+      ends: [low: string, high: string],
+      live?: (i: number) => void,
+    ) => {
+      // the knob stays on the screen at both ends (its width: a finger on a touch screen)
+      const knobW = px(touch ? TOUCH_TARGET : 28);
+      const width = Math.min(wrap, px(280), this.scale.width - knobW - px(16));
       const left = cx - width / 2;
-      const xOf = (i: number) => left + (i * width) / (DRAG_NOTCHES - 1);
-      let notch = notchOfStep(s.dragStep);
+      const xOf = (i: number) => left + (i * width) / (count - 1);
+      let notch = current;
       // the gauge's row: `y` goes on down the screen while the gauge stays (redrawn on a move)
       const gy = y;
       const track = this.add.graphics();
@@ -234,7 +246,7 @@ export class OptionsScene extends Phaser.Scene {
         track.clear();
         track.fillStyle(0x15131c, 1).fillRect(left, y - h / 2, width, h);
         track.fillStyle(hex(COLORS.accent), 1).fillRect(left, y - h / 2, xOf(notch) - left, h);
-        for (let i = 0; i < DRAG_NOTCHES; i++) {
+        for (let i = 0; i < count; i++) {
           const on = i <= notch;
           track
             .fillStyle(on ? hex(COLORS.accent) : hex(COLORS.dim), 1)
@@ -245,20 +257,20 @@ export class OptionsScene extends Phaser.Scene {
       const moveTo = (i: number) => {
         notch = i;
         knob.setX(xOf(i));
-        this.buttons[OptionsScene.GAUGE] = [xOf(i), gy];
+        this.buttons[id] = [xOf(i), gy];
         draw();
         this.publishButtons();
+        live?.(i);
       };
       const commit = () => {
-        const step = stepOfNotch(notch);
-        if (step !== s.dragStep) change(() => (s.dragStep = step));
+        if (notch !== current) change(() => commitNotch(notch));
       };
       draw();
-      this.buttons[OptionsScene.GAUGE] = [xOf(notch), y];
-      for (let i = 0; i < DRAG_NOTCHES; i++) this.buttons[`drag-${i}`] = [xOf(i), y];
-      this.focusables.push({ id: OptionsScene.GAUGE, button: knob, press: () => {} });
-      this.gaugeShift = (by) => {
-        const i = Math.min(DRAG_NOTCHES - 1, Math.max(0, notch + by));
+      this.buttons[id] = [xOf(notch), y];
+      for (let i = 0; i < count; i++) this.buttons[`${id}-${i}`] = [xOf(i), y];
+      this.focusables.push({ id, button: knob, press: () => {} });
+      this.gaugeShifts[id] = (by) => {
+        const i = Math.min(count - 1, Math.max(0, notch + by));
         if (i === notch) return;
         moveTo(i);
         commit();
@@ -272,38 +284,42 @@ export class OptionsScene extends Phaser.Scene {
       // the knob (and its frame, a depth under it) over the track
       track.setDepth(1);
       knob.setDepth(3);
+      // this gauge's knob is held (another gauge's finger moves nothing here)
+      let held = false;
       const grab = (p: Phaser.Input.Pointer) => {
         this.gaugePointer = p.id;
+        held = true;
         this.drag = null;
-        moveTo(notchAt(p.x, left, width));
+        moveTo(notchAt(p.x, left, width, count));
       };
       zone.on('pointerdown', grab);
       knob.on('pointerdown', grab);
       this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
-        if (p.id !== this.gaugePointer || !p.isDown) return;
-        const i = notchAt(p.x, left, width);
+        if (!held || p.id !== this.gaugePointer || !p.isDown) return;
+        const i = notchAt(p.x, left, width, count);
         if (i !== notch) moveTo(i);
       });
       const release = (p: Phaser.Input.Pointer) => {
-        if (p.id !== this.gaugePointer) return;
+        if (!held || p.id !== this.gaugePointer) return;
         this.gaugePointer = null;
+        held = false;
         commit();
       };
       this.input.on('pointerup', release);
       this.input.on('pointerupoutside', release);
       // the ends: what each way means
-      const ends = y + px(touch ? TOUCH_TARGET / 2 + 4 : 18);
-      this.add.text(left, ends, t('dragLow'), textStyle(11, COLORS.dim)).setOrigin(0, 0);
-      this.add.text(left + width, ends, t('dragHigh'), textStyle(11, COLORS.dim)).setOrigin(1, 0);
+      const endsY = y + px(touch ? TOUCH_TARGET / 2 + 4 : 18);
+      this.add.text(left, endsY, ends[0], textStyle(11, COLORS.dim)).setOrigin(0, 0);
+      this.add.text(left + width, endsY, ends[1], textStyle(11, COLORS.dim)).setOrigin(1, 0);
       y += rowStep + px(touch ? 30 : 22);
     };
 
-    // The on/off switches ("Music: On"): one a line, all as wide as the longest of their words
+    // The on/off switches ("Dust: On"): one a line, all as wide as the longest of their words
     // either way, so that a switch pressed changes neither its width nor the lines.
-    type Switch = 'music' | 'effects' | 'torchlight' | 'dust' | 'vignette' | 'smoothing';
+    type Switch = 'torchlight' | 'dust' | 'vignette' | 'smoothing';
     const onOff = (key: Switch, on: boolean) =>
       t('labelValue', { label: t(key), value: on ? t('on') : t('off') });
-    const SWITCHES: Switch[] = ['music', 'effects', 'torchlight', 'dust', 'vignette', 'smoothing'];
+    const SWITCHES: Switch[] = ['torchlight', 'dust', 'vignette', 'smoothing'];
     const switchW = Math.max(
       ...SWITCHES.flatMap((k) =>
         [true, false].map((on) => {
@@ -327,29 +343,48 @@ export class OptionsScene extends Phaser.Scene {
       y += rowStep;
     };
 
-    label(t('sound'));
-    switches([
-      [
-        'sound',
-        'music',
-        s.sound,
-        () =>
-          change(() => {
-            s.sound = !s.sound;
-            syncMusic(this, s.sound, 'music-menu');
-          }),
-      ],
-      [
-        'sfx',
-        'effects',
-        s.sfx,
-        () =>
-          change(() => {
-            s.sfx = !s.sfx;
-            playSfx('key', s.sfx); // a sample when turned on
-          }),
-      ],
-    ]);
+    // the volumes: a gauge each, from off to 100 % by tens; off keeps the volume, for the game's
+    // sound button (which switches both off and on). Heard while the knob moves (the music at
+    // each notch's volume, an effect sample on each notch), saved when it is let go.
+    const music = (c: Channel) => {
+      s.sound = c.on;
+      s.musicVolume = c.volume;
+      setMusicVolume(c.volume);
+      syncMusic(this, s.sound, 'music-menu');
+    };
+    const effects = (c: Channel) => {
+      s.sfx = c.on;
+      s.sfxVolume = c.volume;
+      setSfxVolume(c.volume);
+    };
+    const musicNow = (): Channel => ({ on: s.sound, volume: s.musicVolume });
+    const effectsNow = (): Channel => ({ on: s.sfx, volume: s.sfxVolume });
+    label(t('music'));
+    gauge(
+      'music',
+      VOLUME_NOTCHES,
+      notchOfVolume(musicNow()),
+      (i) => music(channelOfNotch(i, musicNow())),
+      [t('off'), '100 %'],
+      (i) => {
+        const c = channelOfNotch(i, musicNow());
+        setMusicVolume(c.volume);
+        syncMusic(this, c.on, 'music-menu');
+      },
+    );
+    label(t('effects'));
+    gauge(
+      'sfx',
+      VOLUME_NOTCHES,
+      notchOfVolume(effectsNow()),
+      (i) => effects(channelOfNotch(i, effectsNow())),
+      [t('off'), '100 %'],
+      (i) => {
+        const c = channelOfNotch(i, effectsNow());
+        setSfxVolume(c.volume);
+        playSfx('key', c.on); // a sample at this notch's volume
+      },
+    );
 
     label(t('language'));
     const langY = y;
@@ -370,7 +405,11 @@ export class OptionsScene extends Phaser.Scene {
         change(() => (s.dragMode = s.dragMode === 'dynamic' ? 'fixed' : 'dynamic')),
       );
       y += rowStep;
-      if (s.dragMode === 'fixed') gauge();
+      if (s.dragMode === 'fixed')
+        gauge('drag', DRAG_NOTCHES, notchOfStep(s.dragStep), (i) => (s.dragStep = stepOfNotch(i)), [
+          t('dragLow'),
+          t('dragHigh'),
+        ]);
     }
     label(t('repeat'));
     stepper(
@@ -539,13 +578,11 @@ export class OptionsScene extends Phaser.Scene {
       return;
     }
     if (this.langMenu.length) return this.langKey(e);
-    // the sensitivity gauge focused: ← and → move its knob a notch
-    if (
-      this.focus.focused?.id === OptionsScene.GAUGE &&
-      (e.key === 'ArrowLeft' || e.key === 'ArrowRight')
-    ) {
+    // a gauge focused: ← and → move its knob a notch
+    const shift = this.gaugeShifts[this.focus.focused?.id ?? ''];
+    if (shift && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
       e.preventDefault();
-      this.gaugeShift?.(e.key === 'ArrowRight' ? 1 : -1);
+      shift(e.key === 'ArrowRight' ? 1 : -1);
       return;
     }
     // arrows and Tab go from button to button (the screen follows), Enter or Space press it
