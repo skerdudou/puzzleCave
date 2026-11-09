@@ -12,7 +12,8 @@ import {
 import { app } from '../app';
 import { setDebug } from '../debug';
 import { formatTime } from '../format';
-import { t } from '../i18n';
+import { t, type MessageKey } from '../i18n';
+import { isTouchDevice } from '../touch';
 import { onSceneKeyDown } from '../input/sceneKeys';
 import { chapters, hasMaster, levelById, levelTitle, locate, masterState } from '../levels';
 import {
@@ -31,7 +32,9 @@ import {
   drawThresholdLine,
   masterBoxTitle,
   strokeMasterBox,
+  KeyFocus,
   makeButton,
+  sameWidth,
   px,
   shrinkToFit,
   textStyle,
@@ -251,27 +254,55 @@ export class ResultScene extends Phaser.Scene {
       mode !== 'master' && masterState(levelId, app.data.levels[levelId]) === 'open';
     const playMaster = () => this.scene.start('Game', { levelId, mode: 'master' });
     setDebug({ resultMasterButton: masterBtn });
+    // the buttons in reading order: Replay, Master (when open), then Menu, Next (when there is
+    // one); all of one size and one width. The keyboard goes from one to the next (arrows, Tab)
+    // and presses the focused one (Enter, Space); unfocused, the keys of the help line act.
+    type Item = { id: string; label: string; press: () => void; key: MessageKey };
+    const first: Item[] = [
+      { id: 'replay', label: t('replay'), press: replay, key: 'resultKeyReplay' },
+    ];
+    if (masterBtn)
+      first.push({ id: 'master', label: t('master'), press: playMaster, key: 'resultKeyMaster' });
+    const second: Item[] = [{ id: 'menu', label: t('menu'), press: menu, key: 'resultKeyMenu' }];
+    if (next) second.push({ id: 'next', label: t('next'), press: goNext, key: 'resultKeyNext' });
+    const items = [...first, ...second];
+    const made = new Map<string, Phaser.GameObjects.Text>();
+    const make = (item: Item, x: number, by: number) =>
+      made.set(item.id, makeButton(this, x, by, item.label, item.press));
     if (low) {
-      // the buttons in a column on the right
+      // a column on the right, in the same order
       const bx = this.scale.width - px(100);
-      const gap = masterBtn ? px(48) : px(56);
-      let by = this.scale.height / 2 - (masterBtn ? gap / 2 : 0);
-      makeButton(this, bx, by - gap, t('replay'), replay);
-      if (next) makeButton(this, bx, by, t('next'), goNext);
-      if (masterBtn) makeButton(this, bx, (by += gap), t('master'), playMaster, 14);
-      makeButton(this, bx, by + gap, t('menu'), menu, 13);
-      y = Math.max(y, by + gap);
+      const gap = px(48);
+      let by = this.scale.height / 2 - ((items.length - 1) * gap) / 2;
+      for (const item of items) {
+        make(item, bx, by);
+        by += gap;
+      }
+      y = Math.max(y, by - gap);
     } else {
+      // two rows of one or two buttons, centred
       y += px(16);
-      makeButton(this, cx - px(80), y, t('replay'), replay);
-      if (next) makeButton(this, cx + px(80), y, t('next'), goNext);
-      y += px(52);
-      if (masterBtn) {
-        // Menu and master mode share the second row
-        makeButton(this, cx - px(80), y, t('master'), playMaster, 14);
-        makeButton(this, cx + px(80), y, t('menu'), menu, 13);
-      } else makeButton(this, cx, y, t('menu'), menu, 13);
+      for (const rowItems of [first, second]) {
+        rowItems.forEach((item, i) =>
+          make(item, rowItems.length === 1 ? cx : cx + (i === 0 ? -px(80) : px(80)), y),
+        );
+        y += px(52);
+      }
+      y -= px(52);
     }
+    sameWidth([...made.values()]);
+    const focus = new KeyFocus(
+      items.map((item) => ({ id: item.id, button: made.get(item.id)!, press: item.press })),
+    );
+    // the keys, under everything (not on a touch screen)
+    if (!isTouchDevice())
+      this.add
+        .text(cx, this.scale.height - px(14), items.map((item) => t(item.key)).join(' · '), {
+          ...textStyle(11, COLORS.dim),
+          align: 'center',
+          wordWrap: { width: this.scale.width - px(32) },
+        })
+        .setOrigin(0.5, 1);
 
     if (app.author) {
       y += px(56);
@@ -333,6 +364,8 @@ export class ResultScene extends Phaser.Scene {
 
     onSceneKeyDown(this, (e) => {
       this.reveal?.finish();
+      // a focused button first (arrows, Tab, Enter on it)
+      if (focus.key(e)) return;
       if (e.key === 'Enter' && next) this.scene.start('Game', { levelId: next, mode: 'normal' });
       else if (e.key.toLowerCase() === 'r') this.scene.start('Game', { levelId, mode });
       else if (e.key.toLowerCase() === 'p' && masterBtn) playMaster();
