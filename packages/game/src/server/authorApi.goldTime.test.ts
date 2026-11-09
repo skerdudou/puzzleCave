@@ -56,10 +56,10 @@ test('save on a new level: goldMoves and goldTime written, the result text menti
   await new Promise((resolve) => setTimeout(resolve, 0));
   const job = (await api.handle('GET', `/__pc/job/${(r.body as { jobId: string }).jobId}`))
     .body as JobInfo;
-  expect(job).toMatchObject({ state: 'done', after: 3, goldTime: 1 });
+  expect(job).toMatchObject({ state: 'done', after: 3, goldTime: 0.6 });
   const tmx = readFileSync(join(dir, 'lvl.tmx'), 'utf8');
   expect(tmx).toMatch(/name="goldMoves" type="int" value="3"/);
-  expect(tmx).toMatch(/name="goldTime" type="\w+" value="1"/);
-  expect(describeJob(job, 0).detail).toBe('Reference time (gold): 1 s');
+  expect(tmx).toMatch(/name="goldTime" type="\w+" value="0.6"/);
+  expect(describeJob(job, 0).detail).toBe('Reference time (gold): 0.6 s');
   api.dispose();
 });

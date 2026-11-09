@@ -4,7 +4,7 @@
   <property name="name" value="The Moat"/>
   <property name="author" value="moineau"/>
   <property name="goldMoves" type="int" value="47"/>
-  <property name="goldTime" type="int" value="9"/>
+  <property name="goldTime" type="float" value="10.2"/>
   <property name="platinumMoves" type="int" value="42"/>
  </properties>
  <tileset firstgid="1" source="tileset.tsx"/>

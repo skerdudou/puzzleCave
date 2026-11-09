@@ -65,28 +65,28 @@ From the **Medium** chapter on, earning gold on a level unlocks its **master mod
 
 - **no undo** — and restarting starts a brand-new attempt;
 - water no longer stops you… **it drowns you**;
-- **against the clock**: on a level with time medals, you must finish within its **bronze time**.
+- **against the clock**: on a level with time medals, you must finish within its **gold time**.
   The clock starts with your first move (study the map as long as you like before it) and the
   remaining time is shown at the top, in red for the last seconds. Past it the attempt fails,
   like drowning: restart for a new one. The clock stops while the game is hidden (another app,
   screen locked); leaving for the menu ends the attempt.
 
-Master mode has two medals of its own:
+Master mode has two medals of its own, both within the gold time (the mode's limit):
 
 - **Master** (a violet medal with a crown): finish in master mode within the **gold** move limit;
 - **Grand master** (a light-blue medal with a white sparkle): finish in master mode within the
   **grand master** limit, the best solution known — often a different, cleverer route than the
-  gold one — and, on a level with time medals, within its **silver time**. Grand master includes
-  master: a run within the grand master moves but slower than the silver time earns master.
+  gold one. Grand master includes master.
 
-Master mode is a separate achievement, with its own line on the selection and result screens: the
-limits, one line per medal, for example "Master ≤ 610 moves · time ≤ 3:11.40" (master mode's time
-limit) then "Grand master ≤ 538 moves · time ≤ 1:56.90", and your best master run, under the name
-of the master medal you hold ("Grand master: 538 moves · 1:40.12"), or "Master mode: …" while you
-hold none. The best moves and the best time are kept apart and may come from different runs. A
-master finish also counts for the gold, silver and bronze medals it qualifies for. (Older versions
-had a single platinum medal: it is now grand master. A grand master earned before the silver time
-rule is kept.)
+Master mode is a separate achievement, with its own box on the selection and result screens,
+under your best result: the mode's rules (time limit, no undo, deadly water), the limits of its
+two medals ("Master ≤ 610 moves", "Grand master ≤ 538 moves"), and your master record with the
+medal you hold ("Best: 538 moves · 1:40.12"), or "Not finished yet". The best moves and the best
+time are kept apart and may come from different runs. A master finish also counts for the gold,
+silver and bronze medals it qualifies for — gold in time, always. In master mode the cave looks
+different: a cold blue torch, frost in the air, and in the last seconds the edges of the screen
+turn red to a heartbeat. (Older versions had a single platinum medal: it is now grand master.
+Master medals earned under earlier rules are kept.)
 
 The Easy chapter has no master mode.
 

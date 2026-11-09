@@ -15,7 +15,7 @@ import {
 } from '@puzzlecave/core';
 import { loadPack, setMapProperty } from '@puzzlecave/tiled';
 import { inProcessMemoryMb } from './memory';
-import { goldTimeFor, solutionFeatures } from './times';
+import { goldTimeFor, marginFor, readChapters, solutionFeatures } from './times';
 
 /** first line (a comment, ignored by parseMoves) of a saved solution */
 export function solutionHeader(proven: boolean, lowerBound: number): string {
@@ -77,9 +77,9 @@ export function savedWinningMoves(dir: string, level: LevelData): Dir[] | undefi
 }
 
 /** goldTime of a solution (undefined if it does not win) */
-function goldTimeOf(level: LevelData, moves: readonly Dir[]): number | undefined {
+function goldTimeOf(level: LevelData, moves: readonly Dir[], margin: number): number | undefined {
   try {
-    return goldTimeFor(solutionFeatures(level, moves));
+    return goldTimeFor(solutionFeatures(level, moves), undefined, margin);
   } catch {
     return undefined;
   }
@@ -96,13 +96,15 @@ export interface GoldTimeChoice {
  * level without goldTime (undefined when it has one: an existing goldTime is only replaced by
  * `times --force`). It comes from the gold reference solution: the written one when the write
  * sets goldMoves; otherwise the solution saved before the write (`previous`) if its length is
- * goldMoves, else the written one if its length is goldMoves; else it is not guessed ({}).
+ * goldMoves, else the written one if its length is goldMoves; else it is not guessed ({}). With
+ * the level's chapter `margin` (CHAPTER_MARGINS).
  */
 export function goldTimeChoice(
   level: LevelData,
   changes: ThresholdChanges,
   moves: readonly Dir[],
   previous: readonly Dir[] | undefined,
+  margin = 1,
 ): GoldTimeChoice | undefined {
   if (level.thresholds.goldTime !== undefined) return undefined;
   const gold = changes.goldMoves ?? level.thresholds.goldMoves;
@@ -113,7 +115,7 @@ export function goldTimeChoice(
       : [previous && normalizeMoves(level, previous).moves, written];
   for (const c of candidates) {
     if (c === undefined || c.length !== gold) continue;
-    const goldTime = goldTimeOf(level, c);
+    const goldTime = goldTimeOf(level, c, margin);
     if (goldTime !== undefined) return { goldTime, from: c.length };
   }
   return {};
@@ -132,7 +134,8 @@ export function applyThresholds(
   o: { force?: boolean | undefined; previous?: readonly Dir[] | undefined } = {},
 ): string[] {
   const changes = thresholdChanges(level.thresholds, moves.length, o.force);
-  const time = goldTimeChoice(level, changes, moves, o.previous);
+  const margin = marginFor(readChapters(dir), level.id);
+  const time = goldTimeChoice(level, changes, moves, o.previous, margin);
   const props: [string, number][] = Object.entries(changes);
   const lines: string[] = [];
   if (time?.goldTime !== undefined) {

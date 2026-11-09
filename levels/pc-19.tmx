@@ -4,7 +4,7 @@
   <property name="name" value="The Long Way Round"/>
   <property name="author" value="moineau"/>
   <property name="goldMoves" type="int" value="92"/>
-  <property name="goldTime" type="int" value="19"/>
+  <property name="goldTime" type="float" value="18.2"/>
   <property name="platinumMoves" type="int" value="88"/>
  </properties>
  <tileset firstgid="1" source="tileset.tsx"/>

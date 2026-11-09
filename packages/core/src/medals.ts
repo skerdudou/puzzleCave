@@ -2,8 +2,8 @@ import type { LevelData, Mode, ThresholdOverrides } from './types';
 
 export type Medal = 'gold' | 'silver' | 'bronze';
 /**
- * Master mode's two medals: master (within goldMoves) and grand master (within platinumMoves and
- * the silver time).
+ * Master mode's two medals, both within the gold time (master mode's time limit): master (within
+ * goldMoves) and grand master (within platinumMoves).
  */
 export type MasterMedal = 'master' | 'grandMaster';
 export interface Tier {
@@ -76,11 +76,11 @@ export function resolveThresholds(o: ThresholdOverrides): Thresholds {
 }
 
 /**
- * Master mode's time limit, in ms: the bronze time (a run still playing past it has failed).
+ * Master mode's time limit, in ms: the gold time (a run still playing past it has failed).
  * None for a level without goldTime.
  */
 export function masterTimeLimitMs(th: Thresholds): number | undefined {
-  return th.time ? Math.round(th.time.bronze * 1000) : undefined;
+  return th.time ? Math.round(th.time.gold * 1000) : undefined;
 }
 
 export function medalFor(tier: Tier | undefined, value: number): Medal | undefined {
@@ -92,29 +92,20 @@ export function medalFor(tier: Tier | undefined, value: number): Medal | undefin
 }
 
 /**
- * Grand master's time limit, in ms: the silver time (the same test as the silver time medal).
- * None for a level without goldTime: grand master then has no time condition.
- */
-export function grandMasterTimeMs(th: Thresholds): number | undefined {
-  return th.time ? Math.round(th.time.silver * 1000) : undefined;
-}
-
-/**
  * Master mode's medal for a master finish of `moves` moves in `timeMs`: grand master within the
- * grand master move limit (platinumMoves) and, on a level with time medals, within the silver
- * time; else master within the master move limit (goldMoves), whatever the time (a finished run
- * kept master mode's own limit, the bronze time). On a level without platinumMoves both move
- * limits are goldMoves: such a finish is grand master if fast enough (it implies master). An
- * unknown time (`Infinity`) is never grand master on a level with time medals.
+ * grand master move limit (platinumMoves), else master within the master move limit (goldMoves);
+ * on a level with time medals, both within the gold time — master mode's own time limit, which a
+ * finished run has kept. On a level without platinumMoves both move limits are goldMoves: such a
+ * finish is grand master (it implies master). An unknown time (`Infinity`) earns nothing on a
+ * level with time medals.
  */
 export function masterMedalFor(
   th: Thresholds,
   moves: number,
   timeMs: number,
 ): MasterMedal | undefined {
-  const fastEnough = !th.time || timeMs / 1000 <= th.time.silver;
-  if (th.grandMasterMoves !== undefined && moves <= th.grandMasterMoves && fastEnough)
-    return 'grandMaster';
+  if (th.time && timeMs / 1000 > th.time.gold) return undefined;
+  if (th.grandMasterMoves !== undefined && moves <= th.grandMasterMoves) return 'grandMaster';
   if (th.masterMoves !== undefined && moves <= th.masterMoves) return 'master';
   return undefined;
 }
@@ -122,8 +113,8 @@ export function masterMedalFor(
 /**
  * Medals of a finished run. The move and time medals do not depend on the mode (a master finish
  * within the gold limit is gold too); the master and grand master medals need master mode (whose
- * time limit a finished run has kept) and at most their move limits, and grand master the silver
- * time as well (`masterMedalFor`). `masterMode` is false for
+ * time limit, the gold time, a finished run has kept) and at most their move limits
+ * (`masterMedalFor`). `masterMode` is false for
  * levels of a chapter without master mode: no master medal there.
  */
 export function award(level: LevelData, r: RunResult, masterMode = true): Award {

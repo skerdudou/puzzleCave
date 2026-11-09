@@ -4,25 +4,17 @@ import {
   award,
   bestMasterMedal,
   bestMedal,
-  grandMasterTimeMs,
   masterMedalFor,
   masterTimeLimitMs,
   medalFor,
   resolveThresholds,
 } from './medals';
 
-test('master time limit: the bronze time in ms, none without goldTime', () => {
-  expect(masterTimeLimitMs(resolveThresholds({ goldTime: 20 }))).toBe(30_000);
-  expect(masterTimeLimitMs(resolveThresholds({ goldTime: 9 }))).toBe(15_000); // gold + 6 s
-  expect(masterTimeLimitMs(resolveThresholds({ goldTime: 20, bronzeTime: 42.5 }))).toBe(42_500);
+test('master time limit: the gold time in ms, none without goldTime', () => {
+  expect(masterTimeLimitMs(resolveThresholds({ goldTime: 20 }))).toBe(20_000);
+  expect(masterTimeLimitMs(resolveThresholds({ goldTime: 10.4 }))).toBe(10_400);
+  expect(masterTimeLimitMs(resolveThresholds({ goldTime: 20, bronzeTime: 42.5 }))).toBe(20_000);
   expect(masterTimeLimitMs(resolveThresholds({ goldMoves: 30 }))).toBeUndefined();
-});
-
-test('grand master time: the silver time in ms, none without goldTime', () => {
-  expect(grandMasterTimeMs(resolveThresholds({ goldTime: 20 }))).toBe(25_000);
-  expect(grandMasterTimeMs(resolveThresholds({ goldTime: 9 }))).toBe(12_000); // gold + 3 s
-  expect(grandMasterTimeMs(resolveThresholds({ goldTime: 20, silverTime: 22.5 }))).toBe(22_500);
-  expect(grandMasterTimeMs(resolveThresholds({ goldMoves: 30 }))).toBeUndefined();
 });
 
 test.each([
@@ -104,14 +96,12 @@ test('masterMedalFor: grand master within platinumMoves, master within goldMoves
   expect(masterMedalFor(resolveThresholds({}), 1, 0)).toBeUndefined();
 });
 
-test('masterMedalFor: grand master also within the silver time, master whatever the time', () => {
-  // goldTime 85 s with goldMoves 610 (silver 671 moves, bronze 763): silver 116.9 s, bronze 191.4 s
+test('masterMedalFor: both medals within the gold time, master mode limit', () => {
   const th = resolveThresholds({ goldMoves: 610, platinumMoves: 538, goldTime: 85 });
-  expect(masterMedalFor(th, 538, 116_880)).toBe('grandMaster');
-  expect(masterMedalFor(th, 538, 116_910)).toBe('master');
-  expect(masterMedalFor(th, 500, 150_000)).toBe('master');
-  expect(masterMedalFor(th, 538, Infinity)).toBe('master');
-  expect(masterMedalFor(th, 610, 1_000)).toBe('master');
+  expect(masterMedalFor(th, 538, 85_000)).toBe('grandMaster');
+  expect(masterMedalFor(th, 610, 85_000)).toBe('master');
+  expect(masterMedalFor(th, 538, 85_010)).toBeUndefined();
+  expect(masterMedalFor(th, 538, Infinity)).toBeUndefined();
   expect(masterMedalFor(th, 611, 1_000)).toBeUndefined();
 });
 
@@ -123,11 +113,10 @@ test('without platinumMoves (or platinumMoves = goldMoves) the two limits coinci
     expect(masterMedalFor(th, 20, 0)).toBe('grandMaster');
     expect(masterMedalFor(th, 21, 0)).toBeUndefined();
   }
-  // with time medals, a slower finish within the same move limit is master only
+  // with time medals, within the gold time
   const timed = resolveThresholds({ goldMoves: 20, goldTime: 10 });
-  // (silver time: 10 × 22/20 × 1.25 = 13.75, up to 13.8 s)
-  expect(masterMedalFor(timed, 20, 13_800)).toBe('grandMaster');
-  expect(masterMedalFor(timed, 20, 13_810)).toBe('master');
+  expect(masterMedalFor(timed, 20, 10_000)).toBe('grandMaster');
+  expect(masterMedalFor(timed, 20, 10_010)).toBeUndefined();
 });
 
 test('medalFor : value ≤ threshold', () => {
@@ -146,17 +135,16 @@ test('award combines moves and time; master medals only in master mode', () => {
     time: 'gold',
   });
   expect(award(level, { moves: 10, timeMs: 1_000, mode: 'normal' }).master).toBeUndefined();
-  // master mode: the move medals it qualifies for, and its own medal within the limits (grand
-  // master: within the silver time, 30 s, too)
-  expect(award(level, { moves: 10, timeMs: 30_000, mode: 'master' })).toEqual({
+  // master mode: the move medals it qualifies for, and its own medal within the limits (the
+  // gold time, 20 s)
+  expect(award(level, { moves: 10, timeMs: 20_000, mode: 'master' })).toEqual({
     moves: 'gold',
-    time: 'silver',
+    time: 'gold',
     master: 'grandMaster',
   });
-  expect(award(level, { moves: 10, timeMs: 31_000, mode: 'master' })).toEqual({
+  expect(award(level, { moves: 10, timeMs: 21_000, mode: 'master' })).toEqual({
     moves: 'gold',
-    time: 'bronze',
-    master: 'master',
+    time: 'silver',
   });
   expect(award(level, { moves: 11, timeMs: 1_000, mode: 'master' })).toEqual({
     moves: 'silver',

@@ -57,37 +57,16 @@ test('a level without keys at start, in normal mode: no banner', async ({ page }
   expect((await debug(page)).banner).toBeNull();
 });
 
-test('master mode: the whole rules (and the key of pc-31), hidden by a click', async ({ page }) => {
+test('master mode: no rules in the banner (the select box gives them), only the keys; a click hides it', async ({
+  page,
+}) => {
   await select(page, { 'pc-31': { completed: true, bestMoves: 1, medals: { moves: 'gold' } } });
   await goToLevel(page, 'pc-31');
   await page.keyboard.press('KeyP');
   await expect.poll(() => scene(page)).toBe('Game');
-  await expect
-    .poll(async () => (await debug(page)).banner)
-    .toEqual([
-      'Master mode: no undo, water is deadly',
-      'Finish within 0:27.20 (bronze time)',
-      'Keys at start: 1',
-    ]);
+  await expect.poll(async () => (await debug(page)).banner).toEqual(['Keys at start: 1']);
   const [x, y] = (await debug(page)).bannerAt!;
   await page.mouse.click(x, y);
   await expect.poll(async () => (await debug(page)).banner).toBeNull();
   expect((await debug(page)).moves).toBe(0);
-});
-
-test('master mode, for a player who has won a master run: the rules on one short line', async ({
-  page,
-}) => {
-  await select(page, {
-    'pc-31': { completed: true, bestMoves: 1, medals: { moves: 'gold', master: 'master' } },
-  });
-  await goToLevel(page, 'pc-31');
-  await page.keyboard.press('KeyP');
-  await expect.poll(() => scene(page)).toBe('Game');
-  await expect
-    .poll(async () => (await debug(page)).banner)
-    .toEqual(['♛ No undo · deadly water · ≤ 0:27.20', 'Keys at start: 1']);
-  // the first move hides it too
-  await page.keyboard.press('ArrowRight');
-  await expect.poll(async () => (await debug(page)).banner).toBeNull();
 });

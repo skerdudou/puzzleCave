@@ -27,7 +27,10 @@ import { MedalReveal, type MedalSpot } from '../render/MedalReveal';
 import {
   COLORS,
   drawMedal,
+  MASTER_BOX,
   drawThresholdLine,
+  masterBoxTitle,
+  strokeMasterBox,
   makeButton,
   px,
   shrinkToFit,
@@ -168,37 +171,69 @@ export class ResultScene extends Phaser.Scene {
     // master mode, a separate achievement, on its own line: this master run (master or grand
     // master medal), or after a normal run where the player stands in master mode
     if (master && th.grandMasterMoves !== undefined) {
+      const ms = masterStatus(app.data.levels[levelId], true);
       let text: string;
-      if (mode === 'master') {
-        // this run: moves · time, under the name of its medal (revealed with the others), or of
-        // the mode without a medal ("Master mode", not "Master", the first medal's name)
-        medalAt('master');
-        text = t('labelValue', {
-          label: award.master ? masterMedalName(award.master) : t('masterModeName'),
-          value: `${result.moves} · ${formatTime(result.timeMs)}`,
-        });
+      if (mode !== 'master' && ms.kind === 'locked') {
+        // master mode still locked: how to unlock it, in place of its box
+        text = t('masterLocked');
+        this.add
+          .text(cx, y, `🔒 ${text}`, {
+            ...textStyle(11, COLORS.dim),
+            align: 'center',
+            wordWrap: { width: lineWidth - px(16) },
+          })
+          .setOrigin(0.5);
+        y += px(40);
       } else {
-        // a normal run: where the player stands in master mode (its best medal, if any)
-        const ms = masterStatus(app.data.levels[levelId], true);
-        drawMedal(g, cx - px(130), y, px(10), ms.kind === 'best' ? ms.medal : undefined);
-        text = ms.kind === 'locked' ? t('masterLocked') : masterLineText(ms);
+        // master mode's box: its rules, one line per medal ("Master ≤ 610 moves", then "Grand
+        // master ≤ 538 moves"), then this master run or where the player stands in master mode
+        const boxW = Math.min(lineWidth, px(340));
+        const top = y - px(12);
+        const rulesBottom = masterBoxTitle(
+          this,
+          cx,
+          top,
+          boxW,
+          t('masterModeName'),
+          t(th.time ? 'masterRules' : 'masterRulesUntimed'),
+        );
+        const line = px(MASTER_BOX.line);
+        let ly = rulesBottom + px(4) + line / 2;
+        const row = rows.find((r) => r.kind === 'master');
+        for (const tier of row?.tiers ?? []) {
+          drawThresholdLine(this, g, cx, ly, '', [tier], {
+            maxWidth: boxW - 2 * px(MASTER_BOX.pad),
+            named: masterMedalName,
+          });
+          ly += line;
+        }
+        y = ly + px(10);
+        if (mode === 'master') {
+          // this run: moves · time, under the name of its medal (revealed with the others), or
+          // of the mode without a medal ("Master mode", not "Master", the first medal's name);
+          // its "New!" stays in the box
+          medalAt('master');
+          const spot = spots.master;
+          if (spot) spot.minX = cx - boxW / 2 + px(MASTER_BOX.pad);
+          text = t('labelValue', {
+            label: award.master ? masterMedalName(award.master) : t('masterModeName'),
+            value: `${result.moves} · ${formatTime(result.timeMs)}`,
+          });
+        } else {
+          // a normal run: the master record (its medal, if any), as the other records
+          drawMedal(g, cx - px(130), y, px(10), ms.kind === 'best' ? ms.medal : undefined);
+          text = masterLineText(ms);
+        }
+        const runText = this.add
+          .text(cx - px(110), y, text, {
+            ...(mode === 'master' ? textStyle(14, COLORS.master) : textStyle(12, COLORS.dim)),
+            wordWrap: { width: Math.min(px(250), cx + boxW / 2 - (cx - px(110)) - px(8)) },
+          })
+          .setOrigin(0, 0.5);
+        const bottom = Math.max(y + px(12), runText.getBounds().bottom) + px(MASTER_BOX.pad);
+        strokeMasterBox(g, cx, top, boxW, bottom);
+        y = bottom + px(28);
       }
-      this.add
-        .text(cx - px(110), y, text, {
-          ...textStyle(mode === 'master' ? 14 : 12, '#9be7ff'),
-          wordWrap: { width: Math.min(px(250), this.scale.width - (cx - px(110)) - px(8)) },
-        })
-        .setOrigin(0, 0.5);
-      // one line per master medal: "Master ≤ 610 moves · time ≤ …", then "Grand master …"
-      const row = rows.find((r) => r.kind === 'master');
-      for (const tier of row?.tiers ?? []) {
-        drawThresholdLine(this, g, cx, y + px(32), '', [tier], {
-          maxWidth: lineWidth,
-          named: masterMedalName,
-        });
-        y += px(18);
-      }
-      y += px(40);
       setDebug({ resultMasterLine: text });
     }
 

@@ -29,7 +29,7 @@ import { DragSteps, dynamicDragStep } from '../input/drag';
 import { HoldRepeat } from '../input/holdRepeat';
 import { boundsOf, centreOf, zoneArea, zoneAt, zonePolygon, type Box } from '../input/tapZones';
 import { DEEP_THOUGHT, Stillness } from '../achievements';
-import { RunClock, countdown } from '../runClock';
+import { COUNTDOWN_WARN_MS, RunClock, countdown } from '../runClock';
 import { showNotice } from '../notice';
 import { SfxFeed, playSfx, type Sfx } from '../sfx';
 import {
@@ -112,10 +112,12 @@ export class GameScene extends Phaser.Scene {
   private clock = new RunClock();
   /** normal mode: the time since the player last did something (Deep Thought) */
   private readonly stillness = new Stillness();
-  /** master mode: the time limit (the level's bronze time), ms; none without goldTime */
+  /** master mode: the time limit (the level's gold time), ms; none without goldTime */
   private timeLimitMs: number | undefined;
   /** master mode: the time limit is passed, the run has failed (like drowning) */
   private timedOut = false;
+  /** master mode's last seconds: the countdown's second the heartbeat last sounded on */
+  private beatSecond: number | undefined;
   private readonly haptics = new HapticFeed();
   private readonly sounds = new SfxFeed();
   private finished = false;
@@ -160,6 +162,7 @@ export class GameScene extends Phaser.Scene {
     this.ambience = new AmbienceView(this, {
       levelId: this.level.id,
       hudHeight: this.topReserve(),
+      master: this.mode === 'master',
     });
     this.ambience.layout(layout, ...this.hudBand());
     this.board = new BoardView(this, this.session.state, layout, app.data.settings.smoothing);
@@ -305,11 +308,18 @@ export class GameScene extends Phaser.Scene {
 
   override update(time: number): void {
     this.ambience.update(time, this.board.heroCentre());
-    if (this.session.state.status !== 'playing' || this.finished || this.timedOut) return;
-    if (!this.clock.started) return;
+    const playing = this.session.state.status === 'playing' && !this.finished && !this.timedOut;
+    if (!playing || !this.clock.started) {
+      this.ambience.setTension(null);
+      return;
+    }
     const now = performance.now();
-    if (this.checkTimeLimit(now)) return;
+    if (this.checkTimeLimit(now)) {
+      this.ambience.setTension(null);
+      return;
+    }
     this.showTime(now);
+    this.lastSeconds(now);
     // Deep Thought: a minute of the run clock (not the time hidden) without doing anything; not
     // in master mode, where the clock is a countdown
     if (this.mode === 'normal' && this.stillness.thinking(this.clock.elapsed(now))) {
@@ -338,6 +348,31 @@ export class GameScene extends Phaser.Scene {
       ?.setText(`${t('timeLeft')} ${formatTime(c.leftMs)}`)
       .setColor(c.warn ? WARN_COLOR : COLORS.text);
     setDebug({ timeLeftMs: c.leftMs, timeWarn: c.warn });
+  }
+
+  /**
+   * Master mode's last seconds (the countdown's warning): the red vignette, and a heartbeat on
+   * each whole second of the countdown.
+   */
+  private lastSeconds(now: number): void {
+    if (this.timeLimitMs === undefined) return;
+    const c = countdown(this.timeLimitMs, this.clock.elapsed(now));
+    if (!c.warn) {
+      this.ambience.setTension(null);
+      this.beatSecond = undefined;
+      return;
+    }
+    this.ambience.setTension({
+      leftMs: c.leftMs,
+      warnMs: Math.min(COUNTDOWN_WARN_MS, this.timeLimitMs / 4),
+    });
+    const second = Math.ceil(c.leftMs / 1000);
+    if (second === this.beatSecond) return;
+    this.beatSecond = second;
+    this.sfx('beat');
+    this.time.delayedCall(200, () => {
+      if (!this.timedOut && !this.finished) this.sfx('beatSoft');
+    });
   }
 
   /** Master mode: past the time limit, the run fails (true). */
@@ -1030,16 +1065,10 @@ export class GameScene extends Phaser.Scene {
 
   /**
    * The level's intro, under the header, over the board (whose zoom does not change for it):
-   * master mode's rules (one short line once a master run has been won), the keys at start when
-   * not 0. Hidden by the first move, a click or tap on it, or Space.
+   * the keys at start when not 0. Hidden by the first move, a click or tap on it, or Space.
    */
   private showBanner(): void {
-    const lines = introLines({
-      master: this.mode === 'master',
-      ...(this.timeLimitMs === undefined ? {} : { timeLimitMs: this.timeLimitMs }),
-      masterVeteran: Object.values(app.data.levels).some((r) => r?.medals.master !== undefined),
-      initialKeys: this.level.initialKeys,
-    });
+    const lines = introLines({ initialKeys: this.level.initialKeys });
     setDebug({ banner: lines.length ? lines : null });
     if (!lines.length) return;
     const hint = t(isTouchDevice() ? 'bannerHideTouch' : 'bannerHide');

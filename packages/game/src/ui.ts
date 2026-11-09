@@ -37,6 +37,10 @@ export const COLORS = {
   dim: '#8a8597',
   accent: '#ffd25e',
   locked: '#55505f',
+  /** master mode's texts and box */
+  master: '#9be7ff',
+  /** master mode's rules, muted */
+  masterDim: '#6f98aa',
 };
 export const MEDAL_COLORS = {
   gold: 0xf5c518,
@@ -376,6 +380,49 @@ export function drawThresholdLine(
     i.text.setX(x);
     x += i.text.width;
   }
+}
+
+/** Master mode's box: inner margin and line height, base px. */
+export const MASTER_BOX = { pad: 6, line: 18 } as const;
+
+/** Master mode's box title (the mode's name) line height, base px, above its rules. */
+export const MASTER_BOX_NAME = 16;
+
+/** The style of master mode's rules, under the box's title, wrapped in `width` (device px). */
+export function masterRulesStyle(width: number): Phaser.Types.GameObjects.Text.TextStyle {
+  return { ...textStyle(10, COLORS.masterDim), align: 'center', wordWrap: { width } };
+}
+
+/**
+ * Master mode's box, from its top: the mode's name, then its rules under it, muted (wrapped in
+ * the box less its margins); returns the bottom of the rules, where the box's lines start.
+ */
+export function masterBoxTitle(
+  scene: Phaser.Scene,
+  cx: number,
+  top: number,
+  width: number,
+  name: string,
+  rules: string,
+): number {
+  const y = top + px(MASTER_BOX.pad);
+  scene.add.text(cx, y, name, textStyle(12, COLORS.master)).setOrigin(0.5, 0);
+  return scene.add
+    .text(cx, y + px(MASTER_BOX_NAME), rules, masterRulesStyle(width - 2 * px(MASTER_BOX.pad)))
+    .setOrigin(0.5, 0)
+    .getBounds().bottom;
+}
+
+/** The outline of master mode's box, centred on cx. */
+export function strokeMasterBox(
+  g: Phaser.GameObjects.Graphics,
+  cx: number,
+  top: number,
+  width: number,
+  bottom: number,
+): void {
+  g.lineStyle(Math.max(1, px(1)), MEDAL_COLORS.grandMaster, 0.7);
+  g.strokeRoundedRect(cx - width / 2, top, width, bottom - top, px(6));
 }
 
 export function drawMedal(

@@ -7,6 +7,7 @@ import { TILE_ORDER, setMapProperty, writeTmx } from '@puzzlecave/tiled';
 import {
   TIME_RULE,
   estimateTime,
+  marginFor,
   fatigueFactor,
   goldTimeFor,
   niceSeconds,
@@ -19,12 +20,23 @@ import {
 const feat = (o: Partial<SolutionFeatures>): SolutionFeatures => ({
   moves: 0,
   turns: 0,
+  heldRuns: 0,
+  heldMoves: 0,
   pushes: 0,
   keys: 0,
   doors: 0,
   fills: 0,
   interactions: 0,
   ...o,
+});
+
+test('features: held runs, the straight runs of 6 moves or more', () => {
+  const level = fromAscii(['@.......', '.######.', '.......E']);
+  // 7 right (held), 2 down, 7 left (held)… a longer way: 7 right, 2 down
+  const f = solutionFeatures(level, parseMoves('RRRRRRRDD'));
+  expect(f).toMatchObject({ moves: 9, turns: 1, heldRuns: 1, heldMoves: 7 });
+  const g = solutionFeatures(level, parseMoves('DDRRRRRRR'));
+  expect(g).toMatchObject({ moves: 9, turns: 1, heldRuns: 1, heldMoves: 7 });
 });
 
 test('features: moves, turns, pushes, keys, doors, fills', () => {
@@ -42,35 +54,65 @@ test('features: a refused move or a losing solution is an error', () => {
   expect(() => solutionFeatures(level, parseMoves('R'))).toThrow(/does not win/);
 });
 
-test('rule: per move plus per turn, never under the input-rate floor', () => {
-  const rule = { perMove: 0.1, perTurn: 0.2, minPerMove: 0, fatigue: 0, fatigueTurns: 50 };
-  const f = feat({ moves: 10, turns: 4, interactions: 2 });
-  expect(estimateTime(f, rule)).toBeCloseTo(0.1 * 10 + 0.2 * 4);
-  // floor: 10 moves × 0.5 s
-  expect(estimateTime(f, { ...rule, minPerMove: 0.5 })).toBe(5);
-  // the fitted rule: a straight corridor is bounded by the input rate
-  expect(estimateTime(feat({ moves: 100 }))).toBeCloseTo(100 * TIME_RULE.minPerMove);
-  expect(estimateTime(feat({ moves: 100, turns: 40 }))).toBeCloseTo(
-    (100 * TIME_RULE.perMove + 40 * TIME_RULE.perTurn) * fatigueFactor(40),
+test('rule: per press plus per turn; a held run costs the repeat delay, then its interval', () => {
+  const rule = { ...TIME_RULE, fatigue: 0 };
+  expect(estimateTime(feat({ moves: 10, turns: 4 }), rule)).toBeCloseTo(
+    10 * TIME_RULE.perMove + 4 * TIME_RULE.perTurn,
+  );
+  // a single held run of 10: its first move pressed, the repeat's delay, then 8 intervals
+  expect(estimateTime(feat({ moves: 10, heldRuns: 1, heldMoves: 10 }), rule)).toBeCloseTo(
+    TIME_RULE.perMove + TIME_RULE.holdDelay + 8 * TIME_RULE.holdInterval,
+  );
+  // holding is cheaper than pressing on a long run
+  expect(estimateTime(feat({ moves: 10, heldRuns: 1, heldMoves: 10 }))).toBeLessThan(
+    estimateTime(feat({ moves: 10 })),
   );
 });
 
-test('fatigue: +5 % each time the turns double past 50', () => {
+test('fatigue: none up to 300 moves, then +5 % each time the moves double, 5 % at most', () => {
   expect(fatigueFactor(0)).toBe(1);
-  expect(fatigueFactor(50)).toBeCloseTo(1.05);
-  expect(fatigueFactor(150)).toBeCloseTo(1.1);
-  expect(fatigueFactor(750)).toBeCloseTo(1.2);
-  // a long level: 0.35 s a turn, then the fatigue
-  expect(estimateTime(feat({ moves: 400, turns: 150 }))).toBeCloseTo((20 + 52.5) * 1.1);
+  expect(fatigueFactor(300)).toBe(1);
+  expect(fatigueFactor(450)).toBeCloseTo(1 + 0.05 * Math.log2(1.5));
+  expect(fatigueFactor(600)).toBeCloseTo(1.05);
+  expect(fatigueFactor(5000)).toBeCloseTo(1.05);
 });
 
-test('rounding: whole seconds below a minute, 5 s steps above', () => {
-  expect(niceSeconds(0.2)).toBe(1);
-  expect(niceSeconds(12.4)).toBe(12);
-  expect(niceSeconds(59.4)).toBe(59);
-  expect(niceSeconds(61)).toBe(60);
-  expect(niceSeconds(63)).toBe(65);
-  expect(niceSeconds(142.4)).toBe(140);
+test('margins: shrinking chapter after chapter, none on Expert', () => {
+  const chapters = ['easy', 'medium', 'hard', 'expert'].map((id) => ({
+    id,
+    name: { en: id, fr: id },
+    unlockAfter: 0,
+    levels: [`${id}-1`],
+  }));
+  const m = chapters.map((c) => marginFor(chapters, c.levels[0]!));
+  expect(m).toEqual([...m].sort((x, y) => y - x));
+  expect(m.at(-1)).toBe(1);
+  expect(marginFor(chapters, 'elsewhere')).toBe(1);
+  const f = feat({ moves: 100, turns: 40 });
+  expect(goldTimeFor(f, undefined, 1.1)).toBe(niceSeconds(estimateTime(f) * 1.1));
+});
+
+test('rounding up: to the tenth below a minute, to the second above', () => {
+  expect(niceSeconds(0.02)).toBe(0.1);
+  expect(niceSeconds(4.86)).toBe(4.9);
+  expect(niceSeconds(12.41)).toBe(12.5);
+  // a float a hair above a tenth stays on it
+  expect(niceSeconds(13.700000001)).toBe(13.7);
+  expect(niceSeconds(1.1 * 3)).toBe(3.3);
+  expect(niceSeconds(59.96)).toBe(60);
+  expect(niceSeconds(60.2)).toBe(61);
+  expect(niceSeconds(142)).toBe(142);
+  expect(niceSeconds(142.4)).toBe(143);
+});
+
+test('a solution shorter than goldMoves: the time grows with the move ratio', () => {
+  const f = feat({ moves: 100, turns: 40 });
+  const est = estimateTime(f);
+  expect(goldTimeFor(f)).toBe(niceSeconds(est));
+  expect(goldTimeFor(f, 100)).toBe(niceSeconds(est));
+  expect(goldTimeFor(f, 110)).toBe(niceSeconds(est * 1.1));
+  // a longer solution (not the gold limit's) is never shortened
+  expect(goldTimeFor(f, 90)).toBe(niceSeconds(est));
 });
 
 test('fitted rule: more moves, turns or interactions never lower the gold time', () => {
@@ -80,8 +122,6 @@ test('fitted rule: more moves, turns or interactions never lower the gold time',
   expect(goldTimeFor({ ...base, moves: 80 })).toBeGreaterThanOrEqual(g);
   expect(goldTimeFor({ ...base, turns: 40 })).toBeGreaterThanOrEqual(g);
   expect(goldTimeFor({ ...base, interactions: 30 })).toBeGreaterThanOrEqual(g);
-  // never faster than the observed input rate
-  expect(estimateTime(base)).toBeGreaterThanOrEqual(TIME_RULE.minPerMove * base.moves);
 });
 
 test('arguments', () => {
@@ -138,10 +178,30 @@ test('command: table, --apply writes a missing goldTime, --force replaces one', 
   const r = timesCommand(dir, { ids: 'all', apply: true, force: false });
   expect(r.lines.join('\n')).toMatch(/kept \(--force to replace\)/);
   expect(readFileSync(join(dir, 'a.tmx'), 'utf8')).toMatch(
-    new RegExp(`name="goldTime" type="int" value="${expected}"`),
+    new RegExp(`name="goldTime" type="(int|float)" value="${expected}"`),
   );
   expect(readFileSync(tmxB, 'utf8')).toMatch(/value="999"/);
 
   timesCommand(dir, { ids: ['b'], apply: true, force: true });
   expect(readFileSync(tmxB, 'utf8')).not.toMatch(/value="999"/);
+});
+
+test('command: the gold reference solution first, else the saved one scaled to goldMoves', () => {
+  const dir = fixture([
+    fromAscii(['@.....E'], { id: 'g', thresholds: { goldMoves: 8 } }),
+    fromAscii(['@.....E'], { id: 'p', thresholds: { goldMoves: 9 } }),
+  ]);
+  mkdirSync(join(dir, 'solutions', 'gold'));
+  writeFileSync(join(dir, 'solutions', 'g.txt'), 'RRRRRR\n');
+  writeFileSync(join(dir, 'solutions', 'gold', 'g.txt'), 'RRRLRRRR\n');
+  writeFileSync(join(dir, 'solutions', 'p.txt'), 'RRRRRR\n');
+  timesCommand(dir, { ids: 'all', apply: true, force: false });
+  const gold = goldTimeFor(feat({ moves: 8, turns: 2 }));
+  const scaled = niceSeconds(estimateTime(feat({ moves: 6, heldRuns: 1, heldMoves: 6 })) * 1.5);
+  expect(readFileSync(join(dir, 'g.tmx'), 'utf8')).toMatch(
+    `name="goldTime" type="float" value="${gold}"`,
+  );
+  expect(readFileSync(join(dir, 'p.tmx'), 'utf8')).toMatch(
+    `name="goldTime" type="float" value="${scaled}"`,
+  );
 });

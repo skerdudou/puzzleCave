@@ -26,7 +26,11 @@ import {
   HEADER_BAND,
   dpr,
   drawMedal,
+  MASTER_BOX,
+  MASTER_BOX_NAME,
   drawThresholdLine,
+  masterBoxTitle,
+  strokeMasterBox,
   headerBand,
   makeButton,
   px,
@@ -177,12 +181,12 @@ export class SelectScene extends Phaser.Scene {
 
   /** the keys line's height for a wrap width, measured once (key: width + text) */
   private keysHeights = new Map<string, number>();
-  private keysHeight(keys: string, width: number): number {
-    const key = `${width}|${keys}`;
+  private keysHeight(keys: string, width: number, size = 11): number {
+    const key = `${width}|${size}|${keys}`;
     let h = this.keysHeights.get(key);
     if (h === undefined) {
       const k = this.add.text(0, 0, keys, {
-        ...textStyle(11, COLORS.accent),
+        ...textStyle(size, COLORS.accent),
         align: 'center',
         wordWrap: { width },
       });
@@ -193,9 +197,36 @@ export class SelectScene extends Phaser.Scene {
     return h;
   }
 
+  /** master mode's box width in the details' column */
+  private masterBoxWidth(infoW: number): number {
+    return Math.min(infoW - px(16), px(340));
+  }
+
+  /**
+   * Master mode's box height, px: its rules (wrapped), then `lines` lines (one per medal, and
+   * the player's best master run); or, while locked, the sentence that says how to unlock it.
+   */
+  private masterBoxHeight(infoW: number, rules: string, lines: number, locked: boolean): number {
+    if (locked) return this.keysHeight(`🔒 ${t('masterLocked')}`, infoW - px(32));
+    const w = this.masterBoxWidth(infoW) - 2 * px(MASTER_BOX.pad);
+    return (
+      2 * px(MASTER_BOX.pad) +
+      px(MASTER_BOX_NAME) +
+      this.keysHeight(rules, w, 10) +
+      px(4) +
+      lines * px(MASTER_BOX.line)
+    );
+  }
+
+  /** master mode's rules, the box's title: the time limit named on a level with time medals */
+  private masterRules(timed: boolean): string {
+    return t(timed ? 'masterRules' : 'masterRulesUntimed');
+  }
+
   /**
    * From a level's name to its Play button, px: the most any level of any chapter takes (keys
-   * line, thresholds, master line), so that the buttons stay in place while browsing.
+   * line, thresholds, record, master mode's box), so that the buttons stay in place while
+   * browsing.
    */
   private detailsHeight(infoW: number): number {
     let most = 0;
@@ -204,14 +235,21 @@ export class SelectScene extends Phaser.Scene {
         const level = levelById(id);
         const keys = keysLine(level.initialKeys);
         const master = hasMaster(id);
-        const rows = thresholdRows(resolveThresholds(level.thresholds), master);
+        const th = resolveThresholds(level.thresholds);
+        const rows = thresholdRows(th, master);
+        const box = rows.find((r) => r.kind === 'master');
+        const boxH = box
+          ? Math.max(
+              this.masterBoxHeight(infoW, this.masterRules(!!th.time), box.tiers.length + 1, false),
+              this.masterBoxHeight(infoW, '', 0, true),
+            )
+          : 0;
         const h =
           px(44) +
           (keys ? this.keysHeight(keys, infoW - px(32)) + px(8) : 0) +
-          thresholdLines(rows) * px(18) +
+          thresholdLines(rows.filter((r) => r.kind !== 'master')) * px(18) +
           (rows.length ? px(4) : 0) +
-          (master ? px(18) : 0) +
-          px(40);
+          (box ? px(17) + boxH + px(34) : px(40));
         most = Math.max(most, h);
       }
     return most;
@@ -344,23 +382,13 @@ export class SelectScene extends Phaser.Scene {
     const rows = thresholdRows(th, master !== 'none');
     const tg = this.add.graphics();
     for (const r of rows) {
-      if (r.kind === 'master') {
-        // master mode: one line per medal, named when it has room ("Master ≤ 610 moves · time
-        // ≤ 3:11.40", then "Grand master ≤ 538 moves · time ≤ 1:56.90"), else "♛ ≤ 610 moves · …"
-        for (const tier of r.tiers) {
-          drawThresholdLine(this, tg, icx, y, '', [tier], {
-            maxWidth: infoW - px(16),
-            named: masterMedalName,
-          });
-          y += px(18);
-        }
-        continue;
-      }
+      if (r.kind === 'master') continue;
       drawThresholdLine(this, tg, icx, y, t(r.kind), r.tiers, { maxWidth: infoW - px(16) });
       y += px(18);
     }
     setDebug({ thresholds: rows, master });
     if (rows.length) y += px(4);
+    // the record over all runs, then master mode's box
     if (rec?.completed) {
       const time = rec.bestTimeMs !== undefined ? formatTime(rec.bestTimeMs) : '–';
       this.add
@@ -372,12 +400,48 @@ export class SelectScene extends Phaser.Scene {
         )
         .setOrigin(0.5);
     }
-    // master mode on its own line: best master run (named after the medal held), not yet, or
-    // locked (said under the buttons)
+    // master mode: while locked, how to unlock it; else a box with its rules, one line per medal
+    // (named when it has room: "Master ≤ 610 moves", else "♛ ≤ 610 moves") and the best master
+    // run (named after the medal held), or "not finished yet"
     const masterText = masterLineText(masterStatus(rec, master !== 'none'));
-    if (masterText) {
-      y += px(18);
-      this.add.text(icx, y, masterText, textStyle(12, '#9be7ff')).setOrigin(0.5);
+    const masterRow = rows.find((r) => r.kind === 'master');
+    const top = y + px(17);
+    if (master === 'locked' && this.levelOpen(this.ci, this.li)) {
+      this.add
+        .text(icx, top, `🔒 ${t('masterLocked')}`, {
+          ...textStyle(11, COLORS.dim),
+          align: 'center',
+          wordWrap: { width: infoW - px(32) },
+        })
+        .setOrigin(0.5, 0);
+    } else if (master === 'open' && masterRow) {
+      const boxW = this.masterBoxWidth(infoW);
+      const rulesBottom = masterBoxTitle(
+        this,
+        icx,
+        top,
+        boxW,
+        t('masterModeName'),
+        this.masterRules(!!th.time),
+      );
+      const line = px(MASTER_BOX.line);
+      let ly = rulesBottom + px(4) + line / 2;
+      for (const tier of masterRow.tiers) {
+        drawThresholdLine(this, tg, icx, ly, '', [tier], {
+          maxWidth: boxW - 2 * px(MASTER_BOX.pad),
+          named: masterMedalName,
+        });
+        ly += line;
+      }
+      // the master record, as the record over all runs, after the medal held
+      const record = this.add.text(icx, ly, masterText, textStyle(12, COLORS.dim)).setOrigin(0.5);
+      const medal = rec?.medals.master;
+      if (medal) {
+        const r = px(5);
+        record.setX(icx + r + px(3));
+        drawMedal(tg, record.x - record.width / 2 - px(6) - r, ly, r, medal);
+      }
+      strokeMasterBox(tg, icx, top, boxW, ly + line / 2 + px(MASTER_BOX.pad));
     }
     setDebug({ masterLine: masterText, masterMedal: rec?.medals.master ?? null });
     y = buttonsY;
@@ -389,19 +453,6 @@ export class SelectScene extends Phaser.Scene {
       ];
       if (open) row.push(this.button(icx + px(80), y, t('master'), () => this.play('master'), 14));
       playButton = row[0];
-      const rowY = y;
-      let bottom = row[0]!.getBounds().bottom;
-      if (master === 'locked') {
-        y += px(36);
-        const locked = this.add
-          .text(icx, y, `🔒 ${t('masterLocked')}`, {
-            ...textStyle(11, COLORS.dim),
-            align: 'center',
-            wordWrap: { width: infoW - px(32) },
-          })
-          .setOrigin(0.5);
-        bottom = Math.max(bottom, locked.getBounds().bottom);
-      }
     }
     // for the e2e tests: the Play button's centre, CSS px (none on a locked level)
     setDebug({ playButton: playButton && [playButton.x / dpr(), playButton.y / dpr()] });

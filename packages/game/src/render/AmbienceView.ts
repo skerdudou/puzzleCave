@@ -7,11 +7,14 @@ import {
   BOARD_LIGHT_CUT,
   DARK_OUTSIDE,
   chapterTint,
+  frostPosition,
+  frostTwinkle,
   initMotes,
   lightRadius,
   moteAlpha,
   motePosition,
   rockStones,
+  tensionAlpha,
   vignetteRadii,
   type Mote,
   type Rect,
@@ -36,6 +39,11 @@ const GLOW_RADIUS = Math.ceil(BASE_RADIUS * 0.9);
 const GLOW_ADD = 0.32;
 const GLOW_MULTIPLY = 0.7;
 const MOTE_RGB = '220,212,235';
+/** master mode's frost motes */
+const FROST_RGB = '200,240,255';
+const GLOW_WARM_RGB = '255,170,80';
+/** master mode's cold torch */
+const GLOW_COLD_RGB = '110,200,255';
 
 const css = (color: number): string => '#' + color.toString(16).padStart(6, '0');
 
@@ -53,7 +61,18 @@ export class AmbienceView {
   private hudWidth: number | undefined;
   private readonly tint: number | null;
   private readonly reducedMotion: boolean;
-  private readonly keys: { rock: string; overlay: string; glow: string; vignette: string };
+  private readonly keys: {
+    rock: string;
+    overlay: string;
+    glow: string;
+    vignette: string;
+    tension: string;
+  };
+  /** master mode: a cold torch, frost instead of dust, a red vignette in the last seconds */
+  private readonly master: boolean;
+  /** master mode's countdown in its warning span (see setTension), else null */
+  private tensionState: { leftMs: number; warnMs: number } | null = null;
+  private tension: Phaser.GameObjects.Image | null = null;
 
   private rock: Phaser.GameObjects.Image | null = null;
   private overlay: Phaser.GameObjects.Image | null = null;
@@ -78,17 +97,19 @@ export class AmbienceView {
   /** settings last reported to the debug state */
   private shown: { torchlight: boolean; dust: boolean; vignette: boolean } | null = null;
 
-  constructor(scene: Phaser.Scene, opts: { levelId: string; hudHeight: number }) {
+  constructor(scene: Phaser.Scene, opts: { levelId: string; hudHeight: number; master?: boolean }) {
     this.scene = scene;
     this.hudHeight = opts.hudHeight;
     this.tint = chapterTint(opts.levelId);
     this.reducedMotion = prefersReducedMotion();
+    this.master = opts.master ?? false;
     const id = nextId++;
     this.keys = {
       rock: `ambience-rock-${id}`,
       overlay: `ambience-overlay-${id}`,
       glow: `ambience-glow-${id}`,
       vignette: `ambience-vignette-${id}`,
+      tension: `ambience-tension-${id}`,
     };
     scene.game.renderer.on(Phaser.Renderer.Events.RESTORE_WEBGL, this.restore, this);
   }
@@ -146,6 +167,14 @@ export class AmbienceView {
     this.report();
   }
 
+  /**
+   * Master mode's countdown while it warns (`leftMs` left of the `warnMs` warning span): the red
+   * vignette and its heartbeat; null outside it (and once the run is over).
+   */
+  setTension(state: { leftMs: number; warnMs: number } | null): void {
+    this.tensionState = state;
+  }
+
   /** Redraws the light and the dust; `hero` is the hero's centre in device px. */
   update(timeMs: number, hero: [number, number]): void {
     const tex = this.overlayTex;
@@ -153,6 +182,11 @@ export class AmbienceView {
     const { torchlight, dust, vignette } = app.data.settings;
     this.report();
     this.vignette?.setVisible(vignette);
+    if (this.tension) {
+      const ts = this.tensionState;
+      const a = ts ? tensionAlpha(ts.leftMs, ts.warnMs, this.reducedMotion) : 0;
+      this.tension.setVisible(a > 0).setAlpha(a);
+    }
     const t = timeMs / 1000;
     const s = this.scale;
     const W = this.artW;
@@ -208,9 +242,10 @@ export class AmbienceView {
     }
     if (dust) {
       for (const m of this.motes) {
-        const [x, y] = motePosition(m, t, W, H, this.reducedMotion);
-        const a = moteAlpha(Math.hypot(x - hx, y - hy), torchlight);
-        g.fillStyle = `rgba(${MOTE_RGB},${a.toFixed(2)})`;
+        const [x, y] = (this.master ? frostPosition : motePosition)(m, t, W, H, this.reducedMotion);
+        let a = moteAlpha(Math.hypot(x - hx, y - hy), torchlight);
+        if (this.master) a = frostTwinkle(a, m, t, this.reducedMotion);
+        g.fillStyle = `rgba(${this.master ? FROST_RGB : MOTE_RGB},${a.toFixed(2)})`;
         g.fillRect(Math.round(x), Math.round(y), 1, 1);
       }
     }
@@ -219,9 +254,17 @@ export class AmbienceView {
 
   destroy(): void {
     this.scene.game.renderer.off(Phaser.Renderer.Events.RESTORE_WEBGL, this.restore, this);
-    for (const o of [this.rock, this.overlay, this.warm, this.glow, this.vignette, this.band])
+    for (const o of [
+      this.rock,
+      this.overlay,
+      this.warm,
+      this.glow,
+      this.vignette,
+      this.tension,
+      this.band,
+    ])
       o?.destroy();
-    this.rock = this.overlay = this.warm = this.glow = this.vignette = null;
+    this.rock = this.overlay = this.warm = this.glow = this.vignette = this.tension = null;
     this.band = null;
     this.overlayTex = null;
     const textures = this.scene.textures;
@@ -271,8 +314,10 @@ export class AmbienceView {
     g.clearRect(0, 0, size, size);
     const c = GLOW_RADIUS + 0.5;
     const warm = g.createRadialGradient(c, c, 2, c, c, GLOW_RADIUS);
-    warm.addColorStop(0, 'rgba(255,170,80,0.55)');
-    warm.addColorStop(1, 'rgba(255,170,80,0)');
+    // master mode's torch burns cold: icy blue instead of orange
+    const rgb = this.master ? GLOW_COLD_RGB : GLOW_WARM_RGB;
+    warm.addColorStop(0, `rgba(${rgb},0.55)`);
+    warm.addColorStop(1, `rgba(${rgb},0)`);
     g.fillStyle = warm;
     g.fillRect(0, 0, size, size);
     tex.refresh();
@@ -310,6 +355,19 @@ export class AmbienceView {
     g.fillRect(0, 0, W, H);
     tex.refresh();
     this.vignette = this.place(this.vignette, this.keys.vignette, AMBIENCE_DEPTH.vignette);
+    if (!this.master) return;
+    // master mode's last seconds: a tighter red vignette, its alpha set by `update`
+    const tt = this.canvas(this.keys.tension, W, H);
+    const tg = tt.context;
+    tg.clearRect(0, 0, W, H);
+    const red = tg.createRadialGradient(cx, cy, inner * 0.85, cx, cy, outer * 0.85);
+    red.addColorStop(0, 'rgba(170,10,20,0)');
+    red.addColorStop(1, 'rgba(170,10,20,0.8)');
+    tg.fillStyle = red;
+    tg.fillRect(0, 0, W, H);
+    tt.refresh();
+    this.tension = this.place(this.tension, this.keys.tension, AMBIENCE_DEPTH.vignette);
+    this.tension.setVisible(false);
   }
 
   /** The canvas texture `key` at the given size (reused when the size did not change). */

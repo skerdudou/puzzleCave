@@ -4,7 +4,7 @@
   <property name="name" value="Castaway"/>
   <property name="author" value="moineau"/>
   <property name="goldMoves" type="int" value="50"/>
-  <property name="goldTime" type="int" value="10"/>
+  <property name="goldTime" type="float" value="10.7"/>
   <property name="platinumMoves" type="int" value="44"/>
  </properties>
  <tileset firstgid="1" source="tileset.tsx"/>

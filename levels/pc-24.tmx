@@ -3,7 +3,7 @@
  <properties>
   <property name="author" value="moineau"/>
   <property name="goldMoves" type="int" value="26"/>
-  <property name="goldTime" type="int" value="4"/>
+  <property name="goldTime" type="float" value="4.8"/>
   <property name="name" value="Stepping Stone"/>
  </properties>
  <tileset firstgid="1" source="tileset.tsx"/>

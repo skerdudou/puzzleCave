@@ -1,14 +1,82 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { initialState, parseMoves, step, type Dir, type LevelData } from '@puzzlecave/core';
+import {
+  initialState,
+  parseMoves,
+  step,
+  type Chapter,
+  type Dir,
+  type LevelData,
+} from '@puzzlecave/core';
 import { loadPack, setMapProperty } from '@puzzlecave/tiled';
 import type { CommandResult } from './commands';
+
+export interface TimeRule {
+  /** seconds per move, out of the held runs (one key press each) */
+  perMove: number;
+  /** extra seconds per direction change */
+  perTurn: number;
+  /** a straight run of this many moves or more is played holding the key */
+  holdFrom: number;
+  /** a held run: the key repeat's first delay (s) after its first move, then its interval (s) */
+  holdDelay: number;
+  holdInterval: number;
+  /** fatigue: the time grows by `fatigue` each time the moves double past `fatigueMoves`, up to
+   * `fatigue` at most */
+  fatigue: number;
+  fatigueMoves: number;
+}
+
+/**
+ * Gold-time rule: the time of a fast player who knows the route, on a touch screen (slower than
+ * a keyboard) with the key repeat at 20 per second (the default is 10: raising it helps on long
+ * straight runs). Fitted on play-tested runs (Bomberman 254 moves in 41.4 s, Bomberman 2 A 124 in
+ * 18.94 s, No Way Down 217 in 48.49 s, scaled to the moves played), never under any of them: a
+ * press costs 0.105 s and a direction change 0.21 s more; a run of 6 moves or more is held, so
+ * after its first move it costs the repeat's first delay (0.2 s) then 0.05 s a move. No fatigue
+ * showed up to 278 moves: past 300 moves the time grows by 5 % each time the moves double, 5 % at
+ * most. An earlier rule (0.05 s a move, 0.35 s a turn, fitted on the best times of an older game
+ * where moves were faster) made levels with many turns far too easy and those with long runs too
+ * hard. The chapter's margin (CHAPTER_MARGINS) is added on top.
+ */
+export const TIME_RULE: Readonly<TimeRule> = {
+  perMove: 0.105,
+  perTurn: 0.21,
+  holdFrom: 6,
+  holdDelay: 0.2,
+  holdInterval: 0.05,
+  fatigue: 0.05,
+  fatigueMoves: 300,
+};
+
+/**
+ * The gold time's margin over TIME_RULE, per chapter: it shrinks chapter after chapter (gold is
+ * a challenge, more so further on); none on Expert, where a better route than the gold one is
+ * expected. None for a level outside these chapters.
+ */
+export const CHAPTER_MARGINS: Readonly<Record<string, number>> = {
+  easy: 1.15,
+  medium: 1.1,
+  hard: 1.05,
+  expert: 1,
+};
+const DEFAULT_MARGIN = 1;
+
+/** The gold time's margin of level `id` (from its chapter). */
+export function marginFor(chapters: readonly Chapter[], id: string): number {
+  const ch = chapters.find((c) => c.levels.includes(id));
+  return (ch && CHAPTER_MARGINS[ch.id]) ?? DEFAULT_MARGIN;
+}
 
 /** shape of a winning solution, the input of the time rule */
 export interface SolutionFeatures {
   moves: number;
   /** direction changes between two consecutive moves */
   turns: number;
+  /** straight runs long enough to be held (TIME_RULE.holdFrom moves or more) */
+  heldRuns: number;
+  /** the moves of those runs */
+  heldMoves: number;
   pushes: number;
   keys: number;
   doors: number;
@@ -22,10 +90,16 @@ export interface SolutionFeatures {
  * Replays `moves` and measures the solution. Throws if a move is refused (a saved solution never
  * bumps into a wall) or if the solution does not win.
  */
-export function solutionFeatures(level: LevelData, moves: readonly Dir[]): SolutionFeatures {
+export function solutionFeatures(
+  level: LevelData,
+  moves: readonly Dir[],
+  rule: TimeRule = TIME_RULE,
+): SolutionFeatures {
   const f: SolutionFeatures = {
     moves: 0,
     turns: 0,
+    heldRuns: 0,
+    heldMoves: 0,
     pushes: 0,
     keys: 0,
     doors: 0,
@@ -34,12 +108,24 @@ export function solutionFeatures(level: LevelData, moves: readonly Dir[]): Solut
   };
   let s = initialState(level);
   let prev: Dir | undefined;
+  let run = 0;
+  const endRun = () => {
+    if (run >= rule.holdFrom) {
+      f.heldRuns++;
+      f.heldMoves += run;
+    }
+    run = 0;
+  };
   for (const dir of moves) {
     const r = step(s, dir);
     if (r.state.moves === s.moves) throw new Error(`move ${f.moves + 1} (${dir}) is refused`);
     s = r.state;
     f.moves++;
-    if (prev !== undefined && prev !== dir) f.turns++;
+    if (prev !== undefined && prev !== dir) {
+      f.turns++;
+      endRun();
+    }
+    run++;
     prev = dir;
     for (const e of r.events) {
       if (e.type === 'pushed') f.pushes++;
@@ -48,75 +134,63 @@ export function solutionFeatures(level: LevelData, moves: readonly Dir[]): Solut
       else if (e.type === 'blockSank') f.fills++;
     }
   }
+  endRun();
   if (s.status !== 'won') throw new Error(`the solution does not win (status ${s.status})`);
   f.interactions = f.pushes + f.keys + f.doors;
   return f;
 }
 
-export interface TimeRule {
-  /** seconds per move */
-  perMove: number;
-  /** extra seconds per direction change */
-  perTurn: number;
-  /** floor: never less than this many seconds per move (human input rate) */
-  minPerMove: number;
-  /** fatigue: the time grows by this fraction each time the turns double past `fatigueTurns` */
-  fatigue: number;
-  fatigueTurns: number;
+/** the fatigue factor of a solution of `moves` moves (1 up to TIME_RULE.fatigueMoves) */
+export function fatigueFactor(moves: number, rule: TimeRule = TIME_RULE): number {
+  const doublings = Math.log2(1 + Math.max(0, moves - rule.fatigueMoves) / rule.fatigueMoves);
+  return 1 + Math.min(rule.fatigue, rule.fatigue * doublings);
+}
+
+/** time (seconds, unrounded, no margin) of the fast player of TIME_RULE on solution `f` */
+export function estimateTime(f: SolutionFeatures, rule: TimeRule = TIME_RULE): number {
+  // a held run of L moves: its first move pressed, then the repeat's delay, then L - 2 intervals
+  const held = f.heldRuns * (rule.perMove + rule.holdDelay - 2 * rule.holdInterval);
+  const pace =
+    rule.perMove * (f.moves - f.heldMoves) +
+    held +
+    rule.holdInterval * f.heldMoves +
+    rule.perTurn * f.turns;
+  return pace * fatigueFactor(f.moves, rule);
 }
 
 /**
- * Gold-time rule, from player statistics of an earlier version of the game (same rules, same
- * 18×18 boards, a clock that only starts when the player chooses, the map visible beforehand).
- * 238 maps with at least 5 finishers were solved (exact search, or best known solution) and the
- * mean of their three best times fitted against the solution's shape, minimizing the relative
- * error: ≈ 0.043 s × (moves + 6.5 × turns) on the 163 maps with a proven optimal solution, within
- * ×1.2 of the real value on half of them (×1.5 on 80%); pushes, keys and doors add nothing
- * measurable once turns are counted. Rounded up (+10–20%) to 1/20 s per move and 0.3 s per turn,
- * a good player (one who placed around the top three on most maps) earns gold on ~60% of the
- * maps and silver on most others, the record holder gold on ~85%; with the derived silver
- * (×1.25) and bronze (×1.5), the median finisher of a map reaches gold on ~20% of the maps and at
- * least bronze on ~60%. The levels of this game that come from that earlier version are harder
- * than the average map: their recorded times are 0.9–2.3× this rule (median ~1.1).
- *
- * The earlier game moved the player at once on each key press, and ours accepts the next move
- * before the animation of the previous one ends, so the animation is not a floor. The floor is
- * the input rate instead: 10 moves per second (our default key repeat; three quarters of the
- * record times on maps with many turns are slower than that). It only matters for levels made of
- * long straight runs.
- *
- * Touch play: a turn on a touch screen is a new gesture, slower than a key press, and gold proved
- * barely reachable on the easy levels with the 0.3 s a turn fitted above: a turn counts 0.35 s.
- * And a long level wears the player out (thumb, attention): the time grows by 5 % each time the
- * turns double past 50 (+5 % at 50 turns, +10 % at 150, +20 % at 750), a margin the short levels
- * hardly feel.
+ * Rounding to a threshold, always up so that the solution it comes from stays within it: to the
+ * tenth of a second below a minute, to the second above (the value rounded to the microsecond
+ * first, so that a float a hair above a step, 13.700000001, stays on it).
  */
-export const TIME_RULE: Readonly<TimeRule> = {
-  perMove: 0.05,
-  perTurn: 0.35,
-  minPerMove: 0.1,
-  fatigue: 0.05,
-  fatigueTurns: 50,
-};
-
-/** the fatigue factor of a solution with `turns` direction changes (1 without any) */
-export function fatigueFactor(turns: number, rule: TimeRule = TIME_RULE): number {
-  return 1 + rule.fatigue * Math.log2(1 + turns / rule.fatigueTurns);
-}
-
-/** time (seconds, unrounded) of a good player on a level whose best solution has features `f` */
-export function estimateTime(f: SolutionFeatures, rule: TimeRule = TIME_RULE): number {
-  const pace = Math.max(rule.perMove * f.moves + rule.perTurn * f.turns, rule.minPerMove * f.moves);
-  return pace * fatigueFactor(f.turns, rule);
-}
-
-/** rounding to a readable threshold: whole seconds below a minute, 5 s steps above */
 export function niceSeconds(t: number): number {
-  return t < 60 ? Math.max(1, Math.round(t)) : Math.round(t / 5) * 5;
+  const r = Math.round(t * 1e6) / 1e6;
+  return r < 60 ? Math.max(0.1, Math.ceil(Math.round(r * 1e5) / 1e4) / 10) : Math.ceil(r);
 }
 
-export function goldTimeFor(f: SolutionFeatures, rule: TimeRule = TIME_RULE): number {
-  return niceSeconds(estimateTime(f, rule));
+/**
+ * goldTime of a level from the features of a winning solution, with the chapter's `margin`. When
+ * that solution is shorter than the gold move limit `goldMoves` (a level without a gold reference
+ * solution, whose saved one is the platinum route), the time grows with the move ratio: a gold
+ * player plays goldMoves moves (a better route makes the gold time easier).
+ */
+export function goldTimeFor(
+  f: SolutionFeatures,
+  goldMoves?: number,
+  margin = 1,
+  rule: TimeRule = TIME_RULE,
+): number {
+  const ratio = goldMoves !== undefined && goldMoves > f.moves ? goldMoves / f.moves : 1;
+  return niceSeconds(estimateTime(f, rule) * ratio * margin);
+}
+
+/** The chapters of the pack in `dir` (none when chapters.json is missing or unreadable). */
+export function readChapters(dir: string): Chapter[] {
+  try {
+    return JSON.parse(readFileSync(join(dir, 'chapters.json'), 'utf8')) as Chapter[];
+  } catch {
+    return [];
+  }
 }
 
 export const TIMES_USAGE = 'usage: times [<id…>] [--from <solutions dir>] [--apply] [--force]';
@@ -125,8 +199,7 @@ export interface TimesArgs {
   ids: string[] | 'all';
   apply: boolean;
   force: boolean;
-  /** solutions read from this folder instead of levels/solutions (e.g. the gold reference
-   * solutions of levels whose saved solution is the shorter platinum one) */
+  /** solutions read from this folder instead of levels/solutions/gold, else levels/solutions */
   from?: string | undefined;
 }
 
@@ -150,8 +223,9 @@ export function parseTimesArgs(args: string[]): TimesArgs | { error: string } {
 }
 
 /**
- * Table of the proposed goldTime of each level (from its saved solution); with `apply`, writes
- * goldTime into the .tmx when it has none, or replaces it with `force`.
+ * Table of the proposed goldTime of each level (from its gold reference solution, else its saved
+ * one, with its chapter's margin); with `apply`, writes goldTime into the .tmx when it has none,
+ * or replaces it with `force`.
  */
 export function timesCommand(dir: string, o: TimesArgs): CommandResult {
   const pack = loadPack(dir);
@@ -159,7 +233,7 @@ export function timesCommand(dir: string, o: TimesArgs): CommandResult {
   let ok = pack.errors.length === 0;
   const byId = new Map(pack.levels.map((l) => [l.id, l]));
   const wanted = o.ids === 'all' ? pack.levels.map((l) => l.id) : o.ids;
-  lines.push('level   moves turns inter.  estimate  goldTime  current');
+  lines.push('level   moves turns held  estimate  margin  goldTime  current');
   for (const id of wanted) {
     const level = byId.get(id);
     if (!level) {
@@ -167,7 +241,14 @@ export function timesCommand(dir: string, o: TimesArgs): CommandResult {
       ok = false;
       continue;
     }
-    const file = join(o.from ?? join(dir, 'solutions'), `${id}.txt`);
+    // the gold reference solution when there is one, else the saved (platinum) one
+    const goldFile = join(dir, 'solutions', 'gold', `${id}.txt`);
+    const file =
+      o.from !== undefined
+        ? join(o.from, `${id}.txt`)
+        : existsSync(goldFile)
+          ? goldFile
+          : join(dir, 'solutions', `${id}.txt`);
     if (!existsSync(file)) {
       lines.push(`${id}: no saved solution — skipped`);
       continue;
@@ -181,7 +262,8 @@ export function timesCommand(dir: string, o: TimesArgs): CommandResult {
       continue;
     }
     const est = estimateTime(f);
-    const gold = niceSeconds(est);
+    const margin = marginFor(pack.chapters, id);
+    const gold = goldTimeFor(f, level.thresholds.goldMoves, margin);
     const current = level.thresholds.goldTime;
     let note = '';
     if (o.apply) {
@@ -197,7 +279,7 @@ export function timesCommand(dir: string, o: TimesArgs): CommandResult {
       } else if (current !== gold) note = '  kept (--force to replace)';
     }
     lines.push(
-      `${id.padEnd(7)} ${String(f.moves).padStart(5)} ${String(f.turns).padStart(5)} ${String(f.interactions).padStart(6)}  ${est.toFixed(1).padStart(8)}  ${String(gold).padStart(8)}  ${String(current ?? '—').padStart(7)}${note}`,
+      `${id.padEnd(7)} ${String(f.moves).padStart(5)} ${String(f.turns).padStart(5)} ${String(f.heldMoves).padStart(4)}  ${est.toFixed(1).padStart(8)}  ${margin.toFixed(2).padStart(6)}  ${String(gold).padStart(8)}  ${String(current ?? '—').padStart(7)}${note}`,
     );
   }
   return { ok, lines };

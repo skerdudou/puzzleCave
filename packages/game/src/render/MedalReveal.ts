@@ -11,6 +11,8 @@ export interface MedalSpot {
   x: number;
   y: number;
   r: number;
+  /** "New!" stays right of this x (a box's inner edge; default: the screen's edge) */
+  minX?: number;
 }
 
 const WHITE = 0xffffff;
@@ -107,19 +109,20 @@ export class MedalReveal {
   }
 
   /**
-   * "New!" left of the medal, or above it when the screen is too narrow (moved right if need
-   * be, to stay on the screen).
+   * "New!" left of the medal, or above it when the screen (or the box the medal is in) is too
+   * narrow (moved right if need be, to stay on the screen or in the box).
    */
   private newTag(step: RevealStep, spot: MedalSpot): Phaser.GameObjects.Text {
     const color = TAG_COLORS[step.medal] ?? '#ffd25e';
     const tag = this.scene.add.text(0, 0, t('newMedal'), textStyle(10, color));
     const gap = px(6);
-    if (spot.x - spot.r - gap - tag.width >= px(4))
+    const minX = spot.minX ?? px(4);
+    if (spot.x - spot.r - gap - tag.width >= minX)
       tag.setOrigin(1, 0.5).setPosition(spot.x - spot.r - gap, spot.y);
     else
       tag
         .setOrigin(0.5, 1)
-        .setPosition(Math.max(spot.x, px(4) + tag.width / 2), spot.y - spot.r - px(2));
+        .setPosition(Math.max(spot.x, minX + tag.width / 2), spot.y - spot.r - px(2));
     return tag;
   }
 

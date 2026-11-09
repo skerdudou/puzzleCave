@@ -1,8 +1,6 @@
 // Medal thresholds shown to the player (pure, no Phaser).
 import {
-  grandMasterTimeMs,
   isMasterUnlocked,
-  masterTimeLimitMs,
   type LevelRecord,
   type MasterMedal,
   type Medal,
@@ -33,29 +31,21 @@ function row(kind: ThresholdRow['kind'], tier: Tier, fmt: (v: number) => string)
 
 /**
  * One row per criterion that has a gold threshold: moves first, then time. With `master` (the
- * level's chapter has master mode), a third row for master mode, a separate achievement: the
- * master move limit (gold) with master mode's time limit (the bronze time), then the grand master
- * move limit (platinumMoves) with its time (the silver time), the times when the level has time
- * medals: "≤ 610 moves · time ≤ 3:11.40", "≤ 538 moves · time ≤ 1:56.90". Where the two move
- * limits are equal (no platinumMoves)
- * and the level has no time medals, only grand master is shown: such a finish earns it.
+ * level's chapter has master mode), a third row for master mode, a separate achievement drawn in
+ * its own box (whose title gives the rules, the time limit among them): the master move limit
+ * (gold), then the grand master move limit (platinumMoves), "≤ 610 moves", "≤ 538 moves". Where
+ * the two are equal (no platinumMoves) only grand master is shown: such a finish earns it.
  */
 export function thresholdRows(th: Thresholds, master = false): ThresholdRow[] {
   const rows: ThresholdRow[] = [];
   if (th.moves) rows.push(row('moves', th.moves, String));
   if (th.time) rows.push(row('time', th.time, seconds));
   if (master && th.masterMoves !== undefined && th.grandMasterMoves !== undefined) {
-    const gmTime = grandMasterTimeMs(th);
-    const limit = masterTimeLimitMs(th);
     const tiers: ThresholdRow['tiers'] = [];
-    const text = (moves: number, timeMs: number | undefined) =>
-      [
-        t('masterMovesLimit', { moves }),
-        ...(timeMs !== undefined ? [t('masterTimeLimit', { time: formatTime(timeMs) })] : []),
-      ].join(' · ');
-    if (th.masterMoves !== th.grandMasterMoves || gmTime !== undefined)
-      tiers.push({ medal: 'master', text: text(th.masterMoves, limit) });
-    tiers.push({ medal: 'grandMaster', text: text(th.grandMasterMoves, gmTime) });
+    const text = (moves: number) => t('masterMovesLimit', { moves });
+    if (th.masterMoves !== th.grandMasterMoves)
+      tiers.push({ medal: 'master', text: text(th.masterMoves) });
+    tiers.push({ medal: 'grandMaster', text: text(th.grandMasterMoves) });
     rows.push({ kind: 'master', tiers });
   }
   return rows;
@@ -89,18 +79,12 @@ export function masterStatus(rec: LevelRecord | undefined, hasMaster: boolean): 
 }
 
 /**
- * The text of master mode's line under the records: the best master run under the name of the
- * master medal held ("Grand master: 88 moves · 1:02.30"), or under the mode's name when no medal
- * is held ("Master mode: …", never the bare mode name, which is also the first medal's). The
- * moves and the time are separate minima, maybe of different runs: the name is the medal saved,
- * never one worked out from them. "Master mode: not finished yet", or empty (locked, none).
+ * The text of master mode's record, at the bottom of its box (whose title names the mode): as the
+ * record over all runs, "Best: 88 moves · 1:02.30" (the moves and the time are separate minima,
+ * maybe of different runs; the medal held is drawn beside it), "Not finished yet", or empty
+ * (locked, none).
  */
 export function masterLineText(ms: MasterStatus): string {
-  if (ms.kind === 'best')
-    return t('masterBest', {
-      name: ms.medal ? masterMedalName(ms.medal) : t('masterModeName'),
-      moves: ms.moves,
-      time: formatTime(ms.timeMs),
-    });
+  if (ms.kind === 'best') return t('recordLine', { moves: ms.moves, time: formatTime(ms.timeMs) });
   return ms.kind === 'notYet' ? t('masterNotYet') : '';
 }

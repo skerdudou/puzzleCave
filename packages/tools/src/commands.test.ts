@@ -107,9 +107,9 @@ const withA = (thresholds: LevelData['thresholds']) => fromAscii(['@..E'], { id:
 test('solve --apply on a new level: goldMoves and goldTime from the same solution', () => {
   const dir = fixture();
   const r = solveCommand(dir, ['a'], { ...opts, apply: true });
-  expect(r.lines).toContain('a: goldTime = 1 s written (from the 3-move gold solution)');
+  expect(r.lines).toContain('a: goldTime = 0.4 s written (from the 3-move gold solution)');
   expect(tmxOf(dir)).toMatch(/name="goldMoves" type="int" value="3"/);
-  expect(goldTimeOf(dir)).toBe('1');
+  expect(goldTimeOf(dir)).toBe('0.4');
   expect(validateCommand(dir).lines.filter((l) => l.startsWith('a:'))).toEqual([]);
 });
 
@@ -137,17 +137,17 @@ test('solve --apply: existing goldMoves without goldTime, from a solution of gol
   const equal = fixture();
   writeFileSync(join(equal, 'a.tmx'), writeTmx(withA({ goldMoves: 3 })));
   const r = solveCommand(equal, ['a'], { ...opts, apply: true });
-  expect(r.lines).toContain('a: goldTime = 1 s written (from the 3-move gold solution)');
-  expect(goldTimeOf(equal)).toBe('1');
+  expect(r.lines).toContain('a: goldTime = 0.4 s written (from the 3-move gold solution)');
+  expect(goldTimeOf(equal)).toBe('0.4');
   // the saved solution has goldMoves moves (4 turns): it is preferred to the shorter written one
   const saved = fixture();
   writeFileSync(join(saved, 'a.tmx'), writeTmx(withA({ goldMoves: 7 })));
   mkdirSync(join(saved, 'solutions'));
   writeFileSync(join(saved, 'solutions', 'a.txt'), 'RLRLRRR\n');
   const rs = solveCommand(saved, ['a'], { ...opts, apply: true });
-  expect(rs.lines).toContain('a: goldTime = 2 s written (from the 7-move gold solution)');
+  expect(rs.lines).toContain('a: goldTime = 1.6 s written (from the 7-move gold solution)');
   expect(tmxOf(saved)).toMatch(/name="platinumMoves" type="int" value="3"/);
-  expect(goldTimeOf(saved)).toBe('2');
+  expect(goldTimeOf(saved)).toBe('1.6');
   // neither the saved nor the written solution has goldMoves moves: not guessed
   const none = fixture();
   writeFileSync(join(none, 'a.tmx'), writeTmx(withA({ goldMoves: 9 })));

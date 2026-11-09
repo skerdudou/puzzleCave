@@ -104,6 +104,45 @@ export function motePosition(
   ];
 }
 
+/**
+ * Master mode's frost: the motes fall slowly (dust rises), swaying; still when motion is
+ * reduced.
+ */
+export function frostPosition(
+  m: Mote,
+  tSeconds: number,
+  w: number,
+  h: number,
+  reducedMotion: boolean,
+): [number, number] {
+  if (reducedMotion) return [m.x, m.y];
+  return [
+    wrap(m.x + Math.sin(tSeconds * 0.8 + m.phase) * 8, w),
+    wrap(m.y + tSeconds * 30 * m.speed, h),
+  ];
+}
+
+/** Master mode's frost twinkles: the mote's alpha `a` scaled between 0.35 and 1. */
+export function frostTwinkle(a: number, m: Mote, tSeconds: number, reducedMotion: boolean): number {
+  if (reducedMotion) return a;
+  return a * (0.675 + 0.325 * Math.sin(tSeconds * 2.6 + m.phase * 3));
+}
+
+/**
+ * Master mode's last seconds (`leftMs` of `warnMs`, the countdown's warning span): the strength
+ * of the red vignette, growing to the end, with a heartbeat on each whole second of the countdown
+ * (when the heartbeat sounds); steady, growing, when motion is reduced. 0 outside the warning.
+ */
+export function tensionAlpha(leftMs: number, warnMs: number, reducedMotion: boolean): number {
+  if (warnMs <= 0 || leftMs > warnMs || leftMs <= 0) return 0;
+  const k = 1 - leftMs / warnMs;
+  if (reducedMotion) return 0.3 + 0.4 * k;
+  // seconds since the countdown passed its last whole second
+  const since = (1000 - (leftMs % 1000 || 1000)) / 1000;
+  const beat = Math.exp(-since * 6) + 0.5 * Math.exp(-Math.abs(since - 0.2) * 12);
+  return Math.min(1, 0.2 + 0.3 * k + 0.35 * beat);
+}
+
 /** `dist`: distance to the torch; `torchlight` off means a flat brightness. */
 export function moteAlpha(dist: number, torchlight: boolean): number {
   return 0.25 + 0.5 * (torchlight ? Math.max(0.15, 1 - dist / 110) : 0.5);

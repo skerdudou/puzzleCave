@@ -54,10 +54,10 @@ test('applySolution: goldTime from the written solution when it has goldMoves mo
     const five = ['right', 'right', 'right', 'right', 'right'] as const;
     expect(applySolution(dir, level, [...five], 0)).toEqual([
       'p: solution written (5 moves)',
-      'p: goldTime = 1 s written (from the 5-move gold solution)',
+      'p: goldTime = 0.6 s written (from the 5-move gold solution)',
     ]);
     const tmx = readFileSync(join(dir, 'p.tmx'), 'utf8');
-    expect(tmx).toMatch(/name="goldTime" type="\w+" value="1"/);
+    expect(tmx).toMatch(/name="goldTime" type="\w+" value="0.6"/);
     expect(tmx).not.toMatch(/platinumMoves/);
   } finally {
     rmSync(dir, { recursive: true, force: true });

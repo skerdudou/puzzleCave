@@ -189,7 +189,7 @@ time it goes to the background or to another menu screen. On the dev server the 
   who earns silver or bronze plays more moves and plays them more slowly. Without `goldMoves`
   the old rule applies (`t × 1.25` and `t × 1.5`, same minimum gaps). Both are rounded up to the
   next tenth of a second (16.5957 → 16.6). `silverTime` / `bronzeTime`
-  override them. Master mode's time limit (bronze) and grand master's time (silver) follow.
+  override them. Master mode's time limit is the gold time.
 - `platinumMoves`: the best known solution length (master class, often another route), the
   **grand master** move limit (the "platinum limit" of the tools below); `goldMoves` when it is
   absent. It must not exceed `goldMoves`.
@@ -204,44 +204,50 @@ time it goes to the background or to another menu screen. On the dev server the 
   platinum solution is found, `goldMoves` is re-evaluated only once the gap leaves that window.
 - Gold reference solution: when `goldMoves` comes from a real solution that differs from the saved
   (platinum) one, that solution is kept in `levels/solutions/gold/<id>.txt`; `validate` replays it
-  and errors unless it wins in exactly `goldMoves` moves. `goldTime` comes from it
-  (`npm run times -- <id> --from levels/solutions/gold --apply --force`). For a level on the
-  `+10 %` rule there is no such file: `goldTime` stays the time of the optimal route.
+  and errors unless it wins in exactly `goldMoves` moves. `goldTime` comes from it (`npm run times`
+  reads it first). For a level on the `+10 %` rule there is no such file: `goldTime` comes from the
+  optimal route, scaled by `goldMoves` / its length (a gold player plays `goldMoves` moves).
 - Master mode (`Mode` `'master'` in `@puzzlecave/core`): water drowns the player and there is no
   undo (`Session.canUndo` is false; a restart cannot be undone either). It unlocks on a level
   once the save holds gold (moves) there — or a master medal earned without gold (a platinum of an
   older save) — and author mode does not bypass that. Master mode has two medals
   (`MasterMedal`, `masterMedalFor(th, moves, timeMs)`): **master** = a master finish within
-  `goldMoves` (`Thresholds.masterMoves`), whatever its time; **grand master** = within
-  `platinumMoves` (`Thresholds.grandMasterMoves`) and, on a level with `goldTime`, within the
-  silver time (`grandMasterTimeMs`, the same test as the silver time medal), which implies
-  master; the save keeps the better one (`medals.master`). A grand master saved before the time
-  condition existed is kept (nothing recomputes saved medals). Where the two move limits are
-  equal (no `platinumMoves`, or equal to `goldMoves`) such a finish is grand master if fast
-  enough; the third line then shows grand master alone only on a level without `goldTime`. A
-  master finish also earns the move and time medals it qualifies for. On a level with
-  `goldTime`, master mode also has a time limit, the bronze time (`masterTimeLimitMs`): past it
-  the attempt fails like drowning (the game's `RunClock` and `countdown`; the clock starts at the
-  first move and does not count while the page is hidden — the same clock measures the time
-  medals). A platinum route is often longer to find than to play, but it must be played within
-  the silver time for grand master: keep `silverTime` (or `goldTime`) above the time the platinum
-  solution takes. The master row of the threshold lines (`thresholdRows`) is drawn one line per
-  medal: "Master ≤ 610 moves · time ≤ 3:11.40" (master mode's time limit, the bronze time), then
-  "Grand master ≤ 538 moves · time ≤ 1:56.90" (the silver time); where a name does not fit
-  (`drawThresholdLine`) the line keeps the mark alone ("♛ ≤ 610 moves · …"). The save keeps the best master run apart
-  (`masterBestMoves`, `masterBestTimeMs`, two separate minima, maybe of different runs), shown on
-  its own line (`masterLineText`) under the name of the medal saved ("Grand master: 538 moves ·
-  1:40.12"), never one worked out from those minima, or of the mode without a medal ("Master
-  mode: …"): in every language the mode's name is also the first medal's, so a line about the
-  mode always says "Master mode" (`masterModeName`), never the bare "Master".
+  `goldMoves` (`Thresholds.masterMoves`); **grand master** = within `platinumMoves`
+  (`Thresholds.grandMasterMoves`), which implies master; on a level with `goldTime`, both within
+  the gold time, master mode's time limit (`masterTimeLimitMs`), which a finished run has kept.
+  The save keeps the better one (`medals.master`); medals saved under earlier rules (the bronze
+  limit, grand master within the silver time) are kept (nothing recomputes saved medals). Where
+  the two move limits are equal (no `platinumMoves`, or equal to `goldMoves`) such a finish is
+  grand master, shown alone. A master finish also earns the move and time medals it qualifies
+  for (gold in time, always). Past the time limit the attempt fails like drowning (the game's
+  `RunClock` and `countdown`; the clock starts at the first move and does not count while the
+  page is hidden — the same clock measures the time medals). A platinum route is often longer to
+  find than to play, but it must be played within the gold time for grand master.
+- Master mode's box (select and result screens, `masterBoxTitle`, `strokeMasterBox` in `ui.ts`):
+  under the record over all runs, a framed box: "Master mode", then its rules, muted ("Time limit
+  · no undo · deadly water", `masterRules`; `masterRulesUntimed` on a level without `goldTime`),
+  one line per medal (`thresholdRows`' master row: "Master ≤ 610 moves", "Grand master ≤ 538
+  moves"; where a name does not fit, `drawThresholdLine` keeps the mark alone), then the master
+  record as the record over all runs (`masterLineText`: "Best: 538 moves · 1:40.12" after the
+  medal held, or "Not finished yet") — on the result screen, after a master run, this run
+  instead ("Grand master: 538 · 1:40.12", revealed with the others; its "New!" stays in the box,
+  `MedalSpot.minX`). While master mode is locked, the sentence that says how to unlock it takes
+  the box's place. The best moves and time are separate minima (`masterBestMoves`,
+  `masterBestTimeMs`), maybe of different runs. The level's banner no longer repeats the rules
+  (only the keys at start).
+- Master mode's look in game (`AmbienceView`, `master: true`): a cold blue torch, frost (motes
+  falling and twinkling) instead of dust, and in the countdown's warning a tighter red vignette
+  pulsing on each second with a heartbeat (`beat`, `beatSoft` sounds); steady when motion is
+  reduced.
 - Medal marks (`paintMedal`), for the colour-blind as well: bronze plain, silver an inner ring,
   gold a star, master a crown on violet, grand master a white sparkle on light blue. The result
   screen reveals master with one ring and sparkles, grand master with two rings and more.
 - Saves: version 2 replaced `medals.platinum: true` with `medals.master` (`'master'` or
   `'grandMaster'`). The migration from version 1 (`MIGRATIONS[1]` in `save.ts`) turns a platinum
   into grand master and also awards, from the level's current thresholds (`SaveContext`, from
-  `levels.ts`), the medal that `masterBestMoves` qualifies for — master at most on a level with
-  `goldTime`, since the time of that run is unknown.
+  `levels.ts`), the medal that `masterBestMoves` qualified for under the rules of that version
+  (`migratedMasterMedal`: master within gold, grand master within platinum only on a level
+  without `goldTime`, since the time of that run is unknown).
 - Chapters: `"masterMode": false` in `levels/chapters.json` removes master mode and its medals from
   a chapter's levels (the Easy chapter); absent means true. The loader rejects a non-boolean.
 
@@ -477,11 +483,10 @@ The line per level gives saved → best length, rounds, the gains of the structu
 
     npm run times -- [<id…>] [--from <dir>] [--apply] [--force]
 
-Proposes `goldTime` (seconds) for each level from the shape of its saved solution (or of
-`<dir>/<id>.txt` with `--from`, e.g. the gold reference when the saved solution is the shorter
-platinum one); silver and bronze follow from it and from the move thresholds (move ratio × 1.25 and × 1.8, with
-minimum gaps, see `resolveThresholds`). Without `--apply` it only prints the table (moves, turns, interactions,
-estimate, proposed and current goldTime); `--apply` writes goldTime into levels that have none,
+Proposes `goldTime` (seconds) for each level from the shape of its gold reference solution
+(`levels/solutions/gold/<id>.txt`), else of its saved one (or of `<dir>/<id>.txt` with `--from`); silver and bronze follow from it and from the move thresholds (move ratio × 1.25 and × 1.8, with
+minimum gaps, see `resolveThresholds`). Without `--apply` it only prints the table (moves, turns, held moves,
+estimate, margin, proposed and current goldTime); `--apply` writes goldTime into levels that have none,
 `--force` also replaces an existing one.
 
 New levels get it automatically: every tool that writes a solution (`solve`, `improve`, `plan`,
@@ -494,31 +499,30 @@ is guessed and the tool prints `goldTime missing: run npm run times -- <id> --ap
 An existing `goldTime` is never replaced there (only `times --force` does), and `validate` warns
 about a level without one.
 
-The rule (`TIME_RULE` in `packages/tools/src/times.ts`) is
+The rule (`TIME_RULE` and `CHAPTER_MARGINS` in `packages/tools/src/times.ts`) is the time of a
+fast player who knows the route, on a touch screen with the key repeat at 20 per second (the
+default stays 10: raising it helps on long straight runs), times the chapter's margin:
 
-    goldTime ≈ max(0.05 s × moves + 0.35 s × turns, 0.1 s × moves) × (1 + 0.05 × log2(1 + turns / 50))
+    expert  = (0.105 s × pressed moves + 0.21 s × turns + held runs) × fatigue
+    held run of L moves (L ≥ 6) = 0.105 + 0.2 + (L − 2) × 0.05 s
+    fatigue = 1 + min(5 %, 5 % × log2(1 + max(0, moves − 300) / 300))
+    goldTime = expert × max(1, goldMoves / solution moves) × margin
 
-rounded to the second (to 5 s above one minute), where turns are the direction changes of the
-solution. It comes from player statistics of an earlier version of the game (same rules, 18×18
-boards, clock started by the player after studying the map): 238 maps with at least five
-finishers, each solved, and the mean of the three best times fitted against the solution's
-features. Moves and turns explain most of it (pushes, keys and doors add nothing measurable once
-turns are counted); the fit is coarse — within ×1.2 on half the maps, ×1.5 on 80% — and the
-coefficients were rounded up by 10–20%: a strong player (around the top three on most maps)
-gets gold on ~60% of the maps and silver on most others, the median finisher at least bronze on
-~60%. The levels of this game that existed in that earlier version are harder than the average
-map (their recorded times are 0.9–2.3× the rule), so expect gold to be demanding on the long
-puzzle levels; adjust a level by hand when play-testing says so (`times --apply` without
-`--force` never overwrites it). Our game takes the next move while the previous one is still
-animated, so the floor is the human input rate (10 moves/s), not the animation.
+rounded up to the tenth of a second below a minute, to the second above. The margin shrinks
+chapter after chapter — Easy 1.15, Medium 1.1, Hard 1.05, Expert 1 (no margin: a better route
+than the gold one is expected there) — so gold is a challenge everywhere and more so further on;
+a better route than the gold one makes it easier. It is computed on the gold reference solution,
+else on the saved (platinum) one scaled to `goldMoves`.
 
-The fit gave 0.3 s a turn, for the keyboard. Touch play (continuous drag, or the D-pad with hold
-to repeat) is slower: a turn is a new gesture, and gold proved barely reachable on the easy levels
-on a phone. So a turn counts 0.35 s, and a fatigue factor gives the long levels some room: +5 %
-each time the turns double past 50 (+5 % at 50 turns, +10 % at 150, +20 % at 750). All levels
-were recomputed with it (`times --force`, from the gold references where they exist), except
-pc-07, whose earlier, larger goldTime was kept. A save's time medals follow new thresholds when
-loaded: its best time earns the medal it is now worth, never less than the one it had.
+The coefficients were fitted on play-tested touch runs (repeat 20/s), scaled to the moves played
+and never under any of them: Bomberman 254 moves in 41.4 s, Bomberman 2 A 124 in 18.94 s, No Way
+Down 217 in 48.49 s (within 1 %). Keyboard runs at 10/s were 10–17 % faster than touch, and
+raising the repeat to 20/s gained what the held runs predict. No fatigue showed up to 278 moves.
+An earlier rule (0.05 s a move + 0.35 s a turn, fitted on the best times of an older version of
+the game, where moves were faster) made levels with many turns far too easy and those made of
+long runs nearly impossible. Adjust a level by hand when play-testing says so (`times --apply`
+without `--force` never overwrites it). A save's time medals follow new thresholds when loaded:
+its best time earns the medal it is now worth, never less than the one it had.
 
 ## Difficulty: `difficulty`
 

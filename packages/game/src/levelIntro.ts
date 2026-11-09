@@ -1,14 +1,8 @@
-// The banner over a level as it starts (pure, no Phaser): master mode's rules, the keys the
-// player starts with when not 0.
-import { formatTime } from './format';
+// The banner over a level as it starts (pure, no Phaser): the keys the player starts with when
+// not 0. (Master mode's rules are not repeated there: the box of the select screen gives them.)
 import { t } from './i18n';
 
 export interface IntroInfo {
-  master: boolean;
-  /** master mode: its time limit, ms (none without time medals) */
-  timeLimitMs?: number;
-  /** the player has already won a level in master mode: the rules on one short line */
-  masterVeteran: boolean;
   initialKeys: number;
 }
 
@@ -22,16 +16,6 @@ export function keysLine(initialKeys: number): string | null {
 
 /** The banner's lines, without its hint; none: no banner. */
 export function introLines(i: IntroInfo): string[] {
-  const lines: string[] = [];
-  if (i.master) {
-    const time = i.timeLimitMs === undefined ? undefined : formatTime(i.timeLimitMs);
-    if (i.masterVeteran) lines.push(time ? `${t('masterShort')} · ≤ ${time}` : t('masterShort'));
-    else {
-      lines.push(t('masterRules'));
-      if (time) lines.push(t('masterTimeRule', { time }));
-    }
-  }
   const keys = keysLine(i.initialKeys);
-  if (keys) lines.push(keys);
-  return lines;
+  return keys ? [keys] : [];
 }
