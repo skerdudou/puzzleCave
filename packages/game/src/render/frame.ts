@@ -33,6 +33,9 @@ const ICONS = {
   undo: ['..#....', '.#####.', '..#...#', '......#', '......#', '.....#.', '.####..'],
   // a circle open at the top right, its arrow head there
   restart: ['..###.#', '.#...##', '#...###', '#......', '#.....#', '.#...#.', '..###..'],
+  // full screen: four corners pointing out; leaving it: four corners pointing in
+  fullscreen: ['###.###', '#.....#', '#.....#', '.......', '#.....#', '#.....#', '###.###'],
+  fullscreenExit: ['.#...#.', '.#...#.', '##...##', '.......', '##...##', '.#...#.', '.#...#.'],
 } as const;
 
 /** The filled [column, row] cells of a 7×7 HUD icon. */

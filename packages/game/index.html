@@ -35,10 +35,16 @@
         overflow: hidden;
         background: #1d1b26;
       }
+      /* the game stays out of a phone's camera notch, rounded corners and gesture bar
+         (viewport-fit=cover: the page goes under them, this padding keeps the canvas off them;
+         ui.ts viewSize sizes the canvas to what is left) */
       #app {
+        box-sizing: border-box;
         width: 100vw;
         height: 100vh;
         height: 100dvh;
+        padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+          env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
         touch-action: none;
       }
       canvas {
