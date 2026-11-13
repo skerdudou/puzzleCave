@@ -12,6 +12,11 @@ export const app = {
   store: new SaveStore(browserStorage(), saveContext, SAVE_KEYS),
   data: defaultSave() as SaveData,
   author: false,
+  /**
+   * The level last picked on the selection screen (or played): the screen comes back to it from
+   * the menu. Not saved: a new visit starts where the progress is.
+   */
+  lastLevelId: undefined as string | undefined,
   init(): void {
     this.data = this.store.load();
     // the development server; the preview of main by ?dev (remembered, ?dev=0 to leave it); the

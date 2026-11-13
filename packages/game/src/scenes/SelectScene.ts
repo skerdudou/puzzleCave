@@ -1,5 +1,11 @@
 import Phaser from 'phaser';
-import { isChapterUnlocked, isLevelUnlocked, resolveThresholds, type Mode } from '@puzzlecave/core';
+import {
+  isChapterUnlocked,
+  isLevelUnlocked,
+  resolveThresholds,
+  startLevel,
+  type Mode,
+} from '@puzzlecave/core';
 import { KonamiCode } from '../achievements';
 import { app } from '../app';
 import { setDebug } from '../debug';
@@ -36,6 +42,7 @@ import {
   shrinkToFit,
   px,
   textStyle,
+  TOUCH_TARGET,
 } from '../ui';
 import { isTouchDevice } from '../touch';
 import { savedSolution, savedSolutionsAvailable } from '../author/client';
@@ -44,6 +51,15 @@ import { savedSolution, savedSolutionsAvailable } from '../author/client';
 const BAND = HEADER_BAND;
 /** From the level's name to the line under it, base px. */
 const NAME_GAP = 26;
+/** A finished level's tick: its colour, and its pixels [column, row] on a 5 × 4 grid. */
+const DONE_COLOR = 0x7bd88f;
+const TICK: readonly [number, number][] = [
+  [4, 0],
+  [3, 1],
+  [0, 2],
+  [2, 2],
+  [1, 3],
+];
 
 export class SelectScene extends Phaser.Scene {
   private ci = 0;
@@ -53,27 +69,17 @@ export class SelectScene extends Phaser.Scene {
   }
 
   init(data: { levelId?: string }): void {
-    const pos = data.levelId ? locate(data.levelId) : null;
+    // the level asked for (back from a game), else the one last picked in this visit
+    const id = data.levelId ?? app.lastLevelId;
+    const pos = id ? locate(id) : null;
     if (pos) {
       this.ci = pos.chapterIndex;
       this.li = pos.levelIndex;
       return;
     }
-    this.ci = 0;
-    this.li = 0;
-    // where the player's progress is: the chapters the Konami code opened are not a reason to
-    // start at the last one
-    for (let ci = chapters.length - 1; ci >= 0; ci--) {
-      if (!isChapterUnlocked(chapters, ci, app.data.levels)) continue;
-      const ch = chapters[ci]!;
-      const li = ch.levels.findIndex(
-        (id, i) =>
-          isLevelUnlocked(chapters, ci, i, app.data.levels) && !app.data.levels[id]?.completed,
-      );
-      this.ci = ci;
-      this.li = li >= 0 ? li : 0;
-      return;
-    }
+    const start = startLevel(chapters, app.data.levels);
+    this.ci = start.ci;
+    this.li = start.li;
   }
 
   create(): void {
@@ -229,12 +235,13 @@ export class SelectScene extends Phaser.Scene {
   /**
    * From a level's name to its Play button, px: the most any level of any chapter takes (keys
    * line, thresholds, record, master mode's box), so that the buttons stay in place while
-   * browsing.
+   * browsing. `only`: that level's alone (a screen too low for the most).
    */
-  private detailsHeight(infoW: number): number {
+  private detailsHeight(infoW: number, compact = false, only?: string): number {
     let most = 0;
     for (const ch of chapters)
       for (const id of ch.levels) {
+        if (only !== undefined && id !== only) continue;
         const level = levelById(id);
         const keys = keysLine(level.initialKeys);
         const master = hasMaster(id);
@@ -243,7 +250,12 @@ export class SelectScene extends Phaser.Scene {
         const box = rows.find((r) => r.kind === 'master');
         const boxH = box
           ? Math.max(
-              this.masterBoxHeight(infoW, this.masterRules(!!th.time), box.tiers.length + 1, false),
+              this.masterBoxHeight(
+                infoW,
+                this.masterRules(!!th.time),
+                (compact ? 1 : box.tiers.length) + 1,
+                false,
+              ),
               this.masterBoxHeight(infoW, '', 0, true),
             )
           : 0;
@@ -271,6 +283,8 @@ export class SelectScene extends Phaser.Scene {
   }
 
   private draw(): void {
+    // remembered for the menu's Play (a level that can be played, not a lock)
+    if (this.levelOpen(this.ci, this.li)) app.lastLevelId = this.currentId();
     const ch = chapters[this.ci]!;
     const cx = this.scale.width / 2;
     const cols = this.cols();
@@ -357,9 +371,17 @@ export class SelectScene extends Phaser.Scene {
     // the details: under the grid, or in the right column on a low screen
     const infoW = side ? this.scale.width - this.gridAreaW() : this.scale.width;
     const icx = side ? this.gridAreaW() + infoW / 2 : cx;
-    let y = side ? y0 + px(8) : y0 + this.rows() * (cell + gap) + px(16);
-    // the buttons' row: the same for every level
-    const buttonsY = y + this.detailsHeight(infoW);
+    // (in the right column: from the chapter's name's row, nothing over it there)
+    let y = side ? rowY : y0 + this.rows() * (cell + gap) + px(16);
+    // the buttons' row: the same for every level. A low screen where Play would go past the
+    // bottom: master mode's medals on one line in its box (compact); lower still, right under
+    // this level's own details (then it moves from one level to another)
+    const fits = (h: number) => y + h + px(TOUCH_TARGET) / 2 + px(8) <= this.scale.height;
+    const compact = side && !fits(this.detailsHeight(infoW));
+    let details = this.detailsHeight(infoW, compact);
+    if (compact && !fits(details)) details = this.detailsHeight(infoW, true, this.currentId());
+    const buttonsY = y + details;
+    setDebug({ selectCompact: compact });
     // the name alone: the author is not shown (all the levels are by the same one for now)
     const levelName = this.add.text(icx, y, levelTitle(level), textStyle(16)).setOrigin(0.5);
     shrinkToFit(levelName, 16, infoW - px(16));
@@ -426,10 +448,11 @@ export class SelectScene extends Phaser.Scene {
       );
       const line = px(MASTER_BOX.line);
       let ly = rulesBottom + px(4) + line / 2;
-      for (const tier of masterRow.tiers) {
-        drawThresholdLine(this, tg, icx, ly, '', [tier], {
+      // one line a medal, named; compact: all on one line, the marks saying which
+      for (const tiers of compact ? [masterRow.tiers] : masterRow.tiers.map((tier) => [tier])) {
+        drawThresholdLine(this, tg, icx, ly, '', tiers, {
           maxWidth: boxW - 2 * px(MASTER_BOX.pad),
-          named: masterMedalName,
+          named: compact ? undefined : masterMedalName,
         });
         ly += line;
       }
@@ -551,6 +574,14 @@ export class SelectScene extends Phaser.Scene {
       slots.forEach((m, k) =>
         drawMedal(g, x + (cell * (k + 1)) / (slots.length + 1), my, px(5), m),
       );
+      // finished (with or without medals): a green pixel tick in the top right corner
+      if (rec?.completed) {
+        const c = px(2);
+        const tx = x + cell - px(4) - 5 * c;
+        const ty = y + px(4);
+        g.fillStyle(DONE_COLOR, 1);
+        for (const [col, row] of TICK) g.fillRect(tx + col * c, ty + row * c, c, c);
+      }
       if (!current) return;
       const zone = this.add
         .zone(x, y, cell, cell)

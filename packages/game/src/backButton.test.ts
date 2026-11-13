@@ -25,6 +25,14 @@ test('Back on the menu: a second press soon after leaves, a late one warns again
   expect(g.press(10_000 + LEAVE_WINDOW_MS + 2)).toBe(true);
 });
 
+test('the menu left and back: the next Back warns again', () => {
+  const g = new LeaveGate();
+  expect(g.press(1000)).toBe(false);
+  g.reset();
+  expect(g.press(1500)).toBe(false);
+  expect(g.press(2000)).toBe(true);
+});
+
 /** A browser history: the page before the game (-1), the game's own entry (0) and its pushes. */
 class FakeHistory implements HistoryLike {
   entries: unknown[] = [null];

@@ -359,6 +359,11 @@ export class OptionsScene extends Phaser.Scene {
     };
     const musicNow = (): Channel => ({ on: s.sound, volume: s.musicVolume });
     const effectsNow = (): Channel => ({ on: s.sfx, volume: s.sfxVolume });
+    label(t('language'));
+    const langY = y;
+    button('lang', cx, y, `${t('langName')} ▾`, () => this.toggleLangMenu(cx, langY));
+    y += rowStep;
+
     label(t('music'));
     gauge(
       'music',
@@ -386,10 +391,17 @@ export class OptionsScene extends Phaser.Scene {
       },
     );
 
-    label(t('language'));
-    const langY = y;
-    button('lang', cx, y, `${t('langName')} ▾`, () => this.toggleLangMenu(cx, langY));
-    y += rowStep;
+    // vibrations: only offered where the browser can vibrate (not iOS Safari)
+    if (canVibrate()) {
+      label(t('vibration'));
+      button('vibration', cx, y, s.vibration ? t('on') : t('off'), () =>
+        change(() => {
+          s.vibration = !s.vibration;
+          vibrate('bump', s.vibration); // a sample when turned on
+        }),
+      );
+      y += rowStep;
+    }
 
     // touch control: drag or tap zones; the drag distance only matters to the drag
     label(t('touchControl'));
@@ -418,17 +430,6 @@ export class OptionsScene extends Phaser.Scene {
       () => (s.repeatRate = clamp(s.repeatRate - 1, 4, 20)),
       () => (s.repeatRate = clamp(s.repeatRate + 1, 4, 20)),
     );
-    // vibrations: only offered where the browser can vibrate (not iOS Safari)
-    if (canVibrate()) {
-      label(t('vibration'));
-      button('vibration', cx, y, s.vibration ? t('on') : t('off'), () =>
-        change(() => {
-          s.vibration = !s.vibration;
-          vibrate('bump', s.vibration); // a sample when turned on
-        }),
-      );
-      y += rowStep;
-    }
 
     // graphics: the cave ambience and the smoothing, one switch each, like music and effects
     label(t('graphics'));

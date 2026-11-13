@@ -28,6 +28,30 @@ test('U, R, Escape read by letter; Ctrl+Z ignored', () => {
   expect(actions).toEqual([{ type: 'undo' }, { type: 'restart' }, { type: 'menu' }]);
 });
 
+test('U held: one undo at once, then past the initial delay 8 a second until released', () => {
+  const undos = () => actions.filter((a) => a.type === 'undo').length;
+  c.keydown(key('KeyU', 'u'));
+  expect(undos()).toBe(1);
+  // the key's own repeat adds none
+  c.keydown(key('KeyU', 'u', true));
+  vi.advanceTimersByTime(199);
+  expect(undos()).toBe(1);
+  vi.advanceTimersByTime(1);
+  expect(undos()).toBe(2);
+  vi.advanceTimersByTime(1000);
+  expect(undos()).toBe(10);
+  c.keyup(key('KeyU'));
+  vi.advanceTimersByTime(1000);
+  expect(undos()).toBe(10);
+});
+
+test('U tapped: one undo, no repeat', () => {
+  c.keydown(key('KeyU', 'u'));
+  c.keyup(key('KeyU'));
+  vi.advanceTimersByTime(1000);
+  expect(actions).toEqual([{ type: 'undo' }]);
+});
+
 test('rafale : 50 appuis en 200 ms → 50 coups, aucun perdu', () => {
   for (let i = 0; i < 50; i++) {
     const code = i % 2 ? 'ArrowLeft' : 'ArrowRight';

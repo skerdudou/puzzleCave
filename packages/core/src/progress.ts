@@ -87,6 +87,28 @@ export function isLevelUnlocked(
   );
 }
 
+/**
+ * Where the selection screen starts a visit: the first level, chapters in order, that is open and
+ * not completed (a chapter left unfinished comes before the next one, even open). Everything
+ * finished: the last open chapter's first level. By the progression rule alone: the chapters the
+ * Konami code opened are no reason to start in them.
+ */
+export function startLevel(
+  chapters: readonly Chapter[],
+  records: Records,
+): { ci: number; li: number } {
+  let last = 0;
+  for (let ci = 0; ci < chapters.length; ci++) {
+    if (!isChapterUnlocked(chapters, ci, records)) continue;
+    last = ci;
+    const li = chapters[ci]!.levels.findIndex(
+      (id, i) => isLevelUnlocked(chapters, ci, i, records) && !records[id]?.completed,
+    );
+    if (li >= 0) return { ci, li };
+  }
+  return { ci: last, li: 0 };
+}
+
 export function recordRun(prev: LevelRecord | undefined, r: RunResult, a: Award): LevelRecord {
   const medals: LevelRecord['medals'] = {};
   const moves = bestMedal(prev?.medals.moves, a.moves);

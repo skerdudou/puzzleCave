@@ -20,6 +20,10 @@ export class LeaveGate {
     this.last = leave ? -Infinity : now;
     return leave;
   }
+  /** The first press is forgotten (the menu was left): the next one warns again. */
+  reset(): void {
+    this.last = -Infinity;
+  }
 }
 
 /**
@@ -72,6 +76,11 @@ export class BackHistory {
     }
   }
 
+  /** Another screen came up: a Back on the menu warns again before leaving. */
+  sceneChanged(): void {
+    this.gate.reset();
+  }
+
   /** The browser moved in the history (a popstate), on `scene`, at `now` ms. */
   popped(scene: string | undefined, now: number): BackResult {
     const was = this.depth;
@@ -88,10 +97,15 @@ export class BackHistory {
 /**
  * Installs it on the page: Back on a screen gives it an Escape, on the menu `warn`s then leaves.
  * The entries are pushed on a key or a touch only, never at load or when a screen opens (which
- * may follow a Back): before the first one, Back leaves the page as usual.
+ * may follow a Back): before the first one, Back leaves the page as usual. `warn` returns what
+ * takes its warning away, done as soon as the menu is left (`sceneChanged`, returned).
  */
-export function installBackButton(topScene: () => string | undefined, warn: () => void): void {
+export function installBackButton(
+  topScene: () => string | undefined,
+  warn: () => () => void,
+): { sceneChanged: () => void } {
   const back = new BackHistory(history);
+  let unwarn: (() => void) | undefined;
   // a real press only (an event the game sends itself is no user gesture)
   const topUp = (e: Event) => e.isTrusted && back.topUp();
   // pointerup (not pointerdown) is a user gesture on a touch screen
@@ -102,6 +116,16 @@ export function installBackButton(topScene: () => string | undefined, warn: () =
     const r = back.popped(topScene(), performance.now());
     if (r === 'escape')
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape' }));
-    else if (r === 'warn') warn();
+    else if (r === 'warn') {
+      unwarn?.();
+      unwarn = warn();
+    }
   });
+  return {
+    sceneChanged: () => {
+      back.sceneChanged();
+      unwarn?.();
+      unwarn = undefined;
+    },
+  };
 }

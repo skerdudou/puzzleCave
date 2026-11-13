@@ -1,4 +1,5 @@
 import type { Dir } from '@puzzlecave/core';
+import { PressRepeat } from './pressRepeat';
 
 export type Action =
   { type: 'move'; dir: Dir } | { type: 'undo' } | { type: 'restart' } | { type: 'menu' };
@@ -41,10 +42,14 @@ export class InputController {
   private repeatRate: number;
   private readonly held = new Map<string, Dir>();
   private timer: ReturnType<typeof setTimeout> | null = null;
+  /** the undo key held (its code), repeating undos at UNDO_RATE */
+  private undoKey: string | null = null;
+  private readonly undoRepeat: PressRepeat;
 
   constructor(emit: (a: Action) => void, repeatRate: number) {
     this.emit = emit;
     this.repeatRate = clampRate(repeatRate);
+    this.undoRepeat = new PressRepeat(() => this.emit({ type: 'undo' }));
   }
 
   keydown(e: KeyLike): boolean {
@@ -57,16 +62,28 @@ export class InputController {
       this.schedule(this.initialDelay());
       return true;
     }
-    if (e.repeat) return false;
     const k = e.key.toLowerCase();
-    if (k === 'u') this.emit({ type: 'undo' });
-    else if (k === 'r') this.emit({ type: 'restart' });
+    if (k === 'u') {
+      // held: undos repeat (the key's own repeat ignored, ours has its rate)
+      if (e.repeat || this.undoKey === e.code) return true;
+      this.undoKey = e.code;
+      this.emit({ type: 'undo' });
+      this.undoRepeat.start(this.initialDelay());
+      return true;
+    }
+    if (e.repeat) return false;
+    if (k === 'r') this.emit({ type: 'restart' });
     else if (e.key === 'Escape') this.emit({ type: 'menu' });
     else return false;
     return true;
   }
 
   keyup(e: KeyLike): void {
+    if (e.code === this.undoKey) {
+      this.undoKey = null;
+      this.undoRepeat.stop();
+      return;
+    }
     const wasRepeating = [...this.held.keys()].at(-1) === e.code;
     if (!this.held.delete(e.code)) return;
     // only the repeated direction restarts the rate; other keys leave the timer alone
@@ -78,6 +95,8 @@ export class InputController {
   reset(): void {
     this.held.clear();
     this.clear();
+    this.undoKey = null;
+    this.undoRepeat.stop();
   }
 
   setRepeatRate(r: number): void {

@@ -9,6 +9,7 @@ import { SelectScene } from './scenes/SelectScene';
 import { ResultScene } from './scenes/ResultScene';
 import { ReplayScene } from './scenes/ReplayScene';
 import { JournalScene } from './scenes/JournalScene';
+import { CreditsScene } from './scenes/CreditsScene';
 import { app } from './app';
 import { t } from './i18n';
 import { showNotice } from './notice';
@@ -16,6 +17,7 @@ import { installBackButton } from './backButton';
 import { textBoxes, type TextBox } from './debug';
 import { showResumeBox, startUpdates } from './pwa';
 import { redrawTextsOnRestore } from './render/restoreTexts';
+import { installTransitions } from './render/transitions';
 import { setMusicVolume } from './music';
 import { initSfx, setSfxVolume } from './sfx';
 import { COLORS } from './ui';
@@ -59,8 +61,11 @@ const game = new Phaser.Game({
     ResultScene,
     ReplayScene,
     JournalScene,
+    CreditsScene,
   ],
 });
+// fades between the screens, once the scenes exist
+game.events.once(Phaser.Core.Events.READY, () => installTransitions(game));
 startUpdates(game);
 redrawTextsOnRestore(game);
 initSfx(game);
@@ -82,7 +87,12 @@ window.addEventListener('resize', () => {
 });
 
 // the phone's back button goes back a screen (backButton.ts)
-installBackButton(
-  () => game.scene.getScenes(true).at(-1)?.sys.settings.key,
-  () => showNotice(t('backAgainToQuit')),
-);
+const topScene = () => game.scene.getScenes(true).at(-1)?.sys.settings.key;
+const back = installBackButton(topScene, () => showNotice(t('backAgainToQuit')));
+// the warning is the menu's: it goes with the menu, and a Back on it again warns again
+let shownScene = topScene();
+game.events.on(Phaser.Core.Events.POST_STEP, () => {
+  const now = topScene();
+  if (now !== shownScene) back.sceneChanged();
+  shownScene = now;
+});

@@ -56,7 +56,7 @@ type Pad = { up: Rect; down: Rect; left: Rect; right: Rect };
  * lands just beside a button, or in a corner between two, still counts. The buttons drawn keep
  * their size.
  */
-export const DPAD_REACH = 0.2;
+export const DPAD_REACH = 0.5;
 /** No direction within this fraction of a button from the d-pad's centre. */
 export const DPAD_DEAD = 0.25;
 

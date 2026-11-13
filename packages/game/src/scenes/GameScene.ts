@@ -14,7 +14,9 @@ import { app } from '../app';
 import { setDebug } from '../debug';
 import { ellipsize, formatTime } from '../format';
 import { t } from '../i18n';
-import { InputController, type Action } from '../input/InputController';
+import { InputController, repeatDelays, type Action } from '../input/InputController';
+import { PressRepeat } from '../input/pressRepeat';
+import { keepAwake } from '../wakeLock';
 import { directionLabels } from '../input/keyboardLabels';
 import { hasMaster, levelById, levelTitle } from '../levels';
 import { introLines } from '../levelIntro';
@@ -86,6 +88,12 @@ export class GameScene extends Phaser.Scene {
   private controls!: InputController;
   /** hold to repeat on the on-screen d-pad */
   private hold!: HoldRepeat;
+  /** the Undo button held: undos repeat */
+  private undoHold = new PressRepeat(() => {
+    // a drag that started on the button is no press on it
+    if (this.dragMoved || this.zonePress) this.undoHold.stop();
+    else this.handle({ type: 'undo' });
+  });
   /** the finger on the d-pad (it went down there), and the direction it holds (null: none) */
   private padPointer: number | null = null;
   private padDir: Dir | null = null;
@@ -172,6 +180,14 @@ export class GameScene extends Phaser.Scene {
       (dir) => this.handle({ type: 'move', dir }),
       () => app.data.settings.repeatRate,
     );
+    // the Undo button's repeat ends with the finger lifted anywhere, and with the scene
+    this.input.on('pointerup', () => this.undoHold.stop());
+    this.input.on('pointerupoutside', () => this.undoHold.stop());
+    this.events.once('shutdown', () => this.undoHold.stop());
+    // the screen stays on while a level is played: a player thinking without touching it, the
+    // clock running, would see the phone go to sleep
+    const awake = keepAwake();
+    this.events.once('shutdown', () => awake.release());
     this.buildHud();
     // over the board (it can be closed): the board keeps the zoom it has without it
     this.showBanner();
@@ -522,6 +538,7 @@ export class GameScene extends Phaser.Scene {
         };
         const icon = icons && (action.type === 'undo' || action.type === 'restart');
         const b = makeButton(this, x, y, icon ? ' ' : label, click, 13).setOrigin(1, 0.5);
+        if (action.type === 'undo') this.holdToRepeat(b);
         made.push(b);
         if (icon) made.push(this.iconOn(b, action.type as 'undo' | 'restart', label));
         hudButtons[action.type] = [(x - b.width / 2) / dpr(), y / dpr()];
@@ -695,10 +712,9 @@ export class GameScene extends Phaser.Scene {
           arrow.fillRect(Math.round(gx + c * cell), Math.round(gy + row * cell), cell, cell);
         this.hud.push(frame, arrow);
       }
-      // the sound button: under the d-pad column (landscape), or at the left edge on the
-      // d-pad's bottom row (portrait)
-      if (side)
-        this.hud.push(muteAt(pad.up.x + pad.up.w / 2, this.scale.height - px(16) - px(22), 0.5));
+      // the sound button: in the top right corner, above the d-pad's column and off its touch
+      // area (landscape), or at the left edge on the d-pad's bottom row (portrait)
+      if (side) this.hud.push(muteAt(w - px(12), px(30), 1));
       else this.hud.push(muteAt(px(12), pad.down.y + pad.down.h / 2, 0));
       // for the e2e tests: button centres in CSS pixels, once drawn (Phaser hit-tests a new
       // interactive object only from its next pre-update on)
@@ -818,6 +834,7 @@ export class GameScene extends Phaser.Scene {
         if (!this.dragMoved && !this.zonePress) this.handle(action);
       };
       const b = makeButton(this, col / 2, 0, label, click, 13);
+      if (action.type === 'undo') this.holdToRepeat(b);
       made2.push(b);
     }
     sameWidth(made2);
@@ -831,6 +848,24 @@ export class GameScene extends Phaser.Scene {
     }
     made.push(...made2);
     return { made, name, counters, keyIcon, buttonBoxes: boxes, icons: null };
+  }
+
+  /**
+   * The Undo button held: past the moves' initial delay, undos repeat at UNDO_RATE until the
+   * finger is lifted or slides off. A tap stays one undo, on release; a release after repeats
+   * adds none.
+   */
+  private holdToRepeat(b: Phaser.GameObjects.Text): void {
+    b.removeAllListeners('pointerup');
+    // (a drag from the button is seen by the repeat itself: dragMoved is set after this press)
+    b.on('pointerdown', () =>
+      this.undoHold.start(repeatDelays(app.data.settings.repeatRate).initial),
+    );
+    b.on('pointerout', () => this.undoHold.stop());
+    b.on('pointerup', () => {
+      const repeated = this.undoHold.stop();
+      if (!repeated && !this.dragMoved && !this.zonePress) this.handle({ type: 'undo' });
+    });
   }
 
   /**

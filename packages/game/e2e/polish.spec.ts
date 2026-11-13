@@ -47,15 +47,19 @@ async function openOptionsByKeyboard(page: Page): Promise<void> {
 test('menu and options from the keyboard: focus, toggles, language', async ({ page }) => {
   await openOptionsByKeyboard(page);
   expect(await field(page, 'focus')).toBeUndefined();
-  // Tab: the music volume's gauge, then the effects'; ← moves its knob a notch down, the focus
-  // stays on it
+  // Tab: the language first, then the music volume's gauge, then the effects'; ← moves its knob
+  // a notch down, the focus stays on it
+  await press(page, 'Tab');
+  await expect.poll(() => field(page, 'focus')).toBe('lang');
   await press(page, 'Tab', 'Tab');
   await expect.poll(() => field(page, 'focus')).toBe('sfx');
   await press(page, 'ArrowLeft');
   await expect.poll(async () => (await stored(page))?.settings.sfxVolume).toBe(90);
   await expect.poll(() => field(page, 'focus')).toBe('sfx');
-  // next: the language list, opened on the current language; the arrows pick another one
-  await press(page, 'Tab', 'Enter');
+  // back to the language list, opened on the current language; the arrows pick another one
+  await press(page, 'Shift+Tab', 'Shift+Tab');
+  await expect.poll(() => field(page, 'focus')).toBe('lang');
+  await press(page, 'Enter');
   await expect.poll(() => field(page, 'langMenuOpen')).toBe(true);
   await press(page, 'ArrowDown', 'Enter'); // en → fr
   await expect.poll(() => field(page, 'lang')).toBe('fr');
@@ -154,7 +158,7 @@ test('a save that cannot be written is told once', async ({ page }) => {
   }, SAVE_KEY);
   await page.setViewportSize({ width: 1280, height: 900 });
   await openOptionsByKeyboard(page);
-  await press(page, 'Tab', 'ArrowLeft'); // the music a notch down: saved, or not
+  await press(page, 'Tab', 'Tab', 'ArrowLeft'); // the music a notch down: saved, or not
   await expect.poll(() => field(page, 'saveFailed')).toBe(true);
   expect(await field(page, 'notice')).toMatch(/^Cannot save on this device/);
 });

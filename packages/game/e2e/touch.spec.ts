@@ -63,7 +63,10 @@ class Finger {
   }
 }
 
-/** pc-01, first row: @ . B . ~ . k . . (the block sinks into the water when pushed twice) */
+/**
+ * pc-01, first row: # . @ B . ~ . . k . # (the player at x = 2; the block sinks into the water
+ * when pushed twice)
+ */
 async function startPc01(page: Page): Promise<Finger> {
   await page.goto('/');
   await expect.poll(() => field(page, 'scene')).toBe('Menu');
@@ -91,15 +94,16 @@ test('a drag of N steps makes N moves and pushes the block on its way', async ({
   await recordVibrations(page);
   const f = await startPc01(page);
   await f.down(X0, Y0);
-  await f.by(STEP + 4, 0);
+  await f.by(STEP + 4, 0); // into the block: pushed
   await expect.poll(() => field(page, 'moves')).toBe(1);
-  await f.by(STEP, 0); // into the block: pushed
-  await expect.poll(() => field(page, 'moves')).toBe(2);
   expect(await field(page, 'player')).toEqual({ x: 3, y: 1 });
   await f.by(STEP, 0); // the block sinks into the water
+  await expect.poll(() => field(page, 'moves')).toBe(2);
+  expect(await field(page, 'player')).toEqual({ x: 4, y: 1 });
+  await f.by(STEP, 0); // onto the filled water
   await f.up();
   await expect.poll(() => field(page, 'moves')).toBe(3);
-  expect(await field(page, 'player')).toEqual({ x: 4, y: 1 });
+  expect(await field(page, 'player')).toEqual({ x: 5, y: 1 });
   // the push and the filled water are seen on the board: no vibration
   expect(await vibrations(page)).toEqual([]);
 });
@@ -114,17 +118,17 @@ test('a drag shorter than a step makes no move', async ({ page }) => {
   await f.down(...pad.right!);
   await f.up();
   await expect.poll(() => field(page, 'moves')).toBe(1);
-  expect(await field(page, 'player')).toEqual({ x: 2, y: 1 });
+  expect(await field(page, 'player')).toEqual({ x: 3, y: 1 });
 });
 
 test('a drag with a turn moves both ways; a turn into a wall bumps', async ({ page }) => {
   await recordVibrations(page);
   const f = await startPc01(page);
   await f.down(X0, Y0);
-  await f.by(STEP + 4, 0);
-  await expect.poll(() => field(page, 'player')).toEqual({ x: 2, y: 1 });
+  await f.by(STEP + 4, 0); // pushing the block
+  await expect.poll(() => field(page, 'player')).toEqual({ x: 3, y: 1 });
   await f.by(-STEP - 8, 0); // back left, same gesture
-  await expect.poll(() => field(page, 'player')).toEqual({ x: 1, y: 1 });
+  await expect.poll(() => field(page, 'player')).toEqual({ x: 2, y: 1 });
   expect(await field(page, 'moves')).toBe(2);
   await f.by(0, STEP + 8); // then down: a wall
   await expect.poll(() => vibrations(page)).toEqual([[10]]);
@@ -177,8 +181,9 @@ test('d-pad: a tap moves once, holding repeats; sliding off, lifting or cancelli
   // hold right: repeats (the corridor is free up to x = 9 once the block has sunk)…
   await f.down(rx, ry);
   await expect.poll(moves, { timeout: 2000 }).toBeGreaterThanOrEqual(5);
-  // …until the finger slides off the button, still down
-  await f.to(X0, Y0, 3);
+  // …until the finger slides off the d-pad, still down (sideways: through its other directions
+  // it would turn)
+  await f.to(385, ry, 3);
   await steady(moves);
   expect(((await field(page, 'player')) as { x: number }).x).toBeLessThan(9);
   await f.up();
@@ -245,11 +250,11 @@ test('options: drag distance and vibrations are saved and used', async ({ page }
   await expect.poll(() => field(page, 'scene')).toBe('Game');
   const f = await Finger.on(page);
   await f.down(X0, Y0);
-  await f.by(2 * 64 + 10, 0); // two moves at 64 px (it would be three at 40 px): a push
+  await f.by(2 * 64 + 10, 0); // two moves at 64 px (it would be three at 40 px): two pushes
   await f.up();
   await expect.poll(() => field(page, 'moves')).toBe(2);
   await page.waitForTimeout(200);
-  expect(await field(page, 'player')).toEqual({ x: 3, y: 1 });
+  expect(await field(page, 'player')).toEqual({ x: 4, y: 1 });
   expect(await vibrations(page)).toEqual([]); // vibrations off
 });
 
@@ -264,7 +269,7 @@ test('d-pad: a corner between two buttons counts; sliding to another direction t
   // the corner between up and right, nearer the right button's axis: right
   await f.down(rx - 4, uy + 20);
   await f.up();
-  await expect.poll(() => field(page, 'player')).toEqual({ x: 2, y: 1 });
+  await expect.poll(() => field(page, 'player')).toEqual({ x: 3, y: 1 });
   // hold right, then slide down to the down button, still pressed: the repeat turns down (a
   // wall: bumps), and stops when lifted
   await f.down(...pad.right!);

@@ -1,5 +1,8 @@
 # Credits
 
+Also shown in the game (main menu › Credits): the music's author asks for credits in the game
+itself.
+
 - Music (not covered by the code's GPL license):
   - "RPG Battle Climax" — Eric Matyas, www.soundimage.org
   - "Self Destruct Sequence" — Eric Matyas, www.soundimage.org

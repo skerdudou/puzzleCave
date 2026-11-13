@@ -44,6 +44,20 @@ export class MenuScene extends Phaser.Scene {
     ];
     // one column of buttons as wide as the widest
     sameWidth(items.map((i) => i.button));
+    // the credits: small, in the bottom left corner (off the menu's column)
+    const credits = () => this.scene.start('Credits');
+    items.push({
+      id: 'credits',
+      button: makeButton(
+        this,
+        px(12),
+        this.scale.height - px(12),
+        t('credits'),
+        credits,
+        11,
+      ).setOrigin(0, 1),
+      press: credits,
+    });
     // the preview only: its update journal (updateLog.ts), on a page of its own, behind a small
     // icon in the bottom right corner (off the menu's column)
     if (PREVIEW)

@@ -2,8 +2,11 @@ import { t } from './i18n';
 import { setDebug } from './debug';
 import { COLORS, FONT, uiScale } from './ui';
 
-/** A short line over the top of the play area for a few seconds; it never takes a touch. */
-export function showNotice(text: string, color: string = COLORS.text): void {
+/**
+ * A short line over the top of the play area for a few seconds; it never takes a touch. Returns
+ * what takes it away at once.
+ */
+export function showNotice(text: string, color: string = COLORS.text): () => void {
   const el = document.createElement('div');
   el.textContent = text;
   el.setAttribute('role', 'status');
@@ -28,8 +31,13 @@ export function showNotice(text: string, color: string = COLORS.text): void {
   } satisfies Partial<CSSStyleDeclaration>);
   document.body.append(el);
   setDebug({ notice: text });
-  setTimeout(() => (el.style.opacity = '0'), 6000);
-  setTimeout(() => el.remove(), 6600);
+  const fade = setTimeout(() => (el.style.opacity = '0'), 6000);
+  const gone = setTimeout(() => el.remove(), 6600);
+  return () => {
+    clearTimeout(fade);
+    clearTimeout(gone);
+    el.remove();
+  };
 }
 
 /**

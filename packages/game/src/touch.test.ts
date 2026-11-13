@@ -24,11 +24,11 @@ test('isLandscape : width strictly greater than height', () => {
   expect(isLandscape(1000, 2000)).toBe(false);
 });
 
-test('d-pad touch area: the 3 × 3 square, a fifth of a button bigger, kept on the screen', () => {
+test('d-pad touch area: the 3 × 3 square, half a button bigger, kept on the screen', () => {
   const d = dpadLayout(1000, 2000, 100);
-  expect(dpadHitBox(d, 1000, 2000)).toEqual({ x: 330, y: 1630, w: 340, h: 340 });
-  // at the screen's bottom edge: clipped
-  expect(dpadHitBox(d, 1000, 1960)).toEqual({ x: 330, y: 1630, w: 340, h: 330 });
+  expect(dpadHitBox(d, 1000, 2000)).toEqual({ x: 300, y: 1600, w: 400, h: 400 });
+  // past the screen's bottom edge: clipped
+  expect(dpadHitBox(d, 1000, 2000, 0.6)).toEqual({ x: 290, y: 1590, w: 420, h: 410 });
 });
 
 test('d-pad direction: an X from the centre, corners included; none at the centre or off', () => {

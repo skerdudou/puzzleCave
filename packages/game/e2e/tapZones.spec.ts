@@ -89,7 +89,7 @@ class Finger {
   }
 }
 
-/** pc-01, first row: @ . B . ~ . k . . (walls above and below the start) */
+/** pc-01, first row: # . @ B . ~ . . k . # (the player at x = 2, walls above and below) */
 async function startPc01(page: Page): Promise<Finger> {
   await page.goto('/');
   await expect.poll(async () => (await debug(page)).scene).toBe('Menu');
@@ -117,9 +117,9 @@ async function dpadBox(page: Page): Promise<Box> {
   const c = Object.values(pad);
   const xs = c.map(([x]) => x);
   const ys = c.map(([, y]) => y);
-  // the touch area: the buttons (a size apart) and a fifth of a button around them
+  // the touch area: the buttons (a size apart) and half a button around them
   const size = pad.right![0] - pad.up![0];
-  const m = size / 2 + 0.2 * size;
+  const m = size / 2 + 0.5 * size;
   const x = Math.min(...xs) - m;
   const y = Math.min(...ys) - m;
   return { x, y, w: Math.max(...xs) + m - x, h: Math.max(...ys) + m - y };
@@ -138,7 +138,7 @@ test('drag mode (the default): a tap in a zone moves nothing', async ({ page }) 
   // a d-pad tap afterwards: only its move (a zone move, handled first, would show too)
   await f.tap(...(await debug(page)).dpad!.right!);
   await expect.poll(async () => (await debug(page)).moves).toBe(1);
-  expect(await player(page)).toEqual({ x: 2, y: 1 });
+  expect(await player(page)).toEqual({ x: 3, y: 1 });
   expect(await zoneMoves(page)).toBe(0);
 });
 
@@ -146,7 +146,7 @@ test('tap mode: a press moves at once, before the finger is lifted', async ({ pa
   await tapMode(page);
   const f = await startPc01(page);
   await f.down(...(await zonePoint(page, 'right')));
-  await expect.poll(() => player(page)).toEqual({ x: 2, y: 1 });
+  await expect.poll(() => player(page)).toEqual({ x: 3, y: 1 });
   expect(await zoneMoves(page)).toBeGreaterThanOrEqual(1);
   // the pressed triangle is lit while the finger is down, then fades
   expect((await debug(page)).zoneFlash).toBe('right');
@@ -159,21 +159,21 @@ test('tap mode: a tap in each triangle moves that way; diagonal and centre do no
 }) => {
   await tapMode(page);
   const f = await startPc01(page);
-  // to (4, 4), where up, down, left and right are all open:
-  // the block sinks, key, door, then along the third row and down
-  for (const k of [...'RRRRRRRRDDLLLLLD'])
+  // to (3, 5), where up, down, left and right are all open: the block sinks, the key, back to
+  // the door and through it, along the fourth row and down
+  for (const k of [...'RRRRRRLDDDLLLLD'])
     await page.keyboard.press({ R: 'ArrowRight', D: 'ArrowDown', L: 'ArrowLeft' }[k]!);
-  await expect.poll(() => player(page)).toEqual({ x: 4, y: 4 });
+  await expect.poll(() => player(page)).toEqual({ x: 3, y: 5 });
   const moves0 = (await debug(page)).moves!;
 
   await f.tap(...(await zonePoint(page, 'up')));
-  await expect.poll(() => player(page)).toEqual({ x: 4, y: 3 });
+  await expect.poll(() => player(page)).toEqual({ x: 3, y: 4 });
   await f.tap(...(await zonePoint(page, 'left')));
-  await expect.poll(() => player(page)).toEqual({ x: 3, y: 3 });
+  await expect.poll(() => player(page)).toEqual({ x: 2, y: 4 });
   await f.tap(...(await zonePoint(page, 'right')));
-  await expect.poll(() => player(page)).toEqual({ x: 4, y: 3 });
+  await expect.poll(() => player(page)).toEqual({ x: 3, y: 4 });
   await f.tap(...(await zonePoint(page, 'down')));
-  await expect.poll(() => player(page)).toEqual({ x: 4, y: 4 });
+  await expect.poll(() => player(page)).toEqual({ x: 3, y: 5 });
   expect((await debug(page)).moves).toBe(moves0 + 4);
   expect(await zoneMoves(page)).toBe(4);
 
@@ -184,7 +184,7 @@ test('tap mode: a tap in each triangle moves that way; diagonal and centre do no
   await f.tap(cx + 5, cy - 6);
   // …as a following tap shows: one zone move more, its own
   await f.tap(...(await zonePoint(page, 'down')));
-  await expect.poll(() => player(page)).toEqual({ x: 4, y: 5 });
+  await expect.poll(() => player(page)).toEqual({ x: 3, y: 6 });
   expect(await zoneMoves(page)).toBe(5);
   expect((await debug(page)).moves).toBe(moves0 + 5);
 });
@@ -204,7 +204,7 @@ test('tap mode: holding repeats like the d-pad (one vibration), until lifted or 
   expect(await vibrations(page)).toEqual([[10]]);
   // lifted: the repeat has stopped, the next tap makes exactly one move more
   await f.tap(...(await zonePoint(page, 'right')));
-  await expect.poll(() => player(page)).toEqual({ x: 2, y: 1 });
+  await expect.poll(() => player(page)).toEqual({ x: 3, y: 1 });
   expect(await zoneMoves(page)).toBe(n + 1);
   expect((await debug(page)).moves).toBe(1);
 
@@ -213,7 +213,7 @@ test('tap mode: holding repeats like the d-pad (one vibration), until lifted or 
   await expect.poll(() => zoneMoves(page)).toBeGreaterThanOrEqual(n + 4);
   await f.cancel();
   await f.tap(...(await zonePoint(page, 'left')));
-  await expect.poll(() => player(page)).toEqual({ x: 1, y: 1 });
+  await expect.poll(() => player(page)).toEqual({ x: 2, y: 1 });
   expect((await debug(page)).moves).toBe(2);
   expect(await vibrations(page)).toEqual([[10], [10]]);
 });
@@ -223,17 +223,17 @@ test('tap mode: no drag; a finger sliding off its triangle stops, and presses no
 }) => {
   await tapMode(page);
   const f = await startPc01(page);
-  // left of the start is a wall (a bump), then the finger slides over to the "right" triangle
-  await f.down(...(await zonePoint(page, 'left')));
+  // above the start is a wall (a bump), then the finger slides over to the "right" triangle
+  await f.down(...(await zonePoint(page, 'up')));
   await expect.poll(() => zoneMoves(page)).toBeGreaterThanOrEqual(1);
   await f.to(...(await zonePoint(page, 'right')));
   await f.up();
   // no step right, neither from the slide (no drag) nor from the triangle it ended on
-  expect(await player(page)).toEqual({ x: 1, y: 1 });
+  expect(await player(page)).toEqual({ x: 2, y: 1 });
   expect((await debug(page)).moves).toBe(0);
   // the repeat has stopped: a d-pad tap now is the only move
   await f.tap(...(await debug(page)).dpad!.right!);
-  await expect.poll(() => player(page)).toEqual({ x: 2, y: 1 });
+  await expect.poll(() => player(page)).toEqual({ x: 3, y: 1 });
   expect((await debug(page)).moves).toBe(1);
 });
 
@@ -242,10 +242,10 @@ test('tap mode: a tap on the d-pad or on Restart is not a zone tap', async ({ pa
   const f = await startPc01(page);
   await f.tap(...(await debug(page)).dpad!.right!);
   await expect.poll(async () => (await debug(page)).moves).toBe(1);
-  expect(await player(page)).toEqual({ x: 2, y: 1 });
+  expect(await player(page)).toEqual({ x: 3, y: 1 });
   await f.tap(...(await debug(page)).hudButtons!.restart!);
   await expect.poll(async () => (await debug(page)).moves).toBe(0);
-  expect(await player(page)).toEqual({ x: 1, y: 1 });
+  expect(await player(page)).toEqual({ x: 2, y: 1 });
   expect(await zoneMoves(page)).toBe(0);
 });
 
@@ -278,7 +278,7 @@ test('tap mode: the zones keep 24 px away from the header and the d-pad; presses
   await f.tap(area.x + area.w / 2, area.y + area.h - 4);
   await expect.poll(() => zoneMoves(page)).toBe(1);
   expect((await debug(page)).moves).toBe(0);
-  expect(await player(page)).toEqual({ x: 1, y: 1 });
+  expect(await player(page)).toEqual({ x: 2, y: 1 });
 });
 
 test('tap mode: the lit triangle stays inside the area (never over the d-pad or the header)', async ({
@@ -321,7 +321,7 @@ test.describe('landscape', () => {
     // left of the d-pad, within the margin: nothing; further left: "right" (a step)
     await f.tap(pad.x - 12, pad.y + pad.h / 2);
     await f.tap(area.x + area.w - 10, area.y + area.h / 2);
-    await expect.poll(() => player(page)).toEqual({ x: 2, y: 1 });
+    await expect.poll(() => player(page)).toEqual({ x: 3, y: 1 });
     expect(await zoneMoves(page)).toBe(1);
   });
 });
@@ -355,5 +355,5 @@ test('an old save with tap zones around the player plays in tap mode', async ({ 
   const f = await startPc01(page);
   expect((await debug(page)).touchControl).toBe('tap');
   await f.tap(...(await zonePoint(page, 'right')));
-  await expect.poll(() => player(page)).toEqual({ x: 2, y: 1 });
+  await expect.poll(() => player(page)).toEqual({ x: 3, y: 1 });
 });

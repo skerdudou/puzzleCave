@@ -131,7 +131,7 @@ test.describe('phone in landscape', () => {
     expect(await saved(page)).toBe(before);
   });
 
-  test('after scrolling, Smoothing (near the bottom) and Back answer a tap', async ({ page }) => {
+  test('after scrolling, Smoothing (far down) and Back answer a tap', async ({ page }) => {
     await openOptions(page);
     const f = await Finger.on(page);
     // a few drags (one finger's travel is less than the whole height to scroll)
@@ -141,7 +141,7 @@ test.describe('phone in landscape', () => {
     await restingScroll(page);
     await dragFrom(page, 600, 300, -250);
     const y = await restingScroll(page);
-    expect(y).toBe((await debug(page)).maxScrollY);
+    expect(y).toBeGreaterThan(500);
 
     const smoothing = (await debug(page)).settings!.smoothing;
     const [vx, vy] = await button(page, 'smoothing');
@@ -165,13 +165,13 @@ test.describe('phone in landscape', () => {
   test('the language drop-down opens entirely on the screen after scrolling', async ({ page }) => {
     await openOptions(page);
     const f = await Finger.on(page);
-    // scrolled a little: the language button stays on the screen
-    await dragFrom(page, 600, 300, -80);
+    // scrolled a little: the language button (the first) stays on the screen, under the band
+    await dragFrom(page, 600, 300, -30);
     const y = await restingScroll(page);
     expect(y).toBeGreaterThan(0);
 
     const [lx, ly] = await button(page, 'lang');
-    expect(ly).toBeGreaterThan(10);
+    expect(ly).toBeGreaterThan(60);
     await f.tap(lx, ly);
     await expect.poll(async () => (await debug(page)).langMenuOpen).toBe(true);
     for (const lang of ['en', 'fr', 'de', 'es', 'it']) {
@@ -216,7 +216,7 @@ test.describe('phone in landscape', () => {
     // the arrows go from button to button: the first ones are on the screen, nothing scrolls;
     // going back from the first wraps to Back, in the band at the top: nothing scrolls either
     await page.keyboard.press('ArrowDown');
-    await expect.poll(async () => (await debug(page)).focus).toBe('music');
+    await expect.poll(async () => (await debug(page)).focus).toBe('lang');
     expect((await debug(page)).scrollY).toBe(0);
     await page.keyboard.press('ArrowUp');
     await expect.poll(async () => (await debug(page)).focus).toBe('back');

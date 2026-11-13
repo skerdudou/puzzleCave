@@ -6,6 +6,7 @@ import {
   isLevelUnlocked,
   isMasterUnlocked,
   recordRun,
+  startLevel,
   validateChapters,
   type Chapter,
   type Records,
@@ -164,4 +165,16 @@ test('all chapters open (the Konami code): every chapter opens with its first tw
   // the levels further in still open one completion at a time
   expect(isLevelUnlocked(chapters, 0, 2, {}, true)).toBe(false);
   expect(isChapterUnlocked(chapters, 5, {}, true)).toBe(false);
+});
+
+test('startLevel: the first open level not completed, chapters in order', () => {
+  expect(startLevel(chapters, {})).toEqual({ ci: 0, li: 0 });
+  expect(startLevel(chapters, done('a'))).toEqual({ ci: 0, li: 1 });
+  expect(startLevel(chapters, done('a', 'c'))).toEqual({ ci: 0, li: 1 });
+  // the next chapter is open, but this one is not finished
+  expect(startLevel(chapters, done('a', 'b'))).toEqual({ ci: 0, li: 2 });
+  expect(startLevel(chapters, done('a', 'b', 'c'))).toEqual({ ci: 1, li: 0 });
+  expect(startLevel(chapters, done('a', 'b', 'c', 'd'))).toEqual({ ci: 1, li: 1 });
+  // everything finished: the last chapter's first level
+  expect(startLevel(chapters, done('a', 'b', 'c', 'd', 'e'))).toEqual({ ci: 1, li: 0 });
 });
