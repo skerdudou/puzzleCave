@@ -1,6 +1,5 @@
 import Phaser from 'phaser';
 import {
-  formatMoves,
   isLevelUnlocked,
   resolveThresholds,
   type Award,
@@ -27,7 +26,6 @@ import { planReveal, prefersReducedMotion, type RevealSlot } from '../medalRevea
 import { MedalReveal, type MedalSpot } from '../render/MedalReveal';
 import {
   COLORS,
-  copyToClipboard,
   drawMedal,
   MASTER_BOX,
   drawThresholdLine,
@@ -40,14 +38,6 @@ import {
   shrinkToFit,
   textStyle,
 } from '../ui';
-import {
-  authorServerAvailable,
-  fetchJob,
-  fetchSolution,
-  saveSolution,
-  type SaveOutcome,
-} from '../author/client';
-import { describeJob, type JobInfo } from '../author/jobText';
 
 export interface ResultSceneData {
   levelId: string;
@@ -62,29 +52,14 @@ export interface ResultSceneData {
 
 export class ResultScene extends Phaser.Scene {
   private info!: ResultSceneData;
-  private authorY = 0;
-  private status?: Phaser.GameObjects.Text;
-  private detail?: Phaser.GameObjects.Text;
-  private extra: Phaser.GameObjects.GameObject[] = [];
-  private alive = false;
-  /** this run of the scene (a resize restarts it): an older run's request is dropped */
-  private run = 0;
-  private tick = 0;
   private reveal?: MedalReveal;
   constructor() {
     super('Result');
   }
   init(data: ResultSceneData): void {
     this.info = data;
-    this.extra = [];
-    this.alive = true;
-    this.run++;
   }
 
-  /** The scene still shows the run `run` started a request in. */
-  private current(run: number): boolean {
-    return this.alive && this.run === run;
-  }
   create(): void {
     const { levelId, mode, result, award, previous, moveLog } = this.info;
     const level = levelById(levelId);
@@ -108,7 +83,8 @@ export class ResultScene extends Phaser.Scene {
     // the mode, "Master mode" (not "MASTER", the name of a medal too, above the medal won)
     if (mode === 'master')
       this.add.text(cx, y + px(22), t('masterModeName'), textStyle(12, '#9be7ff')).setOrigin(0.5);
-    y += px(48);
+    // (a low screen: a little closer, master mode's box below has its medals on one line)
+    y += px(low ? 42 : 48);
 
     const g = this.add.graphics();
     const th = resolveThresholds(level.thresholds);
@@ -211,10 +187,13 @@ export class ResultScene extends Phaser.Scene {
         const line = px(MASTER_BOX.line);
         let ly = rulesBottom + px(4) + line / 2;
         const row = rows.find((r) => r.kind === 'master');
-        for (const tier of row?.tiers ?? []) {
-          drawThresholdLine(this, g, cx, ly, '', [tier], {
+        // one line a medal, named; a low screen (no height to spare): all on one line, the
+        // marks saying which
+        const tiers = row?.tiers ?? [];
+        for (const lineTiers of low ? [tiers] : tiers.map((tier) => [tier])) {
+          drawThresholdLine(this, g, cx, ly, '', lineTiers, {
             maxWidth: boxW - 2 * px(MASTER_BOX.pad),
-            named: masterMedalName,
+            named: low ? undefined : masterMedalName,
           });
           ly += line;
         }
@@ -269,6 +248,8 @@ export class ResultScene extends Phaser.Scene {
         label: t('labelMine'),
         saving: 'unsaved',
         back: { scene: 'Result', data: { ...this.info, instant: true } },
+        // author mode: the run's tools (its Tiled properties, saved as the level's solution)
+        ...(app.author && { authorRun: { timeMs: result.timeMs } }),
       });
     setDebug({ resultMasterButton: masterBtn });
     // the buttons in reading order: Replay, Master (when open), Watch, then Menu, Next (when there is
@@ -331,67 +312,6 @@ export class ResultScene extends Phaser.Scene {
         })
         .setOrigin(0.5, 1);
 
-    if (app.author) {
-      y += px(56);
-      const props = `goldMoves = ${result.moves}\ngoldTime = ${(result.timeMs / 1000).toFixed(2)}`;
-      const tiled = makeButton(
-        this,
-        cx,
-        y,
-        t('copyTiled'),
-        () => void copyToClipboard(props, tiled),
-        12,
-      );
-      y += px(48);
-      const sol = makeButton(
-        this,
-        cx,
-        y,
-        t('copySolution'),
-        () => void copyToClipboard(formatMoves(moveLog), sol),
-        12,
-      );
-      if (!authorServerAvailable()) {
-        // no development server (the preview of main): no saving, the run replays at once (on
-        // `vite dev` it is offered after saving)
-        y += px(48);
-        makeButton(
-          this,
-          cx,
-          y,
-          t('replayMine'),
-          () => this.replay(moveLog, t('labelMine'), this.info.mode),
-          12,
-        );
-      } else {
-        y += px(48);
-        const save = makeButton(
-          this,
-          cx,
-          y,
-          t('saveSolution'),
-          () => void this.save(save, false),
-          12,
-        );
-        this.authorY = y + px(30);
-        this.status = this.add
-          .text(cx, this.authorY, '', {
-            ...textStyle(12),
-            align: 'center',
-            wordWrap: { width: this.scale.width - px(24) },
-          })
-          .setOrigin(0.5, 0);
-        this.detail = this.add
-          .text(cx, this.authorY, '', {
-            ...textStyle(10, COLORS.dim),
-            align: 'center',
-            wordWrap: { width: this.scale.width - px(24) },
-          })
-          .setOrigin(0.5, 0);
-        this.events.once('shutdown', () => (this.alive = false));
-      }
-    }
-
     setDebug({
       resultAnimDone: false,
       resultReveal: plan.steps.map((s) => `${s.slot}:${s.medal}:${s.emphasis}`),
@@ -418,147 +338,6 @@ export class ResultScene extends Phaser.Scene {
     this.scale.on('resize', onResize);
     this.events.once('shutdown', () => this.scale.off('resize', onResize));
     setDebug({ scene: 'Result' });
-  }
-
-  private clearExtra(): void {
-    for (const o of this.extra) o.destroy();
-    this.extra = [];
-  }
-
-  /** Shows status and detail one under the other, returns the free y below. */
-  private setStatus(text: string, detail = '', color: string = COLORS.text): number {
-    const status = this.status!;
-    const det = this.detail!;
-    status.setText(text).setColor(color).setY(this.authorY);
-    det.setText(detail).setY(this.authorY + status.height + px(4));
-    return det.y + (detail ? det.height : 0) + px(10);
-  }
-
-  private addButtons(y: number, items: [string, () => void][]): void {
-    this.clearExtra();
-    const cx = this.scale.width / 2;
-    let yy = y;
-    for (const [label, fn] of items) {
-      const b = makeButton(this, cx, yy + px(14), label, fn, 12);
-      this.extra.push(b);
-      yy += px(48);
-    }
-  }
-
-  /** `mode`: the rules the moves were played under (the author's solutions are normal mode). */
-  private replay(moves: Dir[], label: string, mode?: Mode): void {
-    this.scene.start('Replay', {
-      levelId: this.info.levelId,
-      moves,
-      label,
-      mode,
-      back: { scene: 'Result', data: this.info },
-    });
-  }
-
-  private async save(button: Phaser.GameObjects.Text, force: boolean): Promise<void> {
-    const { levelId, moveLog } = this.info;
-    const run = this.run;
-    this.clearExtra();
-    button.disableInteractive();
-    this.setStatus(t('optimizing', { dots: '' }), '', COLORS.dim);
-    const outcome = await saveSolution(levelId, formatMoves(moveLog), force);
-    if (!this.current(run)) return;
-    button.setInteractive({ useHandCursor: true });
-    this.afterSave(outcome, button);
-  }
-
-  private afterSave(o: SaveOutcome, button: Phaser.GameObjects.Text): void {
-    const { moveLog } = this.info;
-    const mine: [string, () => void] = [
-      t('replayMine'),
-      () => this.replay(moveLog, t('labelMine'), this.info.mode),
-    ];
-    switch (o.kind) {
-      case 'saved':
-        void this.poll(o.jobId, o.moves);
-        return;
-      case 'not-shorter': {
-        const y = this.setStatus(
-          t(o.proven ? 'notShorterProven' : 'notShorter', { n: o.existing }),
-          '',
-          COLORS.accent,
-        );
-        this.addButtons(y, [[t('replaceAnyway'), () => void this.save(button, true)], mine]);
-        return;
-      }
-      case 'not-winning':
-        this.setStatus(t('notWinning'), '', '#ff8080');
-        return;
-      case 'job-running':
-        this.setStatus(t('jobRunning'), '', COLORS.accent);
-        return;
-      case 'error':
-        this.setStatus(t('networkError', { msg: o.message }), '', '#ff8080');
-    }
-  }
-
-  /** Polls the job every second; the dots and the timer animate between two polls. */
-  private async poll(jobId: string, savedMoves: number): Promise<void> {
-    const run = this.run;
-    const head = t('solutionSaved', { n: savedMoves });
-    let last: JobInfo | null = null;
-    let lastAt = performance.now();
-    const show = () => {
-      if (!last) return this.setStatus(head, '', COLORS.dim);
-      const elapsedMs =
-        last.elapsedMs + (last.state === 'running' ? performance.now() - lastAt : 0);
-      const d = describeJob({ ...last, elapsedMs }, this.tick);
-      return this.setStatus(
-        `${head}
-${d.headline}`,
-        d.detail,
-      );
-    };
-    const anim = this.time.addEvent({
-      delay: 400,
-      loop: true,
-      callback: () => {
-        this.tick++;
-        show();
-      },
-    });
-    let failures = 0;
-    do {
-      const j = await fetchJob(jobId);
-      if (!this.current(run)) return;
-      if (j) {
-        last = j;
-        lastAt = performance.now();
-        failures = 0;
-      } else if (++failures > 5) {
-        anim.remove(false);
-        this.setStatus(head, t('networkError', { msg: jobId }), '#ff8080');
-        return;
-      }
-      show();
-      if (last?.state === 'running' || !last) await new Promise((r) => setTimeout(r, 1000));
-      if (!this.current(run)) return;
-    } while (!last || last.state === 'running');
-    anim.remove(false);
-    const d = describeJob(last, 0);
-    const detail = [d.detail, last.tmxChanged ? t('tmxChanged') : ''].filter(Boolean).join('\n');
-    const y = this.setStatus(
-      `${head}
-${d.headline}`,
-      detail,
-      last.state === 'failed' ? '#ff8080' : COLORS.accent,
-    );
-    const { moveLog } = this.info;
-    const buttons: [string, () => void][] = [
-      [t('replayMine'), () => this.replay(moveLog, t('labelMine'), this.info.mode)],
-    ];
-    if (d.improved) {
-      const sol = await fetchSolution(this.info.levelId);
-      if (sol)
-        buttons.push([t('replayOptimized'), () => this.replay(sol.moves, t('labelOptimized'))]);
-    }
-    if (this.current(run)) this.addButtons(y, buttons);
   }
 
   private nextLevel(id: string): string | undefined {

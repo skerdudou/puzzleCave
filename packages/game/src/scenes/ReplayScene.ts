@@ -9,6 +9,8 @@ import { showNotice } from '../notice';
 import { deleteReplay, getReplay, replayText, setReplay, toSaved } from '../replays';
 import { TwoPress } from '../twoPress';
 import { Playback } from '../author/playback';
+import { AuthorSavePanel } from '../author/authorSavePanel';
+import { authorServerAvailable } from '../author/client';
 import { HoldRepeat } from '../input/holdRepeat';
 import { onSceneKeyDown } from '../input/sceneKeys';
 import { chapterTint } from '../render/ambience';
@@ -26,6 +28,7 @@ import {
   px,
   textIcon,
   textStyle,
+  TOUCH_TARGET,
 } from '../ui';
 import { keepAwake } from '../wakeLock';
 
@@ -46,6 +49,12 @@ export interface ReplaySceneData {
    * Absent (the author's solutions): Export alone.
    */
   saving?: 'unsaved' | 'saved';
+  /**
+   * Author mode, the run just played (from the result screen): its tools beside the others, its
+   * Tiled properties (goldMoves, goldTime) and, with the development server, saved as the level's
+   * solution.
+   */
+  authorRun?: { timeMs: number };
 }
 
 /** The progress bar's height and the room it takes above the buttons, base px. */
@@ -57,13 +66,15 @@ const ROW = 48;
 /** The shortest the bar gets with the run's actions beside it, base px. */
 const MIN_BAR = 200;
 
-type ReplayAction = 'save' | 'export' | 'import' | 'delete';
+type ReplayAction = 'save' | 'export' | 'import' | 'delete' | 'tiled' | 'solution';
 
 const ACTION_LABELS: Record<ReplayAction, MessageKey> = {
   save: 'replaySave',
   export: 'replayExport',
   import: 'replayImport',
   delete: 'replayDelete',
+  tiled: 'copyTiled',
+  solution: 'saveSolution',
 };
 
 /** Solution replay: all rules come from Session, display from BoardView. */
@@ -98,6 +109,8 @@ export class ReplayScene extends Phaser.Scene {
   private seekPending = false;
   /** Save over a saved replay and Delete ask first */
   private confirm!: TwoPress;
+  /** author mode: the run saved as the level's solution, the server's answer */
+  private authorPanel?: AuthorSavePanel;
 
   constructor() {
     super('Replay');
@@ -113,6 +126,7 @@ export class ReplayScene extends Phaser.Scene {
     this.awake = null;
     this.seekPending = false;
     this.confirm = new TwoPress(COLORS.text);
+    this.authorPanel = undefined;
     // a button left asking before a restart (a resize) is drawn again at rest
     setDebug({ armed: null });
   }
@@ -243,27 +257,66 @@ export class ReplayScene extends Phaser.Scene {
    * as a button in place of the bar's room.
    */
   private bottomReserve(): number {
-    const actions = this.actions().length > 0;
-    if (this.narrow()) return px(124 + BAR_ROOM + (actions ? ROW : 0));
-    return px(72 + (actions ? ROW : BAR_ROOM));
+    const n = this.actionRows().length;
+    if (this.narrow()) return px(124 + BAR_ROOM + n * ROW);
+    if (this.actionsBesideBar()) return px(72 + ROW);
+    return px(72 + BAR_ROOM + n * ROW);
   }
 
-  /** The actions beside the bar rather than on a row of their own (see bottomReserve). */
+  /**
+   * The actions beside the bar rather than on rows of their own (see bottomReserve): a wide
+   * screen, all of them on one row.
+   */
   private actionsBesideBar(): boolean {
-    return this.actions().length > 0 && !this.narrow();
+    return this.actionRows().length === 1 && !this.narrow();
+  }
+
+  /** Room for one row of actions, device px: beside the bar, or the screen's width. */
+  private actionsRoom(besideBar: boolean): number {
+    const w = this.scale.width;
+    return besideBar ? w - px(20 + MIN_BAR + 16 + 12) : w - px(16);
+  }
+
+  /** A row of actions' width at their smallest letters, device px. */
+  private actionsMinWidth(ids: ReplayAction[]): number {
+    const minW = isTouchDevice() ? px(TOUCH_TARGET) : 0;
+    return ids.reduce((sum, id, i) => {
+      const m = this.add.text(0, 0, t(ACTION_LABELS[id]), textStyle(9));
+      const bw = Math.max(m.width + 2 * px(8), minW);
+      m.destroy();
+      return sum + bw + (i ? px(8) : 0);
+    }, 0);
+  }
+
+  /**
+   * The actions in rows, the lowest last: one row, or (author mode, not enough room for all on
+   * one) the author's tools on a row above the player's. None: no row.
+   */
+  private actionRows(): ReplayAction[][] {
+    const all = this.actions();
+    if (!all.length) return [];
+    const isAuthor = (id: ReplayAction) => id === 'tiled' || id === 'solution';
+    const author = all.filter(isAuthor);
+    if (!author.length) return [all];
+    const oneRow = this.actionsMinWidth(all) <= this.actionsRoom(!this.narrow());
+    return oneRow ? [all] : [author, all.filter((id) => !isAuthor(id))];
   }
 
   /** The buttons above the controls: what the player can do with this run. */
   private actions(): ReplayAction[] {
-    switch (this.info.saving) {
-      case 'unsaved':
-        return ['save', 'export'];
-      case 'saved':
-        return ['export', 'import', 'delete'];
-      default:
-        // the author's solutions: copied as text, to be imported as a replay
-        return ['export'];
-    }
+    const player = ((): ReplayAction[] => {
+      switch (this.info.saving) {
+        case 'unsaved':
+          return ['save', 'export'];
+        case 'saved':
+          return ['export', 'import', 'delete'];
+        default:
+          // the author's solutions: copied as text, to be imported as a replay
+          return ['export'];
+      }
+    })();
+    if (!this.info.authorRun) return player;
+    return [...player, 'tiled', ...(authorServerAvailable() ? ['solution' as const] : [])];
   }
 
   /** Brings the board to the playback index (forward: moves replayed; backward: rebuilt). */
@@ -339,10 +392,19 @@ export class ReplayScene extends Phaser.Scene {
     let y = h - help.height - px(26) - (rows.length - 1) * px(ROW);
     // the controls' first row (y moves down through them below)
     const controlsY = y;
-    // the run's actions a row above the controls: on a row of their own, or on the bar's line
+    // the run's actions a row above the controls: on rows of their own, or on the bar's line
     const actionsY = y - px(ROW);
     const besideBar = this.actionsBesideBar();
-    const actionsLeft = this.buildActions(actionsY, besideBar);
+    const actionRows = this.actionRows();
+    const centres: Record<string, [number, number]> = {};
+    let actionsLeft = w;
+    actionRows.forEach((ids, i) => {
+      const ry = actionsY - (actionRows.length - 1 - i) * px(ROW);
+      actionsLeft = this.buildActions(ry, besideBar, ids, centres);
+    });
+    setDebug({ replayActions: actionRows.flat(), replayActionButtons: centres });
+    // the top of the actions' rows, the bar over them
+    const actionsTop = actionsY - Math.max(0, actionRows.length - 1) * px(ROW);
     const stepButtons: Record<string, [number, number]> = {};
     for (const row of rows) {
       const buttons = row.map(([label, fn]) => makeButton(this, 0, y, label, fn, 13));
@@ -368,7 +430,7 @@ export class ReplayScene extends Phaser.Scene {
     }
     if (besideBar) this.buildBar(actionsY, actionsLeft - px(16));
     else {
-      const buttonsTop = (this.actions().length ? actionsY : controlsY) - px(22);
+      const buttonsTop = (actionRows.length ? actionsTop : controlsY) - px(22);
       this.buildBar(buttonsTop - px(BAR_ROOM / 2), w - px(20));
     }
     // above the cave's darkness, vignette and HUD band (a button's frame follows it, 1 below)
@@ -380,9 +442,12 @@ export class ReplayScene extends Phaser.Scene {
    * The run's actions (Export alone for the author's solutions) on `y`: centred, or at the screen's
    * right beside the bar. Returns their left edge (device px).
    */
-  private buildActions(y: number, besideBar: boolean): number {
-    const ids = this.actions();
-    const centres: Record<string, [number, number]> = {};
+  private buildActions(
+    y: number,
+    besideBar: boolean,
+    ids: ReplayAction[],
+    centres: Record<string, [number, number]>,
+  ): number {
     const buttons = ids.map((id) => {
       const label = t(ACTION_LABELS[id]);
       const b: Phaser.GameObjects.Text = makeButton(
@@ -399,7 +464,7 @@ export class ReplayScene extends Phaser.Scene {
     const gap = px(8);
     const width = () => buttons.reduce((s, b) => s + b.width, 0) + gap * (buttons.length - 1);
     // long words (German) on a phone: smaller letters rather than past the room they have
-    const room = besideBar ? w - px(20 + MIN_BAR + 16 + 12) : w - px(16);
+    const room = this.actionsRoom(besideBar);
     let size = 12;
     while (width() > room && size > 9) {
       size--;
@@ -413,7 +478,6 @@ export class ReplayScene extends Phaser.Scene {
       this.hud.push(b);
       centres[ids[i]!] = [b.getBounds().centerX / dpr(), y / dpr()];
     }
-    setDebug({ replayActions: ids, replayActionButtons: centres });
     return left;
   }
 
@@ -421,7 +485,7 @@ export class ReplayScene extends Phaser.Scene {
     const levelId = this.level.id;
     const saved = () => toSaved(this.info.moves, this.mode);
     // another button pressed: the one asking is put back
-    if (id === 'export' || id === 'import') this.confirm.reset();
+    if (id !== 'save' && id !== 'delete') this.confirm.reset();
     switch (id) {
       case 'save':
         // over the level's saved replay: asked first
@@ -452,6 +516,31 @@ export class ReplayScene extends Phaser.Scene {
         deleteReplay(levelId);
         showNotice(t('replayDeletedNotice'));
         this.scene.start('Select', { levelId });
+        return;
+      case 'tiled': {
+        const timeMs = this.info.authorRun?.timeMs ?? 0;
+        const props = `goldMoves = ${this.info.moves.length}\ngoldTime = ${(timeMs / 1000).toFixed(2)}`;
+        void copyToClipboard(props, button);
+        return;
+      }
+      case 'solution':
+        // the server's answer and its optimisation shown under the counters, over the board
+        this.authorPanel ??= new AuthorSavePanel(this, {
+          levelId,
+          moves: this.info.moves,
+          cx: this.scale.width / 2,
+          top: px(this.speedBelow() ? 90 : 66),
+          width: this.scale.width - px(32),
+          depth: HUD_DEPTH + 2,
+          watch: (moves, label) =>
+            this.scene.start('Replay', {
+              levelId,
+              moves,
+              label,
+              back: { scene: 'Replay', data: { ...this.info, startIndex: 0, paused: true } },
+            }),
+        });
+        void this.authorPanel.save(button, false);
         return;
     }
   }

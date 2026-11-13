@@ -17,6 +17,11 @@ type Pc = Record<string, unknown>;
 const debug = (page: Page): Promise<Pc> =>
   page.evaluate(() => (window as unknown as { __pc?: Pc }).__pc ?? {});
 const field = async (page: Page, k: string) => (await debug(page))[k];
+/** The replay's actions for the player (the author's tools, shown in author mode, left out). */
+const playerActions = async (page: Page) =>
+  ((await field(page, 'replayActions')) as string[]).filter(
+    (a) => a !== 'tiled' && a !== 'solution',
+  );
 // a scene change goes through a fade: always polled
 const waitScene = (page: Page, name: string) => expect.poll(() => field(page, 'scene')).toBe(name);
 const click = (page: Page, [x, y]: [number, number]) => page.mouse.click(x, y);
@@ -52,11 +57,13 @@ test('finish a level, watch the run, save it: the save keeps the moves', async (
   await waitScene(page, 'Result');
   await page.keyboard.press('KeyV');
   await waitScene(page, 'Replay');
-  await expect.poll(() => field(page, 'replayActions')).toEqual(['save', 'export']);
+  await expect.poll(() => playerActions(page)).toEqual(['save', 'export']);
+  // author mode (the development server): the run's tools beside them, none on the result screen
+  expect(await field(page, 'replayActions')).toEqual(expect.arrayContaining(['tiled', 'solution']));
   expect((await storedSave(page))?.replays['pc-01']).toBeUndefined();
 
   await click(page, await actionButton(page, 'save'));
-  await expect.poll(() => field(page, 'replayActions')).toEqual(['export', 'import', 'delete']);
+  await expect.poll(() => playerActions(page)).toEqual(['export', 'import', 'delete']);
   expect((await storedSave(page))?.replays['pc-01']).toEqual({
     mode: 'normal',
     moves: solutionLetters,
@@ -79,7 +86,7 @@ test('import a replay for a level without one, then the camera shows it', async 
     mode: 'normal',
     moves: solutionLetters,
   });
-  await expect.poll(() => field(page, 'replayActions')).toEqual(['export', 'import', 'delete']);
+  await expect.poll(() => playerActions(page)).toEqual(['export', 'import', 'delete']);
 
   await page.keyboard.press('Escape');
   await waitScene(page, 'Select');
@@ -109,7 +116,7 @@ test('Delete asks twice, then the replay is gone', async ({ page }) => {
   await expect.poll(() => field(page, 'cameraHasReplay')).toBe(true);
   await page.keyboard.press('KeyV');
   await waitScene(page, 'Replay');
-  await expect.poll(() => field(page, 'replayActions')).toEqual(['export', 'import', 'delete']);
+  await expect.poll(() => playerActions(page)).toEqual(['export', 'import', 'delete']);
 
   await click(page, await actionButton(page, 'delete'));
   await expect.poll(() => field(page, 'armed')).toBe('delete');

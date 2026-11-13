@@ -37,6 +37,11 @@ const HEADER_BAND = 48;
 const debug = (page: Page) =>
   page.evaluate(() => (window as unknown as { __pc?: Record<string, unknown> }).__pc ?? {});
 const field = async (page: Page, k: string) => (await debug(page))[k];
+/** The replay's actions for the player (the author's tools, shown in author mode, left out). */
+const playerActions = async (page: Page) =>
+  ((await field(page, 'replayActions')) as string[]).filter(
+    (a) => a !== 'tiled' && a !== 'solution',
+  );
 const sceneIs = (page: Page, scene: string) => expect.poll(() => field(page, 'scene')).toBe(scene);
 
 const overlap = (a: Box, b: Box) =>
@@ -214,16 +219,14 @@ for (const { width, height, touch, langs } of VIEWS) {
         // its replay: with the run's actions to save it, then saved (export, import, delete)
         await page.keyboard.press('KeyV');
         await sceneIs(page, 'Replay');
-        await expect.poll(() => field(page, 'replayActions')).toEqual(['save', 'export']);
+        await expect.poll(() => playerActions(page)).toEqual(['save', 'export']);
         await check('replay unsaved');
         const actions = (await field(page, 'replayActionButtons')) as Record<
           string,
           [number, number]
         >;
         await page.mouse.click(...actions.save!);
-        await expect
-          .poll(() => field(page, 'replayActions'))
-          .toEqual(['export', 'import', 'delete']);
+        await expect.poll(() => playerActions(page)).toEqual(['export', 'import', 'delete']);
         await check('replay saved');
 
         expect(failures).toEqual([]);
