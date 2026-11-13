@@ -1,0 +1,6 @@
+# gold reference — natural solution (220 moves): found by hand, down the left column first, then a plainer route than the best known; goldTime kept at 38.6 s, from the former 240-move gold route (fewer turns, faster to play than this one: 42.2 s)
+DDDDDDDDDDDDDDDDRLUURRUURRRRUULLUUUUUDDDLLUUUURRRR
+RLLLLLUURRRRRRUURRDDRRDDLLUDRRUULLDDDDRRUDRRUULLLR
+DDLLUUUDRRUULLLRUULLDDDDRRRRDDRRRRUULLLLLRDDLLUUUD
+RRUULLLRUULLDDDDDURRDDRRDDRRUUUDRRUULLLLLRDDLLUUUD
+RRUULLLRUULLDDDDDDDD

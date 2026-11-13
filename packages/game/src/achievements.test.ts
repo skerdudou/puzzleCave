@@ -29,6 +29,8 @@ const lv: AchievementLevels = {
   hasMaster: (id) => !id.startsWith('e'),
   // m2 has no time medals
   hasTime: (id) => id !== 'm2',
+  // grand master limits: 20 on the levels with master mode (none on e*, which have no master mode)
+  grandMasterMoves: (id) => (id.startsWith('e') ? undefined : 20),
 };
 const rec = (medals: LevelRecord['medals'] = {}): LevelRecord => ({ completed: true, medals });
 const ids = () => achievementList(lv).map((a) => a.id);
@@ -49,6 +51,7 @@ test('the list: per known chapter, then global medals, then the secrets', () => 
     'completionist',
     'deepThought',
     'konami',
+    'bigBrain',
   ]);
   // 10 and 25 golds: only with that many levels
   const many = Array.from({ length: 25 }, (_, i) => `m${i}`);
@@ -56,15 +59,39 @@ test('the list: per known chapter, then global medals, then the secrets', () => 
     chapters: [chapter('medium', many)],
     hasMaster: () => true,
     hasTime: () => true,
+    grandMasterMoves: () => 20,
   });
   expect(big.map((a) => a.id)).toContain('gold25');
   expect(big.find((a) => a.id === 'gold10')?.n).toBe(10);
 });
 
-test('the secrets are hidden and earned by an action only', () => {
+test('the secrets are hidden; all but Big Brain are earned by an action only', () => {
   const secrets = achievementList(lv).filter((a) => a.hidden);
-  expect(secrets.map((a) => a.id)).toEqual(['deepThought', 'konami']);
-  expect(secrets.every((a) => a.progress === undefined)).toBe(true);
+  expect(secrets.map((a) => a.id)).toEqual(['deepThought', 'konami', 'bigBrain']);
+  expect(secrets.filter((a) => a.progress === undefined).map((a) => a.id)).toEqual([
+    'deepThought',
+    'konami',
+  ]);
+});
+
+test('Big Brain: a level with master mode finished under its grand master limit', () => {
+  const list = achievementList(lv);
+  const run = (bestMoves?: number, masterBestMoves?: number): LevelRecord => ({
+    ...rec(),
+    ...(bestMoves === undefined ? {} : { bestMoves }),
+    ...(masterBestMoves === undefined ? {} : { masterBestMoves }),
+  });
+  const earns = (r: Records) => newlyEarned(list, r, {}).includes('bigBrain');
+  expect(earns({ m1: run(20, 20) })).toBe(false); // the limit itself is only grand master
+  expect(earns({ m1: run(19) })).toBe(true); // in normal mode
+  expect(earns({ m2: run(25, 19) })).toBe(true); // in master mode
+  expect(earns({ e1: run(1) })).toBe(false); // no master mode, no limit
+  // shown as a secret, without progress, until earned
+  const big = list.find((a) => a.id === 'bigBrain')!;
+  expect(viewOf(big, { m1: run(19) }, {})).toEqual({ earned: false, secret: true });
+  // no level with a limit: it cannot be earned, so it is left out
+  const none = achievementList({ ...lv, grandMasterMoves: () => undefined });
+  expect(none.map((a) => a.id)).not.toContain('bigBrain');
 });
 
 test('earned from the records: chapter done, all gold, grand master, firsts', () => {

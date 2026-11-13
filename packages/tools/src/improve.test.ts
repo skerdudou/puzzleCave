@@ -154,6 +154,20 @@ test('improve --apply: thresholds only lowered by a shorter solution', () => {
   expect(platinum(plat)).toBe('3');
 });
 
+test('improve --apply: a platinumMoves with a margin is kept, the shorter solution saved', () => {
+  const dir = fixture(
+    [fromAscii(ROWS, { id: 'k', thresholds: { goldMoves: 10, platinumMoves: 8, goldTime: 9 } })],
+    { k: LONG },
+  );
+  expect(improveCommand(dir, ['k'], { ...opts, apply: true }).ok).toBe(true);
+  expect(solution(dir)).toBe('# optimal (proven)\nRRRR\n');
+  expect(platinum(dir)).toBe('8');
+  expect(validateCommand(dir).lines.filter((l) => l.startsWith('k:'))).toEqual([]);
+  // --force lowers it
+  improveCommand(dir, ['k'], { ...opts, apply: true, force: true });
+  expect(platinum(dir)).toBe('4');
+});
+
 test('improve --apply: best known but unproven, comment with the lower bound', () => {
   const dir = fixture([level('k')], { k: 'RRRR\n' });
   const r = improveCommand(dir, ['k'], { ...opts, apply: true, exact: stuck(2) });
@@ -337,6 +351,10 @@ test('validate: the platinum limit against the saved solution and its header', (
   const equal = validateCommand(fixture([withThresholds(10, 4)], { k: 'RRRR\n' }));
   expect(equal.ok).toBe(true);
   expect(equal.lines.filter((l) => l.startsWith('k:'))).toEqual([]);
+  // platinumMoves above the solution: a deliberate margin, nothing to say either
+  const margin = validateCommand(fixture([withThresholds(10, 6)], { k: 'RRRR\n' }));
+  expect(margin.ok).toBe(true);
+  expect(margin.lines.filter((l) => l.startsWith('k:'))).toEqual([]);
   // a solution longer than the limit, nothing proven: warning only
   const longer = validateCommand(fixture([withThresholds(12, 9)], { k: LONG }));
   expect(longer.ok).toBe(true);

@@ -64,4 +64,5 @@ export const achievements = achievementList({
   chapters,
   hasMaster,
   hasTime: (id) => resolveThresholds(levelById(id).thresholds).time !== undefined,
+  grandMasterMoves: (id) => resolveThresholds(levelById(id).thresholds).grandMasterMoves,
 });
