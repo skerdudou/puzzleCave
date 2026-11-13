@@ -332,7 +332,8 @@ export class SelectScene extends Phaser.Scene {
     // than on the menu)
     const arrowW = (arrows[-1] ?? arrows[1])?.width ?? 0;
     const back = this.button(0, 0, `‹ ${t('menu')}`, () => this.scene.start('Menu'), 12);
-    const name = headerBand(this, 'puzzleCave', back, arrowX(-1, arrowW) - arrowW / 2);
+    // (a low screen: no name, the band holds Play and the others on its right instead)
+    const name = headerBand(this, side ? '' : 'puzzleCave', back, arrowX(-1, arrowW) - arrowW / 2);
     setDebug({ selectBack: this.box(back), selectGameName: this.box(name) });
     setDebug({
       selectTitle: this.box(title),
@@ -387,14 +388,13 @@ export class SelectScene extends Phaser.Scene {
     const icx = side ? this.gridAreaW() + infoW / 2 : cx;
     // (in the right column: from the chapter's name's row, nothing over it there)
     let y = side ? rowY : y0 + this.rows() * (cell + gap) + px(16);
-    // the buttons' row: the same for every level. A low screen where Play would go past the
-    // bottom: master mode's medals on one line in its box (compact); lower still, right under
-    // this level's own details (then it moves from one level to another)
-    const fits = (h: number) => y + h + px(TOUCH_TARGET) / 2 + px(8) <= this.scale.height;
-    const compact = side && !fits(this.detailsHeight(infoW));
-    let details = this.detailsHeight(infoW, compact);
-    if (compact && !fits(details)) details = this.detailsHeight(infoW, true, this.currentId());
-    const buttonsY = y + details;
+    // the buttons' row (under the grid): the same for every level. A low screen has them in the
+    // band at the top instead; where its details still go past the bottom, master mode's medals
+    // on one line in its box (compact). (The details' height ends a button's half and a gap
+    // under the last line.)
+    const fits = (h: number) => y + h - px(TOUCH_TARGET) / 2 <= this.scale.height;
+    const compact = side && !fits(this.detailsHeight(infoW, false, this.currentId()));
+    const buttonsY = y + this.detailsHeight(infoW, compact);
     setDebug({ selectCompact: compact });
     // the name alone: the author is not shown (all the levels are by the same one for now)
     const levelName = this.add.text(icx, y, levelTitle(level), textStyle(16)).setOrigin(0.5);
@@ -482,30 +482,50 @@ export class SelectScene extends Phaser.Scene {
     }
     setDebug({ masterLine: masterText, masterMedal: rec?.medals.master ?? null });
     y = buttonsY;
+    // a low screen: the buttons in the band at the top, from its right edge leftwards
+    const bandY = px(HEADER_BAND) / 2;
+    let bandLeft = this.scale.width - px(12);
+    const inBand = (b: Phaser.GameObjects.Text) => {
+      b.setOrigin(1, 0.5).setPosition(bandLeft, bandY).setScrollFactor(0).setDepth(12);
+      bandLeft -= b.width + px(8);
+      return b;
+    };
     let playButton: Phaser.GameObjects.Text | undefined;
     let camera: Phaser.GameObjects.Text | undefined;
     if (this.levelOpen(this.ci, this.li)) {
-      // Play · Master · camera on one row (no room for another line under the details): side by
-      // side, centred, as far apart as the column allows up to a point
-      const row = [this.button(0, y, t('play'), () => this.play('normal'), 16)];
-      if (master === 'open')
-        row.push(this.button(0, y, t('master'), () => this.play('master'), 14));
-      camera = this.cameraButton(y);
-      row.push(camera);
-      const widths = row.reduce((sum, b) => sum + b.width, 0);
-      const gap = Math.min(px(32), Math.max(px(6), (infoW - px(16) - widths) / (row.length - 1)));
-      let x = icx - (widths + gap * (row.length - 1)) / 2;
-      for (const b of row) {
-        b.setX(x + b.width / 2);
-        x += b.width + gap;
+      if (side) {
+        // a low screen: in the band, from its right edge: Master, Play, the camera
+        if (master === 'open')
+          inBand(this.button(0, 0, t('master'), () => this.play('master'), 14));
+        playButton = inBand(this.button(0, 0, t('play'), () => this.play('normal'), 16));
+        camera = inBand(this.cameraButton(0));
+      } else {
+        // Play · Master · camera on one row (no room for another line under the details): side
+        // by side, centred, as far apart as the column allows up to a point
+        const row = [this.button(0, y, t('play'), () => this.play('normal'), 16)];
+        if (master === 'open')
+          row.push(this.button(0, y, t('master'), () => this.play('master'), 14));
+        camera = this.cameraButton(y);
+        row.push(camera);
+        const widths = row.reduce((sum, b) => sum + b.width, 0);
+        const gap = Math.min(px(32), Math.max(px(6), (infoW - px(16) - widths) / (row.length - 1)));
+        let x = icx - (widths + gap * (row.length - 1)) / 2;
+        for (const b of row) {
+          b.setX(x + b.width / 2);
+          x += b.width + gap;
+        }
+        playButton = row[0];
       }
       camera.emit('placed');
-      playButton = row[0];
     }
     // for the e2e tests: the Play and camera buttons' centres, CSS px (none on a locked level)
-    setDebug({ playButton: playButton && [playButton.x / dpr(), playButton.y / dpr()] });
+    const centre = (b: Phaser.GameObjects.Text | undefined) => {
+      const r = b?.getBounds();
+      return r && [r.centerX / dpr(), r.centerY / dpr()];
+    };
+    setDebug({ playButton: centre(playButton) });
     setDebug({
-      cameraButton: camera ? [camera.x / dpr(), camera.y / dpr()] : null,
+      cameraButton: centre(camera) ?? null,
       cameraHasReplay: !!getReplay(level.id),
     });
     if (savedSolutionsAvailable()) {
@@ -515,6 +535,7 @@ export class SelectScene extends Phaser.Scene {
       void savedSolution(id).then((sol) => {
         if (!sol || !this.sys.isActive() || this.currentId() !== id) return;
         const b = this.button(icx, by, t('replaySaved'), () => this.replaySaved(), 12);
+        if (side) inBand(b);
         b.setName('replaySaved');
       });
     }
@@ -538,6 +559,8 @@ export class SelectScene extends Phaser.Scene {
       const r = b.getBounds();
       const gx = Math.round(r.x + (r.width - iconW) / 2);
       const gy = Math.round(r.y + (r.height - CAMERA.length * cell) / 2);
+      // over the button (in the band at the top on a low screen: over the band too)
+      g.setDepth(b.depth + 1).setScrollFactor(b.scrollFactorX, b.scrollFactorY);
       g.clear().fillStyle(hex(color), 1);
       CAMERA.forEach((line, row) => {
         for (let c = 0; c < line.length; c++)
