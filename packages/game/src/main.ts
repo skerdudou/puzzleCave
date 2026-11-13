@@ -21,7 +21,7 @@ import { redrawTextsOnRestore } from './render/restoreTexts';
 import { installTransitions } from './render/transitions';
 import { setMusicVolume } from './music';
 import { initSfx, setSfxVolume } from './sfx';
-import { COLORS } from './ui';
+import { COLORS, viewSize } from './ui';
 
 const ratio = () => window.devicePixelRatio || 1;
 // e2e only (playwright.config.ts sets it): the most frames per second the game steps and draws.
@@ -48,8 +48,9 @@ const game = new Phaser.Game({
   ...(e2eFps > 0 && { fps: { limit: e2eFps } }),
   scale: {
     mode: Phaser.Scale.NONE,
-    width: Math.round(window.innerWidth * ratio()),
-    height: Math.round(window.innerHeight * ratio()),
+    // the window less its safe area (a phone's notch): ui.ts viewSize
+    width: Math.round(viewSize().width * ratio()),
+    height: Math.round(viewSize().height * ratio()),
     zoom: 1 / ratio(),
   },
   scene: [
@@ -82,8 +83,8 @@ setSfxVolume(app.data.settings.sfxVolume);
 
 window.addEventListener('resize', () => {
   game.scale.resize(
-    Math.round(window.innerWidth * ratio()),
-    Math.round(window.innerHeight * ratio()),
+    Math.round(viewSize().width * ratio()),
+    Math.round(viewSize().height * ratio()),
   );
   game.scale.setZoom(1 / ratio());
 });

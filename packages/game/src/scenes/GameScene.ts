@@ -13,6 +13,7 @@ import {
 import { app } from '../app';
 import { setDebug } from '../debug';
 import { ellipsize, formatTime } from '../format';
+import { fullscreenEnv, isFullscreen, offersFullscreen, toggleFullscreen } from '../fullscreen';
 import { t } from '../i18n';
 import { InputController, repeatDelays, type Action } from '../input/InputController';
 import { PressRepeat } from '../input/pressRepeat';
@@ -530,6 +531,29 @@ export class GameScene extends Phaser.Scene {
       this.muteButton = b;
       return b;
     };
+    // full screen (a phone's browser tab only, as on the menu: fullscreen.ts), a pixel icon; the
+    // HUD is built again on the resize that follows, with the other icon
+    const fullAt = (mx: number, my: number, originX: number) => {
+      const b = makeButton(
+        this,
+        mx,
+        my,
+        ' ',
+        () => {
+          if (!this.dragMoved && !this.zonePress) toggleFullscreen();
+        },
+        16,
+      ).setOrigin(originX, 0.5);
+      const exit = isFullscreen();
+      const icon = this.iconOn(
+        b,
+        exit ? 'fullscreenExit' : 'fullscreen',
+        t(exit ? 'fullscreenExit' : 'fullscreen'),
+      );
+      hudButtons.fullscreen = [b.getBounds().centerX / dpr(), my / dpr()];
+      return [b, icon];
+    };
+    const fullscreen = touch && offersFullscreen(fullscreenEnv(true));
     const timeLabel = this.timeLimitMs === undefined ? t('time') : t('timeLeft');
     const counterTexts: [string, string][] = [
       [`${t('moves')} 999`, COLORS.text],
@@ -730,9 +754,20 @@ export class GameScene extends Phaser.Scene {
         this.hud.push(frame, arrow);
       }
       // the sound button: in the top right corner, above the d-pad's column and off its touch
-      // area (landscape), or at the left edge on the d-pad's bottom row (portrait)
-      if (side) this.hud.push(muteAt(w - px(12), px(30), 1));
-      else this.hud.push(muteAt(px(12), pad.down.y + pad.down.h / 2, 0));
+      // area (landscape), or at the left edge on the d-pad's bottom row (portrait). With full
+      // screen offered, its icon takes the top right corner in landscape (the sound button then
+      // goes to the bottom right corner, below the d-pad) and the right edge of that row in
+      // portrait
+      const row = pad.down.y + pad.down.h / 2;
+      if (side) {
+        if (fullscreen) {
+          this.hud.push(...fullAt(w - px(12), px(30), 1));
+          this.hud.push(muteAt(w - px(12), this.scale.height - px(30), 1));
+        } else this.hud.push(muteAt(w - px(12), px(30), 1));
+      } else {
+        this.hud.push(muteAt(px(12), row, 0));
+        if (fullscreen) this.hud.push(...fullAt(w - px(12), row, 1));
+      }
       // for the e2e tests: button centres in CSS pixels, once drawn (Phaser hit-tests a new
       // interactive object only from its next pre-update on)
       const dpad = Object.fromEntries(
@@ -891,7 +926,7 @@ export class GameScene extends Phaser.Scene {
    */
   private iconOn(
     b: Phaser.GameObjects.Text,
-    icon: 'undo' | 'restart',
+    icon: Parameters<typeof iconPixels>[0],
     word: string,
   ): Phaser.GameObjects.Graphics {
     const extra = Math.max(0, Math.ceil((b.height - b.width) / 2));

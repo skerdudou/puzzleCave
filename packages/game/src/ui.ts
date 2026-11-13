@@ -20,7 +20,26 @@ export function uiScaleFor(cssW: number, cssH: number): number {
   const s = Math.min(cssW / 1280, cssH / 720);
   return s > 1 ? s : 1;
 }
-export const uiScale = (): number => uiScaleFor(window.innerWidth, window.innerHeight);
+export const uiScale = (): number => {
+  const v = viewSize();
+  return uiScaleFor(v.width, v.height);
+};
+
+/**
+ * The game's area, CSS px: the window less its safe area (a phone's camera notch, rounded
+ * corners, gesture bar: index.html pads #app with `env(safe-area-inset-*)`), where the canvas
+ * goes. The whole window where there is no #app.
+ */
+export function viewSize(): { width: number; height: number } {
+  const el = typeof document === 'undefined' ? null : document.getElementById('app');
+  if (!el) return { width: window.innerWidth, height: window.innerHeight };
+  const s = getComputedStyle(el);
+  const pad = (side: string) => parseFloat(s.getPropertyValue(`padding-${side}`)) || 0;
+  return {
+    width: Math.max(1, el.clientWidth - pad('left') - pad('right')),
+    height: Math.max(1, el.clientHeight - pad('top') - pad('bottom')),
+  };
+}
 
 /** An interface size (text, padding, margin, HUD…), `n` base px, in device px. */
 export const px = (n: number): number => Math.round(n * dpr() * uiScale());
