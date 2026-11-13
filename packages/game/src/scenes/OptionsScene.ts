@@ -37,6 +37,7 @@ import {
   type Focusable,
 } from '../ui';
 import { isTouchDevice } from '../touch';
+import { TwoPress } from '../twoPress';
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
@@ -87,7 +88,8 @@ export class OptionsScene extends Phaser.Scene {
    * notches. A gauge's knob is focused like a button; ← and → move it a notch.
    */
   private gaugeShifts: Record<string, (by: number) => void> = {};
-  private armed: { id: string; button: Phaser.GameObjects.Text; label: string } | null = null;
+  /** Import and Erase ask first ("Sure?"), keeping their size */
+  private confirm = new TwoPress(COLORS.text);
 
   constructor() {
     super('Options');
@@ -132,7 +134,10 @@ export class OptionsScene extends Phaser.Scene {
     this.langMenu = [];
     this.langItems = [];
     this.focusables = [];
-    this.armed = null;
+    // (the buttons are new: none asks; the last screen's question stops, its expiry with it)
+    this.confirm.reset();
+    this.confirm = new TwoPress(COLORS.text);
+    setDebug({ armed: null });
     this.gaugeShifts = {};
     this.drag = null;
     this.dragged = false;
@@ -648,17 +653,9 @@ export class OptionsScene extends Phaser.Scene {
     setDebug({ exported: a.download });
   }
 
-  /**
-   * A button that destroys something asks first: a first press turns it to "Sure?" (and puts back
-   * another one that asked), a second one acts and puts it back. True on that second press.
-   */
+  /** Import, Erase: a first press asks ("Sure?", twoPress.ts), true on the second one. */
   private confirmed(id: string, button: Phaser.GameObjects.Text, label: string): boolean {
-    const prev = this.armed;
-    if (prev) prev.button.setText(prev.label).setColor(COLORS.text);
-    this.armed = prev?.id === id ? null : { id, button, label };
-    if (this.armed) button.setText(t('confirmReset')).setColor('#ff8080');
-    setDebug({ armed: this.armed?.id ?? null });
-    return !this.armed;
+    return this.confirm.arm(id, button, label);
   }
 
   /** Options › Import: a file from Export replaces the progress and the settings. */
