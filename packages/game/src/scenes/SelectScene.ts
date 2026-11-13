@@ -28,7 +28,7 @@ import {
   type MedalKind,
 } from '../medalInfo';
 import { syncMusic } from '../music';
-import { arrowTarget } from '../selectNav';
+import { arrowLevels, arrowTargetOpen } from '../selectNav';
 import {
   COLORS,
   HEADER_BAND,
@@ -89,11 +89,16 @@ export class SelectScene extends Phaser.Scene {
     if (pos) {
       this.ci = pos.chapterIndex;
       this.li = pos.levelIndex;
-      return;
+    } else {
+      const start = startLevel(chapters, app.data.levels);
+      this.ci = start.ci;
+      this.li = start.li;
     }
-    const start = startLevel(chapters, app.data.levels);
-    this.ci = start.ci;
-    this.li = start.li;
+    // never a locked level of an open chapter (an old save, a level inserted before): the open
+    // one before it. The arrows and taps skip them too, so the level shown in an open chapter
+    // is always one that can be played
+    if (this.chapterOpen(this.ci))
+      while (this.li > 0 && !this.levelOpen(this.ci, this.li)) this.li--;
   }
 
   create(): void {
@@ -152,13 +157,15 @@ export class SelectScene extends Phaser.Scene {
   }
 
   /**
-   * A chapter's items for the arrow keys: its levels, or one only when it is locked (its lock: an
-   * arrow goes on to the chapter beside, no level picked behind it). undefined: no such chapter.
+   * A chapter's items for the arrow keys: its levels up to the last open one (the locked ones
+   * after it are not picked: an arrow goes on to the chapter beside, as past the grid's end), or
+   * one only when the chapter is locked (its lock). undefined: no such chapter.
    */
   private keySize(ci: number): number | undefined {
     const ch = chapters[ci];
     if (!ch) return undefined;
-    return this.chapterOpen(ci) ? ch.levels.length : 1;
+    if (!this.chapterOpen(ci)) return 1;
+    return arrowLevels(ch.levels.map((_, li) => this.levelOpen(ci, li)));
   }
 
   private chapterOpen(ci: number): boolean {
@@ -442,7 +449,7 @@ export class SelectScene extends Phaser.Scene {
     const masterText = masterLineText(masterStatus(rec, master !== 'none'));
     const masterRow = rows.find((r) => r.kind === 'master');
     const top = y + px(17);
-    if (master === 'locked' && this.levelOpen(this.ci, this.li)) {
+    if (master === 'locked') {
       this.add
         .text(icx, top, `🔒 ${t('masterLocked')}`, {
           ...textStyle(11, COLORS.dim),
@@ -490,35 +497,33 @@ export class SelectScene extends Phaser.Scene {
       bandLeft -= b.width + px(8);
       return b;
     };
-    let playButton: Phaser.GameObjects.Text | undefined;
-    let camera: Phaser.GameObjects.Text | undefined;
-    if (this.levelOpen(this.ci, this.li)) {
-      if (side) {
-        // a low screen: in the band, from its right edge: Master, Play, the camera
-        if (master === 'open')
-          inBand(this.button(0, 0, t('master'), () => this.play('master'), 14));
-        playButton = inBand(this.button(0, 0, t('play'), () => this.play('normal'), 16));
-        camera = inBand(this.cameraButton(0));
-      } else {
-        // Play · Master · camera on one row (no room for another line under the details): side
-        // by side, centred, as far apart as the column allows up to a point
-        const row = [this.button(0, y, t('play'), () => this.play('normal'), 16)];
-        if (master === 'open')
-          row.push(this.button(0, y, t('master'), () => this.play('master'), 14));
-        camera = this.cameraButton(y);
-        row.push(camera);
-        const widths = row.reduce((sum, b) => sum + b.width, 0);
-        const gap = Math.min(px(32), Math.max(px(6), (infoW - px(16) - widths) / (row.length - 1)));
-        let x = icx - (widths + gap * (row.length - 1)) / 2;
-        for (const b of row) {
-          b.setX(x + b.width / 2);
-          x += b.width + gap;
-        }
-        playButton = row[0];
+    // (an open chapter: its level shown is always open, see init and the arrows)
+    let playButton: Phaser.GameObjects.Text;
+    let camera: Phaser.GameObjects.Text;
+    if (side) {
+      // a low screen: in the band, from its right edge: Master, Play, the camera
+      if (master === 'open') inBand(this.button(0, 0, t('master'), () => this.play('master'), 14));
+      playButton = inBand(this.button(0, 0, t('play'), () => this.play('normal'), 16));
+      camera = inBand(this.cameraButton(0));
+    } else {
+      // Play · Master · camera on one row (no room for another line under the details): side
+      // by side, centred, as far apart as the column allows up to a point
+      const row = [this.button(0, y, t('play'), () => this.play('normal'), 16)];
+      if (master === 'open')
+        row.push(this.button(0, y, t('master'), () => this.play('master'), 14));
+      camera = this.cameraButton(y);
+      row.push(camera);
+      const widths = row.reduce((sum, b) => sum + b.width, 0);
+      const gap = Math.min(px(32), Math.max(px(6), (infoW - px(16) - widths) / (row.length - 1)));
+      let x = icx - (widths + gap * (row.length - 1)) / 2;
+      for (const b of row) {
+        b.setX(x + b.width / 2);
+        x += b.width + gap;
       }
-      camera.emit('placed');
+      playButton = row[0]!;
     }
-    // for the e2e tests: the Play and camera buttons' centres, CSS px (none on a locked level)
+    camera.emit('placed');
+    // for the e2e tests: the Play and camera buttons' centres, CSS px
     const centre = (b: Phaser.GameObjects.Text | undefined) => {
       const r = b?.getBounds();
       return r && [r.centerX / dpr(), r.centerY / dpr()];
@@ -555,9 +560,14 @@ export class SelectScene extends Phaser.Scene {
     const p = b.padding;
     b.setPadding(p.left! + extra, p.top!, p.right! + extra, p.bottom!);
     const g = this.add.graphics();
+    // the camera centred, with a saved replay or not; the "+" (no replay) beside it on the right,
+    // in the room the button keeps for it (its width is the whole grid's)
+    const cols = CAMERA.flatMap((line) => [...line].flatMap((ch, c) => (ch === '#' ? [c] : [])));
+    const first = Math.min(...cols);
+    const drawnW = (Math.max(...cols) - first + 1) * cell;
     const paint = (color: string) => {
       const r = b.getBounds();
-      const gx = Math.round(r.x + (r.width - iconW) / 2);
+      const gx = Math.round(r.x + (r.width - drawnW) / 2) - first * cell;
       const gy = Math.round(r.y + (r.height - CAMERA.length * cell) / 2);
       // over the button (in the band at the top on a low screen: over the band too)
       g.setDepth(b.depth + 1).setScrollFactor(b.scrollFactorX, b.scrollFactorY);
@@ -879,13 +889,16 @@ export class SelectScene extends Phaser.Scene {
     if (e.key.startsWith('Arrow')) {
       // a chapter sliding in: it is there at once, the arrow moves in it
       if (this.sliding) this.settle?.complete();
-      const to = arrowTarget(
+      // a locked level among open ones (one inserted before a level already finished) is
+      // skipped; a locked chapter is one item, its lock
+      const to = arrowTargetOpen(
         e.key,
         this.li,
         this.keySize(this.ci)!,
         this.cols(),
         this.keySize(this.ci - 1),
         this.keySize(this.ci + 1),
+        (step, li) => !this.chapterOpen(this.ci + step) || this.levelOpen(this.ci + step, li),
       );
       if (!to) return;
       if (to.chapter !== 0) return this.slide(to.chapter, to.li);

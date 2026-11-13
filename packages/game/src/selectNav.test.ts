@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { arrowTarget } from './selectNav';
+import { arrowLevels, arrowTarget, arrowTargetOpen } from './selectNav';
 
 // 13 levels in rows of 6: 0-5, 6-11, 12
 const at = (key: string, li: number, prevN?: number, nextN?: number) =>
@@ -47,4 +47,43 @@ test('↑ over the first row: the previous chapter, the last level in that colum
 
 test('other keys: nothing', () => {
   expect(at('Enter', 3, 11, 12)).toBeNull();
+});
+
+test('the arrows stop at the last open level: the locked ones after it are skipped', () => {
+  const open = (n: number, total = 13) => Array.from({ length: total }, (_, i) => i < n);
+  expect(arrowLevels(open(2))).toBe(2);
+  expect(arrowLevels(open(13))).toBe(13);
+  // a level already finished after a locked one stays open: up to it
+  expect(arrowLevels([true, true, false, true, false])).toBe(4);
+  // at least one (a chapter's lock, or nothing open)
+  expect(arrowLevels([false, false])).toBe(1);
+  // → on the last open level goes on to the next chapter, ↓ under it too
+  const n = arrowLevels(open(8));
+  expect(arrowTarget('ArrowRight', 7, n, 6, undefined, 5)).toEqual({ chapter: 1, li: 0 });
+  expect(arrowTarget('ArrowDown', 1, n, 6, undefined, 5)).toEqual({ chapter: 0, li: 7 });
+  expect(arrowTarget('ArrowDown', 7, n, 6, undefined, 5)).toEqual({ chapter: 1, li: 1 });
+  // ← from the next chapter: the last open level of this one
+  expect(arrowTarget('ArrowLeft', 0, 5, 6, n, undefined)).toEqual({ chapter: -1, li: 7 });
+});
+
+test('locked levels among open ones are skipped, the arrow going on the same way', () => {
+  // this chapter: rows of 6, levels 2 and 3 locked (0-based), the others up to 10 open (10 the
+  // last open one: the arrows go through 11 levels); the chapters beside: 13 levels, all open
+  const here = (li: number) => li <= 10 && li !== 2 && li !== 3;
+  const open = (chapter: -1 | 0 | 1, li: number) => (chapter === 0 ? here(li) : true);
+  const go = (key: string, li: number, isOpen = open) =>
+    arrowTargetOpen(key, li, 11, 6, 13, 13, isOpen);
+  // → from 1: past 2 and 3, to 4; ← from 4: back to 1
+  expect(go('ArrowRight', 1)).toEqual({ chapter: 0, li: 4 });
+  expect(go('ArrowLeft', 4)).toEqual({ chapter: 0, li: 1 });
+  // ↑ from 8 (column 2): 2 is locked, on to the chapter before, its last row in that column
+  expect(go('ArrowUp', 8)).toEqual({ chapter: -1, li: 8 });
+  // ↓ from 9 (column 3): no level under it (10 is the last), the next chapter's column 3
+  expect(go('ArrowDown', 9)).toEqual({ chapter: 1, li: 3 });
+  // open levels: as arrowTarget
+  expect(go('ArrowRight', 4)).toEqual({ chapter: 0, li: 5 });
+  // the chapter beside locked where the arrow lands: the nearest open level before it
+  const nextLocked = (chapter: -1 | 0 | 1, li: number) =>
+    chapter === 1 ? li < 2 : open(chapter, li);
+  expect(go('ArrowDown', 9, nextLocked)).toEqual({ chapter: 1, li: 1 });
 });
