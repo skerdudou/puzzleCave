@@ -27,6 +27,7 @@ import { planReveal, prefersReducedMotion, type RevealSlot } from '../medalRevea
 import { MedalReveal, type MedalSpot } from '../render/MedalReveal';
 import {
   COLORS,
+  copyToClipboard,
   drawMedal,
   MASTER_BOX,
   drawThresholdLine,
@@ -253,8 +254,18 @@ export class ResultScene extends Phaser.Scene {
     const masterBtn =
       mode !== 'master' && masterState(levelId, app.data.levels[levelId]) === 'open';
     const playMaster = () => this.scene.start('Game', { levelId, mode: 'master' });
+    // the run just played, in the replay player (with Save and Export); Escape comes back here
+    const watch = () =>
+      this.scene.start('Replay', {
+        levelId,
+        moves: moveLog,
+        mode,
+        label: t('labelMine'),
+        saving: 'unsaved',
+        back: { scene: 'Result', data: { ...this.info, instant: true } },
+      });
     setDebug({ resultMasterButton: masterBtn });
-    // the buttons in reading order: Replay, Master (when open), then Menu, Next (when there is
+    // the buttons in reading order: Replay, Master (when open), Watch, then Menu, Next (when there is
     // one); all of one size and one width. The keyboard goes from one to the next (arrows, Tab)
     // and presses the focused one (Enter, Space); unfocused, the keys of the help line act.
     type Item = { id: string; label: string; press: () => void; key: MessageKey };
@@ -265,6 +276,7 @@ export class ResultScene extends Phaser.Scene {
       first.push({ id: 'master', label: t('master'), press: playMaster, key: 'resultKeyMaster' });
     const second: Item[] = [{ id: 'menu', label: t('menu'), press: menu, key: 'resultKeyMenu' }];
     if (next) second.push({ id: 'next', label: t('next'), press: goNext, key: 'resultKeyNext' });
+    first.push({ id: 'watch', label: t('watchReplay'), press: watch, key: 'resultKeyWatch' });
     const items = [...first, ...second];
     const made = new Map<string, Phaser.GameObjects.Text>();
     const make = (item: Item, x: number, by: number) =>
@@ -280,17 +292,26 @@ export class ResultScene extends Phaser.Scene {
       }
       y = Math.max(y, by - gap);
     } else {
-      // two rows of one or two buttons, centred
+      // two rows of buttons, centred: two side by side at +-80 as before, three when the screen
+      // is wide enough; a row that does not fit wraps (a phone in portrait: Watch on its own row)
+      for (const item of items) make(item, cx, y);
+      sameWidth([...made.values()]);
+      const buttonW = made.get('replay')!.width;
+      const step = Math.max(px(160), buttonW + px(8));
+      const perRow = Math.max(1, Math.floor((this.scale.width - px(16) - buttonW) / step) + 1);
       y += px(16);
       for (const rowItems of [first, second]) {
-        rowItems.forEach((item, i) =>
-          make(item, rowItems.length === 1 ? cx : cx + (i === 0 ? -px(80) : px(80)), y),
-        );
-        y += px(52);
+        for (let from = 0; from < rowItems.length; from += perRow) {
+          const row = rowItems.slice(from, from + perRow);
+          row.forEach((item, i) =>
+            made.get(item.id)!.setPosition(cx + (i - (row.length - 1) / 2) * step, y),
+          );
+          y += px(52);
+        }
       }
       y -= px(52);
     }
-    sameWidth([...made.values()]);
+    if (low) sameWidth([...made.values()]);
     const focus = new KeyFocus(
       items.map((item) => ({ id: item.id, button: made.get(item.id)!, press: item.press })),
     );
@@ -307,21 +328,35 @@ export class ResultScene extends Phaser.Scene {
     if (app.author) {
       y += px(56);
       const props = `goldMoves = ${result.moves}\ngoldTime = ${(result.timeMs / 1000).toFixed(2)}`;
-      const tiled = makeButton(this, cx, y, t('copyTiled'), () => void copy(props, tiled), 12);
+      const tiled = makeButton(
+        this,
+        cx,
+        y,
+        t('copyTiled'),
+        () => void copyToClipboard(props, tiled),
+        12,
+      );
       y += px(48);
       const sol = makeButton(
         this,
         cx,
         y,
         t('copySolution'),
-        () => void copy(formatMoves(moveLog), sol),
+        () => void copyToClipboard(formatMoves(moveLog), sol),
         12,
       );
       if (!authorServerAvailable()) {
         // no development server (the preview of main): no saving, the run replays at once (on
         // `vite dev` it is offered after saving)
         y += px(48);
-        makeButton(this, cx, y, t('replayMine'), () => this.replay(moveLog, t('labelMine')), 12);
+        makeButton(
+          this,
+          cx,
+          y,
+          t('replayMine'),
+          () => this.replay(moveLog, t('labelMine'), this.info.mode),
+          12,
+        );
       } else {
         y += px(48);
         const save = makeButton(
@@ -369,6 +404,7 @@ export class ResultScene extends Phaser.Scene {
       if (e.key === 'Enter' && next) this.scene.start('Game', { levelId: next, mode: 'normal' });
       else if (e.key.toLowerCase() === 'r') this.scene.start('Game', { levelId, mode });
       else if (e.key.toLowerCase() === 'p' && masterBtn) playMaster();
+      else if (e.key.toLowerCase() === 'v') watch();
       else if (e.key === 'Escape') this.scene.start('Select', { levelId });
     });
     // the layout (and the interface's size) follows the screen
@@ -403,11 +439,13 @@ export class ResultScene extends Phaser.Scene {
     }
   }
 
-  private replay(moves: Dir[], label: string): void {
+  /** `mode`: the rules the moves were played under (the author's solutions are normal mode). */
+  private replay(moves: Dir[], label: string, mode?: Mode): void {
     this.scene.start('Replay', {
       levelId: this.info.levelId,
       moves,
       label,
+      mode,
       back: { scene: 'Result', data: this.info },
     });
   }
@@ -428,7 +466,7 @@ export class ResultScene extends Phaser.Scene {
     const { moveLog } = this.info;
     const mine: [string, () => void] = [
       t('replayMine'),
-      () => this.replay(moveLog, t('labelMine')),
+      () => this.replay(moveLog, t('labelMine'), this.info.mode),
     ];
     switch (o.kind) {
       case 'saved':
@@ -507,7 +545,7 @@ ${d.headline}`,
     );
     const { moveLog } = this.info;
     const buttons: [string, () => void][] = [
-      [t('replayMine'), () => this.replay(moveLog, t('labelMine'))],
+      [t('replayMine'), () => this.replay(moveLog, t('labelMine'), this.info.mode)],
     ];
     if (d.improved) {
       const sol = await fetchSolution(this.info.levelId);
@@ -530,16 +568,5 @@ ${d.headline}`,
       return chapters[nextCi]!.levels[0];
     }
     return undefined;
-  }
-}
-
-async function copy(text: string, button: Phaser.GameObjects.Text): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(text);
-    button.setText(t('copied'));
-  } catch {
-    // clipboard refused (no focus, permission): said on the button, the text left in the console
-    button.setText(t('copyFailed'));
-    console.log(text);
   }
 }

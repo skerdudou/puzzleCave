@@ -5,6 +5,7 @@ import {
   type LevelRecord,
   type MasterMedal,
   type Medal,
+  type Mode,
   type Thresholds,
   type Tier,
 } from '@puzzlecave/core';
@@ -51,12 +52,19 @@ export interface Settings {
   /** the board's art smoothed (xBR), or drawn as it is */
   smoothing: boolean;
 }
+/** A level's saved replay: the moves as letters (UDLR, no newline) and the mode they were played in. */
+export interface SavedReplay {
+  mode: Mode;
+  moves: string;
+}
 export interface SaveData {
   version: 2;
   settings: Settings;
   levels: Record<string, LevelRecord>;
   /** the achievements earned: id → when (ms since 1970) */
   achievements: Record<string, number>;
+  /** the replays kept: level id → replay (one per level) */
+  replays: Record<string, SavedReplay>;
 }
 export interface KV {
   getItem(k: string): string | null;
@@ -191,6 +199,7 @@ export function parseSave(raw: string, ctx: SaveContext = NO_LEVELS): SaveData {
     settings: sanitiseSettings(obj.settings),
     levels: refreshTimeMedals(sanitiseLevels(obj.levels), ctx),
     achievements: sanitiseAchievements(obj.achievements),
+    replays: sanitiseReplays(obj.replays),
   };
 }
 
@@ -280,6 +289,7 @@ export function defaultSave(): SaveData {
     },
     levels: {},
     achievements: {},
+    replays: {},
   };
 }
 
@@ -375,6 +385,23 @@ function sanitiseAchievements(raw: unknown): Record<string, number> {
   const out: Record<string, number> = {};
   if (!isRecord(raw)) return out;
   for (const [id, when] of Object.entries(raw)) if (isCount(when)) out[id] = when;
+  return out;
+}
+
+/** The replays kept (saves from before them: none); an entry that is not readable is dropped. */
+function sanitiseReplays(raw: unknown): Record<string, SavedReplay> {
+  const out: Record<string, SavedReplay> = {};
+  if (!isRecord(raw)) return out;
+  for (const [id, r] of Object.entries(raw)) {
+    if (!isRecord(r)) continue;
+    const { mode, moves } = r;
+    if (
+      (mode === 'normal' || mode === 'master') &&
+      typeof moves === 'string' &&
+      /^[UDLR]+$/.test(moves)
+    )
+      out[id] = { mode, moves };
+  }
   return out;
 }
 

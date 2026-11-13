@@ -707,6 +707,7 @@ export class OptionsScene extends Phaser.Scene {
   private eraseProgress(): void {
     app.data.levels = {};
     app.data.achievements = {};
+    app.data.replays = {};
     app.persist();
     showNotice(t('progressReset'));
     this.rebuild();

@@ -15,6 +15,8 @@ import { konamiEntered } from '../konami';
 import { keysLine } from '../levelIntro';
 import { formatTime } from '../format';
 import { getLang, t } from '../i18n';
+import { getReplay, movesOf } from '../replays';
+import type { ReplaySceneData } from './ReplayScene';
 import { onSceneKeyDown } from '../input/sceneKeys';
 import { chapters, hasMaster, levelById, levelTitle, locate, masterState } from '../levels';
 import {
@@ -35,6 +37,7 @@ import {
   MASTER_BOX,
   MASTER_BOX_NAME,
   drawThresholdLine,
+  hex,
   masterBoxTitle,
   strokeMasterBox,
   headerBand,
@@ -59,6 +62,17 @@ const TICK: readonly [number, number][] = [
   [0, 2],
   [2, 2],
   [1, 3],
+];
+/** The camera's pixels ('#'), then the "+" beside it on a level without a saved replay. */
+const CAMERA = [
+  '..###..........',
+  '###########.+..',
+  '####...####+++.',
+  '###.....###.+..',
+  '###..#..###....',
+  '###.....###....',
+  '####...####....',
+  '###########....',
 ];
 
 export class SelectScene extends Phaser.Scene {
@@ -469,16 +483,31 @@ export class SelectScene extends Phaser.Scene {
     setDebug({ masterLine: masterText, masterMedal: rec?.medals.master ?? null });
     y = buttonsY;
     let playButton: Phaser.GameObjects.Text | undefined;
+    let camera: Phaser.GameObjects.Text | undefined;
     if (this.levelOpen(this.ci, this.li)) {
-      const open = master === 'open';
-      const row = [
-        this.button(open ? icx - px(80) : icx, y, t('play'), () => this.play('normal'), 16),
-      ];
-      if (open) row.push(this.button(icx + px(80), y, t('master'), () => this.play('master'), 14));
+      // Play · Master · camera on one row (no room for another line under the details): side by
+      // side, centred, as far apart as the column allows up to a point
+      const row = [this.button(0, y, t('play'), () => this.play('normal'), 16)];
+      if (master === 'open')
+        row.push(this.button(0, y, t('master'), () => this.play('master'), 14));
+      camera = this.cameraButton(y);
+      row.push(camera);
+      const widths = row.reduce((sum, b) => sum + b.width, 0);
+      const gap = Math.min(px(32), Math.max(px(6), (infoW - px(16) - widths) / (row.length - 1)));
+      let x = icx - (widths + gap * (row.length - 1)) / 2;
+      for (const b of row) {
+        b.setX(x + b.width / 2);
+        x += b.width + gap;
+      }
+      camera.emit('placed');
       playButton = row[0];
     }
-    // for the e2e tests: the Play button's centre, CSS px (none on a locked level)
+    // for the e2e tests: the Play and camera buttons' centres, CSS px (none on a locked level)
     setDebug({ playButton: playButton && [playButton.x / dpr(), playButton.y / dpr()] });
+    setDebug({
+      cameraButton: camera ? [camera.x / dpr(), camera.y / dpr()] : null,
+      cameraHasReplay: !!getReplay(level.id),
+    });
     if (savedSolutionsAvailable()) {
       // the button only appears if a solution is saved (asynchronous read)
       const id = level.id;
@@ -489,6 +518,61 @@ export class SelectScene extends Phaser.Scene {
         b.setName('replaySaved');
       });
     }
+  }
+
+  /**
+   * The saved replay's button: a pixel camera, coloured when the level has a replay saved (it
+   * opens the player), grey with a "+" when not (it opens the import screen). One width either
+   * way; its row places it, then emits 'placed' for the icon to follow.
+   */
+  private cameraButton(y: number): Phaser.GameObjects.Text {
+    const saved = !!getReplay(this.currentId());
+    const b = this.button(0, y, ' ', () => this.openSavedReplay(), 16).setName('camera');
+    const cell = Math.max(1, Math.round(px(2)));
+    const iconW = CAMERA[0]!.length * cell;
+    const extra = Math.max(0, Math.ceil((iconW + px(16) - b.width) / 2));
+    const p = b.padding;
+    b.setPadding(p.left! + extra, p.top!, p.right! + extra, p.bottom!);
+    const g = this.add.graphics();
+    const paint = (color: string) => {
+      const r = b.getBounds();
+      const gx = Math.round(r.x + (r.width - iconW) / 2);
+      const gy = Math.round(r.y + (r.height - CAMERA.length * cell) / 2);
+      g.clear().fillStyle(hex(color), 1);
+      CAMERA.forEach((line, row) => {
+        for (let c = 0; c < line.length; c++)
+          if (line[c] === '#' || (!saved && line[c] === '+'))
+            g.fillRect(gx + c * cell, gy + row * cell, cell, cell);
+      });
+    };
+    const color = saved ? COLORS.accent : COLORS.dim;
+    // lit under the pointer as a word is (the coloured one already is)
+    b.on('pointerover', () => paint(saved ? COLORS.accent : COLORS.text));
+    b.on('pointerout', () => paint(color));
+    b.on('placed', () => paint(color));
+    b.once(Phaser.GameObjects.Events.DESTROY, () => g.destroy());
+    return b;
+  }
+
+  /** The level's saved replay in the player, or, none saved, the screen to import one. */
+  private openSavedReplay(): void {
+    if (!this.levelOpen(this.ci, this.li)) return;
+    const levelId = this.currentId();
+    const back = { scene: 'Select', data: { levelId } };
+    const r = getReplay(levelId);
+    if (!r) {
+      this.scene.start('ImportReplay', { levelId, back });
+      return;
+    }
+    const data: ReplaySceneData = {
+      levelId,
+      moves: movesOf(r),
+      mode: r.mode,
+      label: t('labelSavedReplay'),
+      saving: 'saved',
+      back,
+    };
+    this.scene.start('Replay', data);
   }
 
   /**
@@ -798,6 +882,7 @@ export class SelectScene extends Phaser.Scene {
         return;
       default:
         if (e.key.toLowerCase() === 'p') this.play('master');
+        else if (e.key.toLowerCase() === 'v') this.openSavedReplay();
         else if (e.key.toLowerCase() === 's') void this.replaySaved();
     }
   }

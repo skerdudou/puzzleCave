@@ -3,6 +3,7 @@ import type { MedalKind } from './medalInfo';
 import { FocusList, focusKey } from './input/focusList';
 import { isTouchDevice } from './touch';
 import { steppedFrame } from './render/frame';
+import { t } from './i18n';
 
 /** The pixel font (bundled, see main.ts); monospace while it loads or if it is missing. */
 export const FONT = 'Silkscreen, monospace';
@@ -543,4 +544,19 @@ export function headerBand(
     .setDepth(12);
   name.setX(Math.max(cx, back.getBounds().right + px(12) + name.width / 2));
   return name;
+}
+
+/** Copies `text`, and says on `button` whether it worked. */
+export async function copyToClipboard(
+  text: string,
+  button: Phaser.GameObjects.Text,
+): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text);
+    button.setText(t('copied'));
+  } catch {
+    // clipboard refused (no focus, permission): said on the button, the text left in the console
+    button.setText(t('copyFailed'));
+    console.log(text);
+  }
 }

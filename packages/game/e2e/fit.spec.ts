@@ -211,6 +211,21 @@ for (const { width, height, touch, langs } of VIEWS) {
         expect(await field(page, 'resultMasterButton')).toBe(true);
         await check('result pc-40 master button');
 
+        // its replay: with the run's actions to save it, then saved (export, import, delete)
+        await page.keyboard.press('KeyV');
+        await sceneIs(page, 'Replay');
+        await expect.poll(() => field(page, 'replayActions')).toEqual(['save', 'export']);
+        await check('replay unsaved');
+        const actions = (await field(page, 'replayActionButtons')) as Record<
+          string,
+          [number, number]
+        >;
+        await page.mouse.click(...actions.save!);
+        await expect
+          .poll(() => field(page, 'replayActions'))
+          .toEqual(['export', 'import', 'delete']);
+        await check('replay saved');
+
         expect(failures).toEqual([]);
       });
     }

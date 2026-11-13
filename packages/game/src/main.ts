@@ -10,6 +10,7 @@ import { ResultScene } from './scenes/ResultScene';
 import { ReplayScene } from './scenes/ReplayScene';
 import { JournalScene } from './scenes/JournalScene';
 import { CreditsScene } from './scenes/CreditsScene';
+import { ImportReplayScene } from './scenes/ImportReplayScene';
 import { app } from './app';
 import { t } from './i18n';
 import { showNotice } from './notice';
@@ -62,6 +63,7 @@ const game = new Phaser.Game({
     ReplayScene,
     JournalScene,
     CreditsScene,
+    ImportReplayScene,
   ],
 });
 // fades between the screens, once the scenes exist

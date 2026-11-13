@@ -1,10 +1,13 @@
 import Phaser from 'phaser';
-import { Session, type Dir, type LevelData } from '@puzzlecave/core';
+import { Session, type Dir, type LevelData, type Mode } from '@puzzlecave/core';
 import { app } from '../app';
 import { setDebug } from '../debug';
 import { ellipsize } from '../format';
-import { t } from '../i18n';
+import { t, type MessageKey } from '../i18n';
 import { levelById, levelTitle } from '../levels';
+import { showNotice } from '../notice';
+import { deleteReplay, getReplay, replayText, setReplay, toSaved } from '../replays';
+import { TwoPress } from '../twoPress';
 import { Playback } from '../author/playback';
 import { HoldRepeat } from '../input/holdRepeat';
 import { onSceneKeyDown } from '../input/sceneKeys';
@@ -13,7 +16,17 @@ import { AmbienceView, HUD_DEPTH } from '../render/AmbienceView';
 import { BoardView } from '../render/BoardView';
 import { boardLayout, fractionalZoom } from '../render/layout';
 import { isTouchDevice } from '../touch';
-import { COLORS, dpr, hex, makeButton, placeIconBefore, px, textIcon, textStyle } from '../ui';
+import {
+  COLORS,
+  copyToClipboard,
+  dpr,
+  hex,
+  makeButton,
+  placeIconBefore,
+  px,
+  textIcon,
+  textStyle,
+} from '../ui';
 import { keepAwake } from '../wakeLock';
 
 export interface ReplaySceneData {
@@ -26,10 +39,32 @@ export interface ReplaySceneData {
   /** resume after a resize */
   startIndex?: number;
   paused?: boolean;
+  /** the rules the moves were played under (master mode lets water through) */
+  mode?: Mode;
+  /**
+   * the player's own run, with a row to keep it: not kept yet, or the level's saved replay.
+   * Absent (the author's solutions): no such row.
+   */
+  saving?: 'unsaved' | 'saved';
 }
 
 /** The progress bar's height and the room it takes above the buttons, base px. */
 const BAR_ROOM = 36;
+
+/** A row of buttons, base px from one to the next. */
+const ROW = 48;
+
+/** The shortest the bar gets with the run's actions beside it, base px. */
+const MIN_BAR = 200;
+
+type ReplayAction = 'save' | 'export' | 'import' | 'delete';
+
+const ACTION_LABELS: Record<ReplayAction, MessageKey> = {
+  save: 'replaySave',
+  export: 'replayExport',
+  import: 'replayImport',
+  delete: 'replayDelete',
+};
 
 /** Solution replay: all rules come from Session, display from BoardView. */
 export class ReplayScene extends Phaser.Scene {
@@ -61,6 +96,8 @@ export class ReplayScene extends Phaser.Scene {
    * times between two), in update()
    */
   private seekPending = false;
+  /** Save over a saved replay and Delete ask first */
+  private confirm!: TwoPress;
 
   constructor() {
     super('Replay');
@@ -75,10 +112,17 @@ export class ReplayScene extends Phaser.Scene {
     this.seeking = null;
     this.awake = null;
     this.seekPending = false;
+    this.confirm = new TwoPress(COLORS.text);
+    // a button left asking before a restart (a resize) is drawn again at rest
+    setDebug({ armed: null });
+  }
+
+  private get mode(): Mode {
+    return this.info.mode ?? 'normal';
   }
 
   create(): void {
-    this.session = new Session(this.level);
+    this.session = new Session(this.level, this.mode);
     this.hold = new HoldRepeat(
       (d) => this.stepBy(d === 'right' ? 1 : -1),
       () => app.data.settings.repeatRate,
@@ -190,15 +234,40 @@ export class ReplayScene extends Phaser.Scene {
     return this.scale.width < px(560);
   }
 
+  /**
+   * The controls, the bar and the run's actions under the board. Narrow: two rows of controls,
+   * the actions on a row of their own above them, then the bar. Wide (a phone in landscape, short
+   * of height): one row of controls, the actions on the bar's line at its right, in a row as tall
+   * as a button in place of the bar's room.
+   */
   private bottomReserve(): number {
-    return px((this.narrow() ? 124 : 72) + BAR_ROOM);
+    const actions = this.actions().length > 0;
+    if (this.narrow()) return px(124 + BAR_ROOM + (actions ? ROW : 0));
+    return px(72 + (actions ? ROW : BAR_ROOM));
+  }
+
+  /** The actions beside the bar rather than on a row of their own (see bottomReserve). */
+  private actionsBesideBar(): boolean {
+    return this.actions().length > 0 && !this.narrow();
+  }
+
+  /** The buttons above the controls: what the player can do with this run. */
+  private actions(): ReplayAction[] {
+    switch (this.info.saving) {
+      case 'unsaved':
+        return ['save', 'export'];
+      case 'saved':
+        return ['export', 'import', 'delete'];
+      default:
+        return [];
+    }
   }
 
   /** Brings the board to the playback index (forward: moves replayed; backward: rebuilt). */
   private sync(animMs: number): void {
     const target = this.playback.index;
     if (this.shown > target) {
-      this.session = new Session(this.level);
+      this.session = new Session(this.level, this.mode);
       this.shown = 0;
       for (; this.shown < target; this.shown++) this.session.move(this.info.moves[this.shown]!);
       this.board.rebuild(this.session.state);
@@ -264,8 +333,11 @@ export class ReplayScene extends Phaser.Scene {
     }
     const playIndex = 2; // 3rd button of the full row: Start, ◀, Pause/Play…
     let flat = 0;
-    let y = h - help.height - px(26) - (rows.length - 1) * px(48);
-    const buttonsTop = y - px(22);
+    let y = h - help.height - px(26) - (rows.length - 1) * px(ROW);
+    // the run's actions a row above the controls: on a row of their own, or on the bar's line
+    const actionsY = y - px(ROW);
+    const besideBar = this.actionsBesideBar();
+    const actionsLeft = this.buildActions(actionsY, besideBar);
     const stepButtons: Record<string, [number, number]> = {};
     for (const row of rows) {
       const buttons = row.map(([label, fn]) => makeButton(this, 0, y, label, fn, 13));
@@ -287,12 +359,96 @@ export class ReplayScene extends Phaser.Scene {
         }
       }
       flat += row.length;
-      y += px(48);
+      y += px(ROW);
     }
-    this.buildBar(buttonsTop - px(BAR_ROOM / 2));
+    if (besideBar) this.buildBar(actionsY, actionsLeft - px(16));
+    else {
+      const buttonsTop = (this.actions().length ? actionsY : y) - px(22);
+      this.buildBar(buttonsTop - px(BAR_ROOM / 2), w - px(20));
+    }
     // above the cave's darkness, vignette and HUD band (a button's frame follows it, 1 below)
     for (const o of this.hud) (o as Phaser.GameObjects.Text).setDepth(HUD_DEPTH);
     setDebug({ replayStepButtons: stepButtons });
+  }
+
+  /**
+   * The run's actions (none for the author's solutions) on `y`: centred, or at the screen's
+   * right beside the bar. Returns their left edge (device px).
+   */
+  private buildActions(y: number, besideBar: boolean): number {
+    const ids = this.actions();
+    const centres: Record<string, [number, number]> = {};
+    const buttons = ids.map((id) => {
+      const label = t(ACTION_LABELS[id]);
+      const b: Phaser.GameObjects.Text = makeButton(
+        this,
+        0,
+        y,
+        label,
+        () => this.act(id, b, label),
+        12,
+      );
+      return b;
+    });
+    const w = this.scale.width;
+    const gap = px(8);
+    const width = () => buttons.reduce((s, b) => s + b.width, 0) + gap * (buttons.length - 1);
+    // long words (German) on a phone: smaller letters rather than past the room they have
+    const room = besideBar ? w - px(20 + MIN_BAR + 16 + 12) : w - px(16);
+    let size = 12;
+    while (width() > room && size > 9) {
+      size--;
+      for (const b of buttons) b.setFontSize(`${px(size)}px`);
+    }
+    const left = besideBar ? w - px(12) - width() : (w - width()) / 2;
+    let x = left;
+    for (const [i, b] of buttons.entries()) {
+      b.setOrigin(0, 0.5).setX(x);
+      x += b.width + gap;
+      this.hud.push(b);
+      centres[ids[i]!] = [b.getBounds().centerX / dpr(), y / dpr()];
+    }
+    setDebug({ replayActions: ids, replayActionButtons: centres });
+    return left;
+  }
+
+  private act(id: ReplayAction, button: Phaser.GameObjects.Text, label: string): void {
+    const levelId = this.level.id;
+    const saved = () => toSaved(this.info.moves, this.mode);
+    // another button pressed: the one asking is put back
+    if (id === 'export' || id === 'import') this.confirm.reset();
+    switch (id) {
+      case 'save':
+        // over the level's saved replay: asked first
+        if (getReplay(levelId) && !this.confirm.arm('save', button, label)) return;
+        if (!setReplay(levelId, saved())) {
+          showNotice(t('saveFailed'), '#ff8080');
+          return;
+        }
+        showNotice(t('replaySavedNotice'));
+        this.scene.restart({
+          ...this.info,
+          saving: 'saved',
+          startIndex: this.playback.index,
+          paused: !this.playback.playing,
+        });
+        return;
+      case 'export':
+        void copyToClipboard(replayText(saved()), button);
+        return;
+      case 'import':
+        this.scene.start('ImportReplay', {
+          levelId,
+          back: { scene: 'Replay', data: { ...this.info, startIndex: 0, paused: false } },
+        });
+        return;
+      case 'delete':
+        if (!this.confirm.arm('delete', button, label)) return;
+        deleteReplay(levelId);
+        showNotice(t('replayDeletedNotice'));
+        this.scene.start('Select', { levelId });
+        return;
+    }
   }
 
   /** ◀ or ▶ held down: a move at once, then more after a delay until released or slid off. */
@@ -304,10 +460,10 @@ export class ReplayScene extends Phaser.Scene {
     b.on('pointerout', (p: Phaser.Input.Pointer) => this.hold.release(p.id));
   }
 
-  /** The progress bar across the screen at `y` (device px), with a zone a finger can drag. */
-  private buildBar(y: number): void {
+  /** The progress bar at `y`, from the screen's left to `right` (device px), with a zone a finger can drag. */
+  private buildBar(y: number, right: number): void {
     const x = px(20);
-    const w = this.scale.width - 2 * x;
+    const w = right - x;
     const g = this.add.graphics();
     this.bar = { x, y, w, g };
     const zone = this.add
@@ -379,6 +535,7 @@ export class ReplayScene extends Phaser.Scene {
       replaySpeed: p.speed,
       replayPlaying: p.playing,
       replayKeys: keys,
+      replayStatus: this.session.state.status,
     });
   }
 

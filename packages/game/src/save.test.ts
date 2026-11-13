@@ -619,3 +619,26 @@ test('drag mode: dynamic by default; an older save whose distance was chosen sta
   expect(load({ dragMode: 'fixed' }).dragMode).toBe('fixed');
   expect(load({ dragMode: 'wobbly' }).dragMode).toBe('dynamic');
 });
+
+test('a save without replays loads with none', () => {
+  const { replays: _r, ...old } = defaultSave();
+  expect(parseSave(JSON.stringify(old)).replays).toEqual({});
+  expect(defaultSave().replays).toEqual({});
+});
+test('malformed replays are dropped, readable ones kept', () => {
+  const raw = {
+    ...defaultSave(),
+    replays: {
+      a: { mode: 'master', moves: 'UD' },
+      b: { mode: 'x', moves: 'UD' },
+      c: { moves: 'UZ' },
+      d: 5,
+    },
+  };
+  expect(parseSave(JSON.stringify(raw)).replays).toEqual({ a: { mode: 'master', moves: 'UD' } });
+});
+test('export then import keeps the replays', () => {
+  const d = defaultSave();
+  d.replays = { a: { mode: 'normal', moves: 'URDL' } };
+  expect(importSave(exportSave(d)).replays).toEqual(d.replays);
+});
