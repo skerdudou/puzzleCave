@@ -45,10 +45,11 @@ export interface ReplaySceneData {
   /** the rules the moves were played under (master mode lets water through) */
   mode?: Mode;
   /**
-   * the player's own run, with a row to keep it: not kept yet, or the level's saved replay.
-   * Absent (the author's solutions): Export alone.
+   * the player's own run, with a row to keep it: not kept yet, kept just now from this player
+   * (the same buttons, Save done: "Saved", greyed), or the level's saved replay. Absent (the
+   * author's solutions): Export alone.
    */
-  saving?: 'unsaved' | 'saved';
+  saving?: 'unsaved' | 'justSaved' | 'saved';
   /**
    * Author mode, the run just played (from the result screen): its tools beside the others, its
    * Tiled properties (goldMoves, goldTime) and, with the development server, saved as the level's
@@ -283,7 +284,7 @@ export class ReplayScene extends Phaser.Scene {
   private actionsMinWidth(ids: ReplayAction[]): number {
     const minW = isTouchDevice() ? px(TOUCH_TARGET) : 0;
     return ids.reduce((sum, id, i) => {
-      const m = this.add.text(0, 0, t(ACTION_LABELS[id]), textStyle(9));
+      const m = this.add.text(0, 0, this.actionLabel(id), textStyle(9));
       const bw = Math.max(m.width + 2 * px(8), minW);
       m.destroy();
       return sum + bw + (i ? px(8) : 0);
@@ -309,6 +310,7 @@ export class ReplayScene extends Phaser.Scene {
     const player = ((): ReplayAction[] => {
       switch (this.info.saving) {
         case 'unsaved':
+        case 'justSaved':
           return ['save', 'export'];
         case 'saved':
           return ['export', 'import', 'delete'];
@@ -404,7 +406,11 @@ export class ReplayScene extends Phaser.Scene {
       const ry = actionsY - (actionRows.length - 1 - i) * px(ROW);
       actionsLeft = this.buildActions(ry, besideBar, ids, centres);
     });
-    setDebug({ replayActions: actionRows.flat(), replayActionButtons: centres });
+    setDebug({
+      replayActions: actionRows.flat(),
+      replayActionButtons: centres,
+      replaySaveDone: this.info.saving === 'justSaved',
+    });
     // the top of the actions' rows, the bar over them
     const actionsTop = actionsY - Math.max(0, actionRows.length - 1) * px(ROW);
     const stepButtons: Record<string, [number, number]> = {};
@@ -451,7 +457,7 @@ export class ReplayScene extends Phaser.Scene {
     centres: Record<string, [number, number]>,
   ): number {
     const buttons = ids.map((id) => {
-      const label = t(ACTION_LABELS[id]);
+      const label = this.actionLabel(id);
       const b: Phaser.GameObjects.Text = makeButton(
         this,
         0,
@@ -460,6 +466,8 @@ export class ReplayScene extends Phaser.Scene {
         () => this.act(id, b, label),
         12,
       );
+      // saved just now: "Saved", greyed, nothing to press any more
+      if (this.saveDone(id)) b.disableInteractive().setColor(COLORS.dim);
       return b;
     });
     const w = this.scale.width;
@@ -483,6 +491,15 @@ export class ReplayScene extends Phaser.Scene {
     return left;
   }
 
+  /** Save, once the run was saved from this player: done. */
+  private saveDone(id: ReplayAction): boolean {
+    return id === 'save' && this.info.saving === 'justSaved';
+  }
+
+  private actionLabel(id: ReplayAction): string {
+    return t(this.saveDone(id) ? 'replaySavedDone' : ACTION_LABELS[id]);
+  }
+
   private act(id: ReplayAction, button: Phaser.GameObjects.Text, label: string): void {
     const levelId = this.level.id;
     const saved = () => toSaved(this.info.moves, this.mode);
@@ -497,9 +514,11 @@ export class ReplayScene extends Phaser.Scene {
           return;
         }
         showNotice(t('replaySavedNotice'));
+        // the same buttons, Save shown done ("Saved"): Import and Delete are the saved replay's,
+        // from the selection screen
         this.scene.restart({
           ...this.info,
-          saving: 'saved',
+          saving: 'justSaved',
           startIndex: this.playback.index,
           paused: !this.playback.playing,
         });

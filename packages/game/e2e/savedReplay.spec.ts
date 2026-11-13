@@ -63,11 +63,18 @@ test('finish a level, watch the run, save it: the save keeps the moves', async (
   expect((await storedSave(page))?.replays['pc-01']).toBeUndefined();
 
   await click(page, await actionButton(page, 'save'));
-  await expect.poll(() => playerActions(page)).toEqual(['export', 'import', 'delete']);
+  // the same buttons, Save shown done ("Saved", greyed): no Import or Delete appearing
+  await expect.poll(() => field(page, 'replaySaveDone')).toBe(true);
+  expect(await playerActions(page)).toEqual(['save', 'export']);
   expect((await storedSave(page))?.replays['pc-01']).toEqual({
     mode: 'normal',
     moves: solutionLetters,
   });
+  // pressed again: nothing (it does not ask to replace the replay just saved)
+  await click(page, await actionButton(page, 'save'));
+  await page.waitForTimeout(300);
+  expect(await field(page, 'armed')).toBeNull();
+  expect(await field(page, 'replaySaveDone')).toBe(true);
 });
 
 test('import a replay for a level without one, then the camera shows it', async ({ page }) => {
