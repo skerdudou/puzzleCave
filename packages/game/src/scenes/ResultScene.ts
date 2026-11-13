@@ -128,8 +128,8 @@ export class ResultScene extends Phaser.Scene {
     // the threshold lines: centred on cx, in lineWidth
     // held medals are drawn by the reveal animation, missing ones (outlines) here
     const spots: Partial<Record<RevealSlot, MedalSpot>> = {};
-    const medalAt = (slot: RevealSlot) => {
-      const spot = { x: cx - px(130), y, r: px(10) };
+    const medalAt = (slot: RevealSlot, x = cx - px(130)) => {
+      const spot = { x, y, r: px(10) };
       if (shown.has(slot)) spots[slot] = spot;
       else drawMedal(g, spot.x, spot.y, spot.r, undefined);
     };
@@ -143,12 +143,15 @@ export class ResultScene extends Phaser.Scene {
     ) => {
       const slot: RevealSlot = kind;
       if (hasTier) medalAt(slot);
-      this.add
+      const valueText = this.add
         .text(cx - px(110), y, t('labelValue', { label, value }), textStyle(16))
         .setOrigin(0, 0.5);
-      // the record and "New record!" on the right, moved left on a narrow phone to stay on it
+      // the record and "New record!" on the right, moved left on a narrow phone to stay on it;
+      // smaller where even then they would run into the value
       const onRight = (ty: number, text: string, size: number, color: string) => {
         const txt = this.add.text(cx + px(60), ty, text, textStyle(size, color)).setOrigin(0, 0.5);
+        const from = valueText.x + valueText.width + px(8);
+        if (ty === y) shrinkToFit(txt, size, right - from, 8);
         txt.setX(Math.min(txt.x, right - txt.width));
       };
       if (best) onRight(y, `${t('record')} ${best}`, 12, COLORS.dim);
@@ -216,11 +219,14 @@ export class ResultScene extends Phaser.Scene {
           ly += line;
         }
         y = ly + px(10);
+        // the medal and its line as the other rows', but inside the box on a narrow screen
+        const medalX = Math.max(cx - px(130), cx - boxW / 2 + px(MASTER_BOX.pad + 16));
+        const textX = medalX + px(20);
         if (mode === 'master') {
           // this run: moves · time, under the name of its medal (revealed with the others), or
           // of the mode without a medal ("Master mode", not "Master", the first medal's name);
           // its "New!" stays in the box
-          medalAt('master');
+          medalAt('master', medalX);
           const spot = spots.master;
           if (spot) spot.minX = cx - boxW / 2 + px(MASTER_BOX.pad);
           text = t('labelValue', {
@@ -229,13 +235,13 @@ export class ResultScene extends Phaser.Scene {
           });
         } else {
           // a normal run: the master record (its medal, if any), as the other records
-          drawMedal(g, cx - px(130), y, px(10), ms.kind === 'best' ? ms.medal : undefined);
+          drawMedal(g, medalX, y, px(10), ms.kind === 'best' ? ms.medal : undefined);
           text = masterLineText(ms);
         }
         const runText = this.add
-          .text(cx - px(110), y, text, {
+          .text(textX, y, text, {
             ...(mode === 'master' ? textStyle(14, COLORS.master) : textStyle(12, COLORS.dim)),
-            wordWrap: { width: Math.min(px(250), cx + boxW / 2 - (cx - px(110)) - px(8)) },
+            wordWrap: { width: Math.min(px(250), cx + boxW / 2 - textX - px(8)) },
           })
           .setOrigin(0, 0.5);
         const bottom = Math.max(y + px(12), runText.getBounds().bottom) + px(MASTER_BOX.pad);
