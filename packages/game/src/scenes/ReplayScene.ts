@@ -125,6 +125,8 @@ export class ReplayScene extends Phaser.Scene {
     this.seeking = null;
     this.awake = null;
     this.seekPending = false;
+    // the last screen's question stops, its expiry with it
+    this.confirm?.reset();
     this.confirm = new TwoPress(COLORS.text);
     this.authorPanel = undefined;
     // a button left asking before a restart (a resize) is drawn again at rest

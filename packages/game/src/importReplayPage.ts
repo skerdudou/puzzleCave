@@ -1,5 +1,6 @@
 import { setDebug } from './debug';
 import { t } from './i18n';
+import { CONFIRM_MS } from './twoPress';
 import { COLORS, FONT } from './ui';
 
 export interface ImportReplayOptions {
@@ -82,18 +83,27 @@ export function showImportReplay(opts: ImportReplayOptions): void {
     return b;
   };
   let armed = false;
+  let expiry: ReturnType<typeof setTimeout> | undefined;
   const importLabel = t('replayImport');
-  const importButton = button(importLabel, (b) => {
-    // over the level's saved replay: asked first, like the other two-press buttons
-    if (opts.replace && !armed) {
-      armed = true;
-      b.textContent = t('confirmReset');
-      b.style.color = '#ff8080';
-      return;
-    }
+  const atRest = (b: HTMLButtonElement) => {
     armed = false;
+    clearTimeout(expiry);
     b.textContent = importLabel;
     b.style.color = COLORS.text;
+  };
+  const importButton = button(importLabel, (b) => {
+    // over the level's saved replay: asked first, like the other two-press buttons (twoPress.ts),
+    // and no longer after CONFIRM_MS
+    if (opts.replace && !armed) {
+      armed = true;
+      // "Sure?" in a button of the same size (at least: a longer word grows it)
+      b.style.minWidth = `${b.offsetWidth}px`;
+      b.textContent = t('confirmReset');
+      b.style.color = '#ff8080';
+      expiry = setTimeout(() => atRest(b), CONFIRM_MS);
+      return;
+    }
+    atRest(b);
     opts.onImport(text.value);
   });
   const buttons = document.createElement('div');
