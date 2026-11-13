@@ -135,7 +135,10 @@ very first launch after a deploy; it arrives this way:
    covered). The service worker script is fetched
    past the HTTP cache, and Workbox fetches the files it lists past it too (hashed names, or a
    `__WB_REVISION__` parameter for `index.html` and the manifest): GitHub Pages' `max-age=600`
-   does not delay an update.
+   does not delay an update in the browser. Its CDN may still hand out the previous `sw.js` for
+   up to 10 minutes after a deployment, which would pass for a new version: no start-up check on
+   the reload that puts a new version in (it is the latest), else a second update to the same
+   version would follow.
 2. **Download**: the new service worker precaches the new files in the background, then waits
    (it does not take over a page by itself).
 3. **Switch** (`UpdateGate`, `packages/game/src/updateGate.ts`; `pwa.ts`): never under the
