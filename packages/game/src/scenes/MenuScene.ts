@@ -2,7 +2,9 @@ import Phaser from 'phaser';
 import { KonamiCode } from '../achievements';
 import { app } from '../app';
 import { setDebug } from '../debug';
+import { fullscreenEnv, isFullscreen, offersFullscreen, toggleFullscreen } from '../fullscreen';
 import { t } from '../i18n';
+import { isTouchDevice } from '../touch';
 import { onSceneKeyDown } from '../input/sceneKeys';
 import { konamiEntered } from '../konami';
 import { syncMusic } from '../music';
@@ -73,6 +75,23 @@ export class MenuScene extends Phaser.Scene {
         ).setOrigin(1, 1),
         press: journal,
       });
+    // full screen (a phone's browser tab only, where the page may go full screen: not the
+    // installed app, nor an iPhone's Safari), small, in the top right corner (off the menu's
+    // column); the menu is drawn again on the resize that follows, with the other label
+    const fullscreen = offersFullscreen(fullscreenEnv(isTouchDevice()));
+    if (fullscreen)
+      items.push({
+        id: 'fullscreen',
+        button: makeButton(
+          this,
+          this.scale.width - px(12),
+          px(12),
+          t(isFullscreen() ? 'fullscreenExit' : 'fullscreen'),
+          toggleFullscreen,
+          11,
+        ).setOrigin(1, 0),
+        press: toggleFullscreen,
+      });
     const focus = new KeyFocus(items);
     const konami = new KonamiCode();
     // arrows or Tab, then Enter; Enter alone plays
@@ -95,6 +114,12 @@ export class MenuScene extends Phaser.Scene {
     const buttonWidths = Object.fromEntries(
       items.map(({ id, button: b }) => [id, b.width / dpr()]),
     );
-    setDebug({ scene: 'Menu', buttons, buttonWidths, versionLine: versionLine.text });
+    setDebug({
+      scene: 'Menu',
+      buttons,
+      buttonWidths,
+      versionLine: versionLine.text,
+      fullscreenOffered: fullscreen,
+    });
   }
 }

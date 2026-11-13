@@ -71,10 +71,15 @@ export class ResultScene extends Phaser.Scene {
       (low ? 2 * Math.min(cx, this.scale.width - px(170) - cx) : this.scale.width) - px(16);
     // the right end of the records' column
     const right = low ? this.scale.width - px(170) : this.scale.width - px(8);
-    let y = low ? px(36) : px(60);
+    // a vertical gap of `n` base px: on a low screen, the gaps (not the texts) shrink with its
+    // height, so that master mode's box stays on a phone in landscape under its browser's bars
+    // (~260–340 CSS px high); 340 high and more: as they are
+    const squeeze = low ? Math.min(1, this.scale.height / px(340)) : 1;
+    const gap = (n: number) => Math.round(px(n) * squeeze);
+    let y = low ? gap(36) : px(60);
     const title = this.add.text(cx, y, t('won'), textStyle(26, COLORS.accent)).setOrigin(0.5);
     shrinkToFit(title, 26, lineWidth, 16);
-    y += px(36);
+    y += gap(36);
     shrinkToFit(
       this.add.text(cx, y, levelTitle(level), textStyle(16)).setOrigin(0.5),
       16,
@@ -82,9 +87,9 @@ export class ResultScene extends Phaser.Scene {
     );
     // the mode, "Master mode" (not "MASTER", the name of a medal too, above the medal won)
     if (mode === 'master')
-      this.add.text(cx, y + px(22), t('masterModeName'), textStyle(12, '#9be7ff')).setOrigin(0.5);
+      this.add.text(cx, y + gap(22), t('masterModeName'), textStyle(12, '#9be7ff')).setOrigin(0.5);
     // (a low screen: a little closer, master mode's box below has its medals on one line)
-    y += px(low ? 42 : 48);
+    y += low ? gap(42) : px(48);
 
     const g = this.add.graphics();
     const th = resolveThresholds(level.thresholds);
@@ -131,13 +136,13 @@ export class ResultScene extends Phaser.Scene {
         txt.setX(Math.min(txt.x, right - txt.width));
       };
       if (best) onRight(y, `${t('record')} ${best}`, 12, COLORS.dim);
-      if (isRecord) onRight(y + px(16), t('newRecord'), 10, COLORS.accent);
+      if (isRecord) onRight(y + gap(16), t('newRecord'), 10, COLORS.accent);
       const row = rows.find((r) => r.kind === kind);
       if (row) {
-        drawThresholdLine(this, g, cx, y + px(32), '', row.tiers, { maxWidth: lineWidth });
-        y += px(18);
+        drawThresholdLine(this, g, cx, y + gap(32), '', row.tiers, { maxWidth: lineWidth });
+        y += gap(18);
       }
-      y += px(40);
+      y += gap(40);
     };
     line(
       t('moves'),
