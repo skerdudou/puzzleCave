@@ -161,7 +161,9 @@ for (const mode of ['master', 'normal'] as const) {
     await expect.poll(() => field(page, 'cameraHasReplay')).toBe(true);
     await page.keyboard.press('KeyV');
     await waitScene(page, 'Replay');
-    // played to the end by itself
+    // it opens paused; played, it goes to the end by itself
+    await expect.poll(() => field(page, 'replayPlaying')).toBe(false);
+    await page.keyboard.press('Space');
     await expect.poll(() => field(page, 'replayIndex'), { timeout: 30_000 }).toBe(moves.length);
     // water drowns the hero in master mode; in normal mode the move is only blocked
     await expect

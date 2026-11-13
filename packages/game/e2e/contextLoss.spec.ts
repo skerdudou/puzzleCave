@@ -101,9 +101,7 @@ const REACH = {
     await sceneIs(page, 'Select');
     await page.keyboard.press('KeyS');
     await sceneIs(page, 'Replay');
-    // paused, for a still screen
-    await expect.poll(async () => (await debug(page)).replayPlaying).toBe(true);
-    await page.keyboard.press('Space');
+    // it opens paused: a still screen
     await expect.poll(async () => (await debug(page)).replayPlaying).toBe(false);
   },
 } as const;

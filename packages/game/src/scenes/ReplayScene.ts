@@ -43,7 +43,7 @@ export interface ReplaySceneData {
   mode?: Mode;
   /**
    * the player's own run, with a row to keep it: not kept yet, or the level's saved replay.
-   * Absent (the author's solutions): no such row.
+   * Absent (the author's solutions): Export alone.
    */
   saving?: 'unsaved' | 'saved';
 }
@@ -142,7 +142,9 @@ export class ReplayScene extends Phaser.Scene {
       this.playback.index = start;
       this.sync(0);
     }
-    if (this.info.paused) this.playback.playing = false;
+    // a replay opens paused (the board seen first, Play when ready); a restart (a resize, a save)
+    // keeps it playing if it was
+    if (this.info.paused !== false) this.playback.playing = false;
     this.refreshHud();
 
     onSceneKeyDown(this, (e) => this.onKey(e));
@@ -259,7 +261,8 @@ export class ReplayScene extends Phaser.Scene {
       case 'saved':
         return ['export', 'import', 'delete'];
       default:
-        return [];
+        // the author's solutions: copied as text, to be imported as a replay
+        return ['export'];
     }
   }
 
@@ -334,6 +337,8 @@ export class ReplayScene extends Phaser.Scene {
     const playIndex = 2; // 3rd button of the full row: Start, ◀, Pause/Play…
     let flat = 0;
     let y = h - help.height - px(26) - (rows.length - 1) * px(ROW);
+    // the controls' first row (y moves down through them below)
+    const controlsY = y;
     // the run's actions a row above the controls: on a row of their own, or on the bar's line
     const actionsY = y - px(ROW);
     const besideBar = this.actionsBesideBar();
@@ -363,7 +368,7 @@ export class ReplayScene extends Phaser.Scene {
     }
     if (besideBar) this.buildBar(actionsY, actionsLeft - px(16));
     else {
-      const buttonsTop = (this.actions().length ? actionsY : y) - px(22);
+      const buttonsTop = (this.actions().length ? actionsY : controlsY) - px(22);
       this.buildBar(buttonsTop - px(BAR_ROOM / 2), w - px(20));
     }
     // above the cave's darkness, vignette and HUD band (a button's frame follows it, 1 below)
@@ -372,7 +377,7 @@ export class ReplayScene extends Phaser.Scene {
   }
 
   /**
-   * The run's actions (none for the author's solutions) on `y`: centred, or at the screen's
+   * The run's actions (Export alone for the author's solutions) on `y`: centred, or at the screen's
    * right beside the bar. Returns their left edge (device px).
    */
   private buildActions(y: number, besideBar: boolean): number {
@@ -439,7 +444,7 @@ export class ReplayScene extends Phaser.Scene {
       case 'import':
         this.scene.start('ImportReplay', {
           levelId,
-          back: { scene: 'Replay', data: { ...this.info, startIndex: 0, paused: false } },
+          back: { scene: 'Replay', data: { ...this.info, startIndex: 0, paused: true } },
         });
         return;
       case 'delete':

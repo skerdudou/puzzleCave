@@ -30,6 +30,24 @@ async function openReplayPaused(page: Page) {
     .toEqual([0, false]);
 }
 
+test('the solution replay opens paused at move 0, with Export as its action', async ({ page }) => {
+  await page.goto('/');
+  await expect.poll(async () => (await debug(page)).scene).toBe('Menu');
+  await page.keyboard.press('Enter');
+  await goToLevel(page, 'pc-21');
+  await page.keyboard.press('KeyS');
+  await expect.poll(async () => (await debug(page)).scene).toBe('Replay');
+  await expect
+    .poll(async () => {
+      const d = await debug(page);
+      return [d.replayIndex, d.replayPlaying, d.replayActions];
+    })
+    .toEqual([0, false, ['export']]);
+  // still there a moment later: nothing plays by itself
+  await page.waitForTimeout(500);
+  expect((await debug(page)).replayIndex).toBe(0);
+});
+
 test('the solution replay shows the keys in hand at each move', async ({ page }) => {
   // expected keys after each move, from the rules
   let s = initialState(level);
