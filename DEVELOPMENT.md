@@ -194,7 +194,7 @@ time it goes to the background or to another menu screen. On the dev server the 
   `goldMoves` when it is absent. It must not exceed `goldMoves`. Usually the best known solution
   length (master class, often another route), but the designer may leave a margin above it, so
   that grand master does not demand the very best route and the secret Big Brain (fewer moves
-  than the limit) can be earned — pc-04: limit 196 (the best hand-found route), best known 170. The tools respect that margin
+  than the limit) can be earned — pc-04: limit 196 (an earlier hand-found route), best known 170 (also by hand). The tools respect that margin
   (below).
 - On levels with master mode, gold never demands the optimum: `goldMoves` is either the length
   of a **natural solution** (another well-optimised solution following a genuinely different,
