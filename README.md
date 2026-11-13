@@ -49,13 +49,13 @@ has no undo).
 Each level awards a medal for the number of **moves** — gold, silver or bronze (a few levels also
 have a medal for the **time** you took). The level selection screen shows the limits for each
 medal. Gold means a good, honest solution; you do not need to find the cleverest route to get it:
-from the Medium chapter on, the gold limit is always above the best solution (a good alternative
-route, or about 10 % more moves than the best one; on the Hard and Expert levels, between 10 % and
-25 % more moves than the best known solution).
+from the Medium chapter on, the gold limit is always above the grand master limit (a good
+alternative route, or about 10 % more moves; on the Hard and Expert levels, between 10 % and 25 %
+more moves).
 
 <p align="center">
-  <img src="docs/screenshots/no-way-down-select.png" alt="The selection screen of the Hard chapter, No Way Down selected: its move and time limits for each medal, and its master mode limits" width="480"><br>
-  The selection screen: the limits of each medal for No Way Down.
+  <img src="docs/screenshots/no-way-down-select.png" alt="The selection screen of the Hard chapter part-way through: medals won on the first levels, the last two levels still locked, No Way Down selected with its medal limits, its best run and its master mode limits" width="400"><br>
+  The selection screen: the medals won so far, and the limits of each medal for No Way Down.
 </p>
 
 ### Master mode: master and grand master
@@ -75,8 +75,9 @@ Master mode has two medals of its own, both within the gold time (the mode's lim
 
 - **Master** (a violet medal with a crown): finish in master mode within the **gold** move limit;
 - **Grand master** (a light-blue medal with a white sparkle): finish in master mode within the
-  **grand master** limit, the best solution known — often a different, cleverer route than the
-  gold one. Grand master includes master.
+  **grand master** limit, a master-class route — often a different, cleverer route than the gold
+  one. It is not always the very best solution known: some levels leave a little room under it.
+  Grand master includes master.
 
 Master mode is a separate achievement, with its own box on the selection and result screens,
 under your best result: the mode's rules (time limit, no undo, deadly water), the limits of its
