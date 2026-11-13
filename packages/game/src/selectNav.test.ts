@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { arrowTarget } from './selectNav';
+import { arrowLevels, arrowTarget } from './selectNav';
 
 // 13 levels in rows of 6: 0-5, 6-11, 12
 const at = (key: string, li: number, prevN?: number, nextN?: number) =>
@@ -47,4 +47,21 @@ test('↑ over the first row: the previous chapter, the last level in that colum
 
 test('other keys: nothing', () => {
   expect(at('Enter', 3, 11, 12)).toBeNull();
+});
+
+test('the arrows stop at the last open level: the locked ones after it are skipped', () => {
+  const open = (n: number, total = 13) => Array.from({ length: total }, (_, i) => i < n);
+  expect(arrowLevels(open(2))).toBe(2);
+  expect(arrowLevels(open(13))).toBe(13);
+  // a level already finished after a locked one stays open: up to it
+  expect(arrowLevels([true, true, false, true, false])).toBe(4);
+  // at least one (a chapter's lock, or nothing open)
+  expect(arrowLevels([false, false])).toBe(1);
+  // → on the last open level goes on to the next chapter, ↓ under it too
+  const n = arrowLevels(open(8));
+  expect(arrowTarget('ArrowRight', 7, n, 6, undefined, 5)).toEqual({ chapter: 1, li: 0 });
+  expect(arrowTarget('ArrowDown', 1, n, 6, undefined, 5)).toEqual({ chapter: 0, li: 7 });
+  expect(arrowTarget('ArrowDown', 7, n, 6, undefined, 5)).toEqual({ chapter: 1, li: 1 });
+  // ← from the next chapter: the last open level of this one
+  expect(arrowTarget('ArrowLeft', 0, 5, 6, n, undefined)).toEqual({ chapter: -1, li: 7 });
 });

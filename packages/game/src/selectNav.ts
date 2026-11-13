@@ -6,6 +6,14 @@
  * chapter's last level in that column.
  */
 
+/**
+ * How many of a chapter's levels the arrows go through: up to its last open level (the locked
+ * ones after it are skipped, as if the grid ended there), at least one. `open`: each level's.
+ */
+export function arrowLevels(open: readonly boolean[]): number {
+  return Math.max(1, open.lastIndexOf(true) + 1);
+}
+
 /** Where an arrow goes: `chapter` -1, 0 (this one) or 1, and the level picked there. */
 export interface ArrowTarget {
   chapter: -1 | 0 | 1;

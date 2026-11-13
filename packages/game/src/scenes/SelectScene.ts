@@ -28,7 +28,7 @@ import {
   type MedalKind,
 } from '../medalInfo';
 import { syncMusic } from '../music';
-import { arrowTarget } from '../selectNav';
+import { arrowLevels, arrowTarget } from '../selectNav';
 import {
   COLORS,
   HEADER_BAND,
@@ -152,13 +152,15 @@ export class SelectScene extends Phaser.Scene {
   }
 
   /**
-   * A chapter's items for the arrow keys: its levels, or one only when it is locked (its lock: an
-   * arrow goes on to the chapter beside, no level picked behind it). undefined: no such chapter.
+   * A chapter's items for the arrow keys: its levels up to the last open one (the locked ones
+   * after it are not picked: an arrow goes on to the chapter beside, as past the grid's end), or
+   * one only when the chapter is locked (its lock). undefined: no such chapter.
    */
   private keySize(ci: number): number | undefined {
     const ch = chapters[ci];
     if (!ch) return undefined;
-    return this.chapterOpen(ci) ? ch.levels.length : 1;
+    if (!this.chapterOpen(ci)) return 1;
+    return arrowLevels(ch.levels.map((_, li) => this.levelOpen(ci, li)));
   }
 
   private chapterOpen(ci: number): boolean {
@@ -555,9 +557,14 @@ export class SelectScene extends Phaser.Scene {
     const p = b.padding;
     b.setPadding(p.left! + extra, p.top!, p.right! + extra, p.bottom!);
     const g = this.add.graphics();
+    // the camera centred, with a saved replay or not; the "+" (no replay) beside it on the right,
+    // in the room the button keeps for it (its width is the whole grid's)
+    const cols = CAMERA.flatMap((line) => [...line].flatMap((ch, c) => (ch === '#' ? [c] : [])));
+    const first = Math.min(...cols);
+    const drawnW = (Math.max(...cols) - first + 1) * cell;
     const paint = (color: string) => {
       const r = b.getBounds();
-      const gx = Math.round(r.x + (r.width - iconW) / 2);
+      const gx = Math.round(r.x + (r.width - drawnW) / 2) - first * cell;
       const gy = Math.round(r.y + (r.height - CAMERA.length * cell) / 2);
       // over the button (in the band at the top on a low screen: over the band too)
       g.setDepth(b.depth + 1).setScrollFactor(b.scrollFactorX, b.scrollFactorY);
@@ -888,6 +895,10 @@ export class SelectScene extends Phaser.Scene {
         this.keySize(this.ci + 1),
       );
       if (!to) return;
+      // a locked level among open ones (one inserted before a level already finished): not
+      // picked, the arrow stays
+      const ci = this.ci + to.chapter;
+      if (this.chapterOpen(ci) && !this.levelOpen(ci, to.li)) return;
       if (to.chapter !== 0) return this.slide(to.chapter, to.li);
       this.li = to.li;
       this.redraw();
