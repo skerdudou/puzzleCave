@@ -15,7 +15,7 @@ import { logScene, logUpdate } from './updateLog';
  * downloaded, it is applied at one of UpdateGate's moments: the page reloads
  * and comes back to the screen it was on (RESUME_KEY), behind an "Updating…" box when the game is
  * on the screen. At start-up the first screen waits for the check (at most START_CHECK_MS): a new
- * version found then is applied before anything shows.
+ * version found then is applied before anything shows. No start-up check on an update's reload.
  */
 
 /** The screen to come back to after an update's reload (sessionStorage: this tab only). */
@@ -41,6 +41,14 @@ let resume: { scene: string; data: object } | null = (() => {
     return null;
   }
 })();
+
+/**
+ * This page is an update's reload (it has a screen to come back to): the version just put in is
+ * the latest, so there is no start-up check. Asked again at once, GitHub Pages' cache (up to 10
+ * minutes after a deployment) may still hand out the previous service worker, which would pass for
+ * a new one and bring a second update to the same version.
+ */
+const reloadedForUpdate = resume !== null;
 
 /**
  * Coming back from an update: the "Updating…" box, until that screen is drawn again (called once
@@ -91,8 +99,10 @@ export function startUpdates(game: Phaser.Game): void {
     };
   });
   // no service worker (the dev server), none yet (the very first visit: nothing to update),
-  // offline: nothing to wait for
-  if (import.meta.env.DEV || !hadController || !navigator.onLine) done(false);
+  // offline, an update's reload: nothing to wait for
+  if (reloadedForUpdate && hadController && !import.meta.env.DEV)
+    logUpdate('start-up check skipped: the version was just put in');
+  if (import.meta.env.DEV || !hadController || !navigator.onLine || reloadedForUpdate) done(false);
   else
     setTimeout(() => {
       if (starting) logUpdate(`start-up check: no answer within ${START_CHECK_MS} ms, game shown`);
@@ -152,6 +162,8 @@ export function startUpdates(game: Phaser.Game): void {
     },
     onRegisteredSW: (_url, registration) => {
       if (!registration) return done(false);
+      watchForUpdates(registration);
+      if (reloadedForUpdate) return;
       // the check at start-up: nothing new once it is over (else onNeedRefresh comes, once the
       // new version is downloaded)
       registration
@@ -160,7 +172,6 @@ export function startUpdates(game: Phaser.Game): void {
           if (!registration.installing && !registration.waiting) done(false);
         })
         .catch(() => done(false));
-      watchForUpdates(registration);
     },
   });
   navigator.serviceWorker?.addEventListener('controllerchange', () => {
