@@ -184,10 +184,8 @@ export class GameScene extends Phaser.Scene {
     this.input.on('pointerup', () => this.undoHold.stop());
     this.input.on('pointerupoutside', () => this.undoHold.stop());
     this.events.once('shutdown', () => this.undoHold.stop());
-    // the screen stays on while a level is played: a player thinking without touching it, the
-    // clock running, would see the phone go to sleep
-    const awake = keepAwake();
-    this.events.once('shutdown', () => awake.release());
+    this.awake = null;
+    this.events.once('shutdown', () => this.keepScreenOn(false));
     this.buildHud();
     // over the board (it can be closed): the board keeps the zoom it has without it
     this.showBanner();
@@ -322,9 +320,28 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  /** the screen kept on (Screen Wake Lock) while the run's clock goes */
+  private awake: { release(): void } | null = null;
+
+  /**
+   * The screen stays on while the clock goes (from the first move to the end of the run): a
+   * player thinking without touching it would see the phone go to sleep. Before the first move,
+   * after the end, the phone sleeps as it would.
+   */
+  private keepScreenOn(on: boolean): void {
+    if (on === (this.awake !== null)) return;
+    if (on) this.awake = keepAwake();
+    else {
+      this.awake!.release();
+      this.awake = null;
+    }
+    setDebug({ screenKeptOn: on });
+  }
+
   override update(time: number): void {
     this.ambience.update(time, this.board.heroCentre());
     const playing = this.session.state.status === 'playing' && !this.finished && !this.timedOut;
+    this.keepScreenOn(playing && this.clock.started);
     if (!playing || !this.clock.started) {
       this.ambience.setTension(null);
       return;
