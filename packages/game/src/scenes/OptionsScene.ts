@@ -396,8 +396,9 @@ export class OptionsScene extends Phaser.Scene {
       },
     );
 
-    // vibrations: only offered where the browser can vibrate (not iOS Safari)
-    if (canVibrate()) {
+    // vibrations: only offered on a touch device whose browser can vibrate (not iOS Safari, and
+    // not a desktop: Chrome has navigator.vibrate there too, with nothing to vibrate)
+    if (touch && canVibrate()) {
       label(t('vibration'));
       button('vibration', cx, y, s.vibration ? t('on') : t('off'), () =>
         change(() => {
