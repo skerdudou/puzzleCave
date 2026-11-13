@@ -54,15 +54,6 @@ import { savedSolution, savedSolutionsAvailable } from '../author/client';
 const BAND = HEADER_BAND;
 /** From the level's name to the line under it, base px. */
 const NAME_GAP = 26;
-/** A finished level's tick: its colour, and its pixels [column, row] on a 5 × 4 grid. */
-const DONE_COLOR = 0x7bd88f;
-const TICK: readonly [number, number][] = [
-  [4, 0],
-  [3, 1],
-  [0, 2],
-  [2, 2],
-  [1, 3],
-];
 /** The camera's pixels ('#'), then the "+" beside it on a level without a saved replay. */
 const CAMERA = [
   '..###..........',
@@ -74,6 +65,8 @@ const CAMERA = [
   '####...####....',
   '###########....',
 ];
+/** The camera's width without the "+" (its small copy on a level's tile). */
+const CAMERA_W = 11;
 
 export class SelectScene extends Phaser.Scene {
   private ci = 0;
@@ -688,16 +681,21 @@ export class SelectScene extends Phaser.Scene {
       if (th.time) slots.push(rec?.medals.time);
       // master mode: one slot, its best medal (master or grand master)
       if (hasMaster(id) && th.grandMasterMoves !== undefined) slots.push(rec?.medals.master);
-      slots.forEach((m, k) =>
-        drawMedal(g, x + (cell * (k + 1)) / (slots.length + 1), my, px(5), m),
-      );
-      // finished (with or without medals): a green pixel tick in the top right corner
-      if (rec?.completed) {
-        const c = px(2);
-        const tx = x + cell - px(4) - 5 * c;
+      // never finished: no slots (the empty circles appear once the level is done)
+      if (rec?.completed)
+        slots.forEach((m, k) =>
+          drawMedal(g, x + (cell * (k + 1)) / (slots.length + 1), my, px(5), m),
+        );
+      // a replay saved: the replay button's camera, small, in the top right corner
+      if (getReplay(id)) {
+        const c = px(1);
+        const tx = x + cell - px(4) - CAMERA_W * c;
         const ty = y + px(4);
-        g.fillStyle(DONE_COLOR, 1);
-        for (const [col, row] of TICK) g.fillRect(tx + col * c, ty + row * c, c, c);
+        g.fillStyle(hex(COLORS.accent), 1);
+        CAMERA.forEach((line, row) => {
+          for (let col = 0; col < CAMERA_W; col++)
+            if (line[col] === '#') g.fillRect(tx + col * c, ty + row * c, c, c);
+        });
       }
       if (!current) return;
       const zone = this.add
