@@ -31,6 +31,32 @@ test('validate: OK without solutions', () => {
   expect(r.lines.at(-1)).toMatch(/2 level\(s\) loaded, 0 solution\(s\) replayed — OK/);
 });
 
+test('validate: archived solutions win in the moves their name starts with', () => {
+  const dir = fixture();
+  const archive = (id: string, name: string, moves: string) => {
+    mkdirSync(join(dir, 'solutions', 'archive', id), { recursive: true });
+    writeFileSync(join(dir, 'solutions', 'archive', id, name), `# archived — test\n${moves}\n`);
+  };
+  archive('a', '5-detour.txt', 'RLRRR');
+  const good = validateCommand(dir);
+  expect(good.ok).toBe(true);
+  expect(good.lines.at(-1)).toMatch(/\(\+ 1 archived\) — OK$/);
+  archive('a', '4-wrong.txt', 'RLRRR');
+  archive('a', 'noname.txt', 'RRR');
+  archive('a', '2-lost.txt', 'RR');
+  archive('nope', '3-x.txt', 'RRR');
+  const bad = validateCommand(dir);
+  expect(bad.ok).toBe(false);
+  expect(bad.lines).toEqual(
+    expect.arrayContaining([
+      'a: archived solution 4-wrong.txt wins in 5 moves, not 4',
+      'a: archived solution noname.txt: the name must start with its moves ("3-…")',
+      'a: archived solution 2-lost.txt does not win (status playing)',
+      'archive/nope: no such level',
+    ]),
+  );
+});
+
 test('validate: starting on water is a warning, not an error', () => {
   const dir = fixture();
   const level = fromAscii(['@~.E'], { id: 'w' });

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { freemem, totalmem } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -236,6 +236,7 @@ export function validateCommand(dir: string): CommandResult {
       lines.push(`${level.id}: unreadable gold reference solution — ${(err as Error).message}`);
     }
   }
+  const archived = validateArchive(dir, pack.levels, lines);
   const ok = lines.length === 0;
   lines.push(...warnings);
   // no time medals without goldTime: allowed (e.g. a level in progress), but flagged
@@ -252,9 +253,46 @@ export function validateCommand(dir: string): CommandResult {
     }
   }
   lines.push(
-    `${pack.levels.length} level(s) loaded, ${checked} solution(s) replayed${golds ? ` (+ ${golds} gold reference(s))` : ''}${ok ? ' — OK' : ''}`,
+    `${pack.levels.length} level(s) loaded, ${checked} solution(s) replayed${golds ? ` (+ ${golds} gold reference(s))` : ''}${archived ? ` (+ ${archived} archived)` : ''}${ok ? ' — OK' : ''}`,
   );
   return { ok, lines };
+}
+
+/**
+ * Archived solutions (solutions/archive/<id>/<moves>-<name>.txt): other noteworthy routes of a
+ * level, kept for the record (a genuinely different strategy, not a worse variant of the best
+ * known one). Each must win in the number of moves its file name starts with; a folder must be
+ * a level of the pack. Errors go to `lines`; returns how many were replayed.
+ */
+function validateArchive(dir: string, levels: readonly LevelData[], lines: string[]): number {
+  const root = join(dir, 'solutions', 'archive');
+  if (!existsSync(root)) return 0;
+  const byId = new Map(levels.map((l) => [l.id, l]));
+  let count = 0;
+  for (const id of readdirSync(root).sort()) {
+    const level = byId.get(id);
+    if (!level) {
+      lines.push(`archive/${id}: no such level`);
+      continue;
+    }
+    for (const name of readdirSync(join(root, id)).sort()) {
+      if (!name.endsWith('.txt')) continue;
+      count++;
+      const where = `${id}: archived solution ${name}`;
+      const stated = /^(\d+)-/.exec(name)?.[1];
+      try {
+        const end = replay(level, parseMoves(readFileSync(join(root, id, name), 'utf8')));
+        if (end.status !== 'won') lines.push(`${where} does not win (status ${end.status})`);
+        else if (stated === undefined)
+          lines.push(`${where}: the name must start with its moves ("${end.moves}-…")`);
+        else if (Number(stated) !== end.moves)
+          lines.push(`${where} wins in ${end.moves} moves, not ${stated}`);
+      } catch (err) {
+        lines.push(`${where} unreadable — ${(err as Error).message}`);
+      }
+    }
+  }
+  return count;
 }
 
 export interface SolveCommandOptions {
