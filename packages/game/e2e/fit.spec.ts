@@ -216,7 +216,7 @@ for (const { width, height, touch, langs } of VIEWS) {
         expect(await field(page, 'resultMasterButton')).toBe(true);
         await check('result pc-40 master button');
 
-        // its replay: with the run's actions to save it, then saved (export, import, delete)
+        // its replay: with the run's actions to save it, then saved ("Saved", greyed, and export)
         await page.keyboard.press('KeyV');
         await sceneIs(page, 'Replay');
         await expect.poll(() => playerActions(page)).toEqual(['save', 'export']);
@@ -226,6 +226,15 @@ for (const { width, height, touch, langs } of VIEWS) {
           [number, number]
         >;
         await page.mouse.click(...actions.save!);
+        await expect.poll(() => field(page, 'replaySaveDone')).toBe(true);
+        await check('replay just saved');
+        // the saved replay from the selection screen (V): export, import, delete
+        await page.keyboard.press('Escape');
+        await sceneIs(page, 'Result');
+        await page.keyboard.press('Escape');
+        await sceneIs(page, 'Select');
+        await page.keyboard.press('KeyV');
+        await sceneIs(page, 'Replay');
         await expect.poll(() => playerActions(page)).toEqual(['export', 'import', 'delete']);
         await check('replay saved');
 
