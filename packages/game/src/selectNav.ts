@@ -14,6 +14,34 @@ export function arrowLevels(open: readonly boolean[]): number {
   return Math.max(1, open.lastIndexOf(true) + 1);
 }
 
+/**
+ * arrowTarget over the locked levels: in this chapter, a locked level is skipped (the arrow goes
+ * on the same way from it: → past it to the next open one, ↓ down the column…, on to the
+ * chapter beside past the grid); in the chapter beside, a locked level gives the nearest open one
+ * before it (its first level, at worst). `open(chapter, li)`: that level may be picked.
+ */
+export function arrowTargetOpen(
+  key: string,
+  li: number,
+  n: number,
+  cols: number,
+  prevN: number | undefined,
+  nextN: number | undefined,
+  open: (chapter: -1 | 0 | 1, li: number) => boolean,
+): ArrowTarget | null {
+  let from = li;
+  for (;;) {
+    const to = arrowTarget(key, from, n, cols, prevN, nextN);
+    if (!to || open(to.chapter, to.li)) return to;
+    if (to.chapter !== 0) {
+      let back = to.li;
+      while (back > 0 && !open(to.chapter, back)) back--;
+      return { chapter: to.chapter, li: back };
+    }
+    from = to.li;
+  }
+}
+
 /** Where an arrow goes: `chapter` -1, 0 (this one) or 1, and the level picked there. */
 export interface ArrowTarget {
   chapter: -1 | 0 | 1;
