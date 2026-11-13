@@ -45,8 +45,9 @@ export type ThresholdChanges = Partial<Record<'goldMoves' | 'platinumMoves', num
 
 /**
  * Thresholds a new best solution of `n` moves sets. goldMoves is a "good honest" solution chosen
- * by the designer: it is only written for a level that has none. Otherwise the best length goes
- * to platinumMoves, when strictly shorter than the platinum limit — or always with `force` (a
+ * by the designer: it is only written for a level that has none. platinumMoves too, once set: it
+ * may keep a margin above the best known solution. Otherwise the best length goes to
+ * platinumMoves, when strictly shorter than goldMoves — or always with `force` (a
  * goldMoves below a forced length is raised to it, so that platinumMoves ≤ goldMoves holds).
  */
 export function thresholdChanges(
@@ -61,7 +62,9 @@ export function thresholdChanges(
     if (n > gold) return { goldMoves: n, platinumMoves: n };
     return n === limit ? {} : { platinumMoves: n };
   }
-  return n < limit ? { platinumMoves: n } : {};
+  // an existing platinumMoves is the designer's: it may leave a margin above the best known
+  // solution (Big Brain is beating it), so only a level without one gets it
+  return t.platinumMoves === undefined && n < limit ? { platinumMoves: n } : {};
 }
 
 /** moves of the saved solution of a level (without refused moves), if it is readable and wins */
@@ -202,7 +205,9 @@ export function validateCommand(dir: string): CommandResult {
           warnings.push(
             `${level.id}: warning — the saved solution (${end.moves} moves) is longer than ${p.name} (${p.value})`,
           );
-        else if (p.value > end.moves)
+        // a platinumMoves above the saved solution is a deliberate margin (Big Brain beats it);
+        // without one, a goldMoves above it means the grand master limit was never set
+        else if (p.name === 'goldMoves' && p.value > end.moves)
           warnings.push(
             `${level.id}: warning — ${p.name} (${p.value}) is longer than the saved solution (${end.moves} moves)`,
           );
@@ -311,8 +316,9 @@ export function reportSolve(
   if (o.apply) {
     try {
       const solution = join(dir, 'solutions', `${id}.txt`);
-      const better = Object.keys(thresholdChanges(level.thresholds, n, o.force)).length > 0;
       const previous = savedWinningMoves(dir, level);
+      // shorter than the saved solution (or none saved, or it does not win)
+      const better = previous === undefined || n < previous.length;
       if (o.force || better || !existsSync(solution)) {
         mkdirSync(join(dir, 'solutions'), { recursive: true });
         writeFileSync(solution, `${solutionHeader(true, n)}\n${formatMoves(r.moves)}`);

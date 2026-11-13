@@ -190,9 +190,12 @@ time it goes to the background or to another menu screen. On the dev server the 
   the old rule applies (`t × 1.25` and `t × 1.5`, same minimum gaps). Both are rounded up to the
   next tenth of a second (16.5957 → 16.6). `silverTime` / `bronzeTime`
   override them. Master mode's time limit is the gold time.
-- `platinumMoves`: the best known solution length (master class, often another route), the
-  **grand master** move limit (the "platinum limit" of the tools below); `goldMoves` when it is
-  absent. It must not exceed `goldMoves`.
+- `platinumMoves`: the **grand master** move limit (the "platinum limit" of the tools below);
+  `goldMoves` when it is absent. It must not exceed `goldMoves`. Usually the best known solution
+  length (master class, often another route), but the designer may leave a margin above it, so
+  that grand master does not demand the very best route and the secret Big Brain (fewer moves
+  than the limit) can be earned — pc-04: limit 196 (the best hand-found route), best known 184. The tools respect that margin
+  (below).
 - On levels with master mode, gold never demands the optimum: `goldMoves` is either the length
   of a **natural solution** (another well-optimised solution following a genuinely different,
   plausible strategy — another block-to-water assignment, door order, a simpler route —, kept
@@ -251,11 +254,14 @@ time it goes to the background or to another menu screen. On the dev server the 
 - Chapters: `"masterMode": false` in `levels/chapters.json` removes master mode and its medals from
   a chapter's levels (the Easy chapter); absent means true. The loader rejects a non-boolean.
 
-The solver tools never touch a designer's `goldMoves`: when they find a shorter solution, they
-set or lower `platinumMoves`; they write `goldMoves` only for a level that has none. `validate`
-errors on `platinumMoves > goldMoves` and on a platinum limit below the proven optimum or the
-proven lower bound written in the saved solution's header; it warns when the saved solution is
-longer than the platinum limit, or shorter (the limit should then be lowered).
+The solver tools never touch a designer's thresholds: they write `goldMoves` only for a level
+that has none, and `platinumMoves` only for a level that has none (a solution strictly shorter
+than `goldMoves`); an existing `platinumMoves` is only lowered with `--force`. A shorter solution
+is still saved in `levels/solutions/`. `validate` errors on `platinumMoves > goldMoves` and on a
+platinum limit below the proven optimum or the proven lower bound written in the saved
+solution's header; it warns when the saved solution is longer than the platinum limit, or, on a
+level without `platinumMoves`, shorter than `goldMoves` (a grand master limit to set). A
+`platinumMoves` above the saved solution is a deliberate margin: no warning.
 
 In author mode (`npm run dev`, or the preview of `main` opened with `?dev`; the release never enables it), all levels are unlocked and the result screen
 lets you copy `goldMoves`/`goldTime` and the solution you played.
@@ -272,7 +278,10 @@ lets you copy `goldMoves`/`goldTime` and the solution you played.
   everywhere.
 - Secrets, shown as "???" until earned: Deep Thought (a minute of the run clock without a move,
   bump, undo or restart, in normal mode, after the first move; the time the game is hidden does
-  not count) and the Konami code (↑ ↑ ↓ ↓ ← → ← → B A on the main menu, keyboard only). The code
+  not count), Big Brain (FR "Y’en a là-dedans !": a level with master mode finished, in either
+  mode, in strictly fewer moves than its grand master limit — `bestMoves` or `masterBestMoves`
+  below `Thresholds.grandMasterMoves`; earned from the records, so an old save that already beat
+  a limit gets it too) and the Konami code (↑ ↑ ↓ ↓ ← → ← → B A on the main menu, keyboard only). The code
   plays a fanfare and sends the player sprite running across the screen each time, and its
   achievement opens every chapter for good (`isChapterUnlocked(…, allOpen)`; the levels inside
   still open two at a time). Select still starts where the player's own progress is.
@@ -288,7 +297,7 @@ save gets what its records already earn). Erase clears them with the levels.
 2. On the result screen, "Copy solution".
 3. Paste it into `levels/solutions/<id>.txt`.
 4. `npm run improve -- <id> --apply`: the solution is shortened if possible, saved with its status
-   on the first line, and `platinumMoves` is lowered if it is shorter (see "Medal thresholds").
+   on the first line, and `platinumMoves` is set if the level has none and it is shorter than `goldMoves` (an existing one is kept, see "Medal thresholds").
 
 ## Solutions (spoilers!)
 
@@ -296,7 +305,7 @@ save gets what its records already earn). Erase clears them with the levels.
 
 Current solver limits: exact A* search bounded by time (60 s by default, `--timeout <s>`) and by memory (`--max-memory <MB>` per process, computed by default, see below); `--max-states <n>` adds a state limit (none by default). The compact engine stores a macro-state in ~60–110 bytes (typed arrays outside the V8 heap, which it caps itself) and processes one in ~1–6 µs. When memory or the state limit stops it before the deadline, it restarts for the remaining time with partial expansion (slower, but deeper for the same memory) and keeps the best bound. Large levels with many pushable objects exceed these limits and stay without an optimal solution: `improve` (below) then starts from the designer's solution or looks for a non-optimal one. When a limit is hit, `solve` prints a **proven lower bound** (`≥ L moves`: no solution is shorter) and reports an error if the level's platinum limit (`platinumMoves`, else `goldMoves`) is below that bound (unreachable threshold).
 
-`--apply` writes the solution and `goldMoves` of a level that has none; on a level with a `goldMoves`, a proven optimum strictly shorter than the platinum limit sets `platinumMoves` (and replaces the solution); `--force` always writes it (and raises a `goldMoves` below it). `goldMoves` itself is never lowered. An existing solution is not rewritten otherwise.
+`--apply` writes the solution and `goldMoves` of a level that has none; on a level with a `goldMoves` and no `platinumMoves`, a proven optimum strictly shorter than `goldMoves` sets `platinumMoves`; an existing `platinumMoves` is kept (it may leave a margin); `--force` always writes it (and raises a `goldMoves` below it). `goldMoves` itself is never lowered. The solution replaces the saved one when it is strictly shorter (or none wins), never otherwise without `--force`.
 
 Parallel solving: with `--all` or several identifiers, each level is solved in a separate Node process, `--jobs <n>` at a time. A single identifier without `--all` is solved in the current process and `--jobs` is then ignored.
 
@@ -354,7 +363,7 @@ For measurements, `npx tsx packages/tools/src/findBench.ts <id…> [--memory MB]
 
 Each step replays the solution: it always wins and is never longer than the input. One line per level gives the start (designer's or found solution), the length before → after, the status, the lower bound and the duration, followed by the detail of the steps.
 
-Without `--apply`, nothing is written. With `--apply`, the solution is written with a first comment line (ignored when reading): `# optimal (proven)` or `# best known — not proven optimal (proven lower bound ≥ L)`. The thresholds follow the `solve` rule: `goldMoves` only for a level without one, otherwise `platinumMoves`, only lowered by a strictly shorter solution, or always with `--force`. `npm run validate` checks that all solutions win and compares the platinum limit with the saved solution (see "Medal thresholds").
+Without `--apply`, nothing is written. With `--apply`, the solution is written with a first comment line (ignored when reading): `# optimal (proven)` or `# best known — not proven optimal (proven lower bound ≥ L)`. The thresholds follow the `solve` rule: `goldMoves` only for a level without one, otherwise `platinumMoves` only for a level without one (an existing one is kept), or always with `--force`; the solution itself is saved when strictly shorter. `npm run validate` checks that all solutions win and compares the platinum limit with the saved solution (see "Medal thresholds").
 
 A saved solution that is unreadable or does not win is never overwritten without `--force`: it is kept and reported, the solution found is written next to it in `levels/solutions/<id>.found.txt`, and the thresholds are left untouched; that `.found.txt` is deleted as soon as the saved solution is valid again (or with `--force`). `solve --apply` also writes the `# optimal (proven)` header. `solve` and `improve` replay every solution before writing it: a solution that does not win is an error and nothing is written. The `improve` watchdog kills a child process past `--timeout` plus 60 s.
 

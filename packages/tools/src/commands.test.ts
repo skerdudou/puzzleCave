@@ -74,13 +74,19 @@ test('solve --apply writes the solution and goldMoves', () => {
   expect(validateCommand(dir).ok).toBe(true);
 });
 
-test('solve --apply does not rewrite an equal goldMoves nor its solution', () => {
+test('solve --apply does not rewrite an equal goldMoves; a shorter solution replaces the saved one', () => {
   const dir = fixture();
   solveCommand(dir, ['a'], { ...opts, apply: true });
+  // a saved solution as short as the optimum: kept
+  writeFileSync(join(dir, 'solutions', 'a.txt'), 'RRR\n');
+  expect(solveCommand(dir, ['a'], { ...opts, apply: true }).ok).toBe(true);
+  expect(solutionOf(dir)).toBe('RRR\n');
+  // a longer one: replaced by the optimum, the thresholds untouched
   writeFileSync(join(dir, 'solutions', 'a.txt'), 'RLRRR\n');
   expect(solveCommand(dir, ['a'], { ...opts, apply: true }).ok).toBe(true);
-  expect(solutionOf(dir)).toBe('RLRRR\n');
+  expect(solutionOf(dir)).toBe('# optimal (proven)\nRRR\n');
   expect(tmxOf(dir)).toMatch(/name="goldMoves" type="int" value="3"/);
+  expect(tmxOf(dir)).not.toMatch(/platinumMoves/);
 });
 
 test('solve --apply keeps an existing goldMoves and sets platinumMoves to the proven optimum', () => {
@@ -198,8 +204,12 @@ test('thresholdChanges: goldMoves for a new level, platinumMoves otherwise', () 
   expect(thresholdChanges({ goldMoves: 60 }, 60)).toEqual({});
   expect(thresholdChanges({ goldMoves: 60, platinumMoves: 50 }, 50)).toEqual({});
   expect(thresholdChanges({ goldMoves: 60, platinumMoves: 50 }, 52)).toEqual({});
-  expect(thresholdChanges({ goldMoves: 60, platinumMoves: 50 }, 48)).toEqual({ platinumMoves: 48 });
+  // an existing platinumMoves may keep a margin above the best known: never lowered
+  expect(thresholdChanges({ goldMoves: 60, platinumMoves: 50 }, 48)).toEqual({});
   // --force: always the new length; a goldMoves below it is raised too
+  expect(thresholdChanges({ goldMoves: 60, platinumMoves: 50 }, 48, true)).toEqual({
+    platinumMoves: 48,
+  });
   expect(thresholdChanges({ goldMoves: 60, platinumMoves: 50 }, 52, true)).toEqual({
     platinumMoves: 52,
   });

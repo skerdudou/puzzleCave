@@ -9,6 +9,8 @@ export interface AchievementLevels {
   hasMaster(levelId: string): boolean;
   /** this level has time medals (a goldTime) */
   hasTime(levelId: string): boolean;
+  /** the grand master move limit (platinumMoves, else goldMoves) of a level; none: undefined */
+  grandMasterMoves(levelId: string): number | undefined;
 }
 
 export interface Progress {
@@ -36,6 +38,8 @@ export interface Achievement {
 /** The ids of the achievements earned by an action, not by the level records. */
 export const DEEP_THOUGHT = 'deepThought';
 export const KONAMI = 'konami';
+/** The secret earned by the records: a level finished in fewer moves than its grand master limit. */
+export const BIG_BRAIN = 'bigBrain';
 
 /** The chapters that have achievements, by their id, and the names of these. */
 const CHAPTER_NAMES: Readonly<
@@ -87,6 +91,11 @@ export function achievementList(lv: AchievementLevels): Achievement[] {
   const list: Achievement[] = [];
   const all = lv.chapters.flatMap((c) => c.levels);
   const withMaster = all.filter((id) => lv.hasMaster(id));
+  // the levels with master mode and a grand master limit, with that limit
+  const limits = withMaster.flatMap((id) => {
+    const limit = lv.grandMasterMoves(id);
+    return limit === undefined ? [] : [{ id, limit }];
+  });
   for (const chapter of lv.chapters) {
     const names = CHAPTER_NAMES[chapter.id];
     if (!names) continue;
@@ -162,6 +171,22 @@ export function achievementList(lv: AchievementLevels): Achievement[] {
     },
     { id: DEEP_THOUGHT, name: 'achDeepThought', desc: 'achDescDeepThought', hidden: true },
     { id: KONAMI, name: 'achKonami', desc: 'achDescKonami', hidden: true },
+    {
+      id: BIG_BRAIN,
+      name: 'achBigBrain',
+      desc: 'achDescBigBrain',
+      hidden: true,
+      // the best run of either mode, strictly under the limit (the limit itself is grand master)
+      progress: (r) => ({
+        got: limits.some(
+          ({ id, limit }) =>
+            Math.min(r[id]?.bestMoves ?? Infinity, r[id]?.masterBestMoves ?? Infinity) < limit,
+        )
+          ? 1
+          : 0,
+        goal: limits.length > 0 ? 1 : 0,
+      }),
+    },
   );
   // none that cannot be earned: a chapter with no levels, more golds than there are levels
   return list.filter((a) => !a.progress || (a.progress({}).goal > 0 && (a.n ?? 0) <= all.length));
