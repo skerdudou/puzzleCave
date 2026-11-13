@@ -4,7 +4,7 @@
   <property name="name" value="Bomberman"/>
   <property name="author" value="moineau"/>
   <property name="initialKeys" type="int" value="2"/>
-  <property name="goldMoves" type="int" value="240"/>
+  <property name="goldMoves" type="int" value="220"/>
   <property name="platinumMoves" type="int" value="196"/>
   <property name="goldTime" type="float" value="38.6"/>
  </properties>
