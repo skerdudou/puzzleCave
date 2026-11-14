@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, test } from 'vitest';
-import { provenOptima, readSolutions } from './solutions';
+import { bestKnownMoves, provenOptima, readSolutions } from './solutions';
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -41,6 +41,16 @@ test('proven optima: the moves of the solutions marked "# optimal (proven)" only
   writeFileSync(join(s, 'pc-02.txt'), '# best known — not proven optimal\nLLUU');
   writeFileSync(join(s, 'pc-03.prev.txt'), '# optimal (proven)\nLU');
   expect(provenOptima(d)).toEqual({ 'pc-01': 6 });
+});
+
+test('best known: the moves of every saved solution, proven optimal or not', () => {
+  const d = levelsDir();
+  const s = join(d, 'solutions');
+  mkdirSync(s, { recursive: true });
+  writeFileSync(join(s, 'pc-01.txt'), '# optimal (proven)\nRRDD');
+  writeFileSync(join(s, 'pc-02.txt'), '# best known — not proven optimal\nLLUU\nRR');
+  writeFileSync(join(s, 'pc-03.prev.txt'), '# optimal (proven)\nLU');
+  expect(bestKnownMoves(d)).toEqual({ 'pc-01': 4, 'pc-02': 6 });
 });
 
 test('the repository: every level with a saved solution is there', () => {

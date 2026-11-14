@@ -1,6 +1,6 @@
 import type { Plugin } from 'vite';
 import { loadPack } from '@puzzlecave/tiled';
-import { provenOptima, readSolutions } from './src/server/solutions';
+import { bestKnownMoves, provenOptima, readSolutions } from './src/server/solutions';
 
 const SOLUTIONS_ID = 'virtual:solutions';
 const SOLUTIONS_RESOLVED = '\0virtual:solutions';
@@ -41,7 +41,8 @@ export function levelsPlugin(dir: string, suspendReload: () => boolean = () => f
       if (pack.errors.length) this.error(`Invalid levels:\n${pack.errors.join('\n')}`);
       // the proven optima (levels/solutions/; on the dev server, read again when the levels are)
       const optima = provenOptima(dir);
-      return `export const levels = ${JSON.stringify(pack.levels)};\nexport const chapters = ${JSON.stringify(pack.chapters)};\nexport const optima = ${JSON.stringify(optima)};\n`;
+      const best = bestKnownMoves(dir);
+      return `export const levels = ${JSON.stringify(pack.levels)};\nexport const chapters = ${JSON.stringify(pack.chapters)};\nexport const optima = ${JSON.stringify(optima)};\nexport const best = ${JSON.stringify(best)};\n`;
     },
     configureServer(server) {
       server.watcher.add(dir);

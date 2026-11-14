@@ -48,9 +48,16 @@ function row(
  * (gold), then the grand master move limit (platinumMoves), "≤ 610 moves", "≤ 538 moves". Where
  * the two are equal (no platinumMoves) only grand master is shown: such a finish earns it. A
  * move limit equal to the level's proven optimum (`optimum`: nobody does fewer) reads "=": the
- * gold of an easy level ("= 26"), its grand master ("= 401 moves").
+ * gold of an easy level ("= 26"), its grand master ("= 401 moves"). `bestKnown` (the best known
+ * solution's moves, given once the player holds grand master): where it beats the grand master
+ * limit, it follows it, "≤ 196 moves (done in 170)".
  */
-export function thresholdRows(th: Thresholds, master = false, optimum?: number): ThresholdRow[] {
+export function thresholdRows(
+  th: Thresholds,
+  master = false,
+  optimum?: number,
+  bestKnown?: number,
+): ThresholdRow[] {
   const rows: ThresholdRow[] = [];
   if (th.moves) rows.push(row('moves', th.moves, String, optimum));
   if (th.time) rows.push(row('time', th.time, seconds));
@@ -60,7 +67,14 @@ export function thresholdRows(th: Thresholds, master = false, optimum?: number):
       t(moves === optimum ? 'masterMovesExact' : 'masterMovesLimit', { moves });
     if (th.masterMoves !== th.grandMasterMoves)
       tiers.push({ medal: 'master', text: text(th.masterMoves) });
-    tiers.push({ medal: 'grandMaster', text: text(th.grandMasterMoves) });
+    const gm = th.grandMasterMoves;
+    tiers.push({
+      medal: 'grandMaster',
+      text:
+        bestKnown !== undefined && bestKnown < gm
+          ? t('grandMasterBeaten', { moves: gm, best: bestKnown })
+          : text(gm),
+    });
     rows.push({ kind: 'master', tiers });
   }
   return rows;

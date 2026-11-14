@@ -19,6 +19,7 @@ import { getReplay, movesOf } from '../replays';
 import type { ReplaySceneData } from './ReplayScene';
 import { onSceneKeyDown } from '../input/sceneKeys';
 import {
+  bestKnownFor,
   chapters,
   hasMaster,
   levelById,
@@ -423,7 +424,12 @@ export class SelectScene extends Phaser.Scene {
     }
     const th = resolveThresholds(level.thresholds);
     const master = this.masterState();
-    const rows = thresholdRows(th, master !== 'none', provenOptimum(level.id));
+    const rows = thresholdRows(
+      th,
+      master !== 'none',
+      provenOptimum(level.id),
+      bestKnownFor(level.id, rec),
+    );
     const tg = this.add.graphics();
     for (const r of rows) {
       if (r.kind === 'master') continue;

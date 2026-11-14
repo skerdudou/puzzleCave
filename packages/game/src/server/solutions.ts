@@ -32,3 +32,15 @@ export function provenOptima(levelsDir: string): Record<string, number> {
   }
   return out;
 }
+
+/**
+ * The moves of each level's saved solution, proven optimal or not: the best known solution, which
+ * the game names to a grand master when it beats the grand master limit (the release gets the
+ * number, not the solution).
+ */
+export function bestKnownMoves(levelsDir: string): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [id, text] of Object.entries(readSolutions(levelsDir)))
+    out[id] = parseMoves(text).length;
+  return out;
+}

@@ -1,4 +1,4 @@
-import { chapters, levels, optima } from 'virtual:levels';
+import { best, chapters, levels, optima } from 'virtual:levels';
 import {
   hasMasterMode,
   isMasterUnlocked,
@@ -34,6 +34,14 @@ export function levelById(id: string): LevelData {
 
 /** The level's proven optimum in moves (its saved solution is proven optimal), else undefined. */
 export const provenOptimum = (id: string): number | undefined => optima[id];
+
+/**
+ * The best known solution's moves, for the grand master line, once the player holds grand master
+ * on the level (`rec`); else undefined (the line names it only where it beats the limit).
+ */
+export function bestKnownFor(id: string, rec: LevelRecord | undefined): number | undefined {
+  return rec?.medals.master === 'grandMaster' ? best[id] : undefined;
+}
 
 /** master mode (and its medals) exists on this level: its chapter does not disable it */
 export function hasMaster(id: string): boolean {
