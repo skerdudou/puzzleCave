@@ -1,4 +1,4 @@
-import { chapters, levels } from 'virtual:levels';
+import { chapters, levels, optima } from 'virtual:levels';
 import {
   hasMasterMode,
   isMasterUnlocked,
@@ -31,6 +31,9 @@ export function levelById(id: string): LevelData {
   if (!l) throw new Error(`unknown level: ${id}`);
   return l;
 }
+
+/** The level's proven optimum in moves (its saved solution is proven optimal), else undefined. */
+export const provenOptimum = (id: string): number | undefined => optima[id];
 
 /** master mode (and its medals) exists on this level: its chapter does not disable it */
 export function hasMaster(id: string): boolean {

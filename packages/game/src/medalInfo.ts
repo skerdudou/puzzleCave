@@ -25,8 +25,20 @@ export interface ThresholdRow {
 const MEDALS: readonly Medal[] = ['gold', 'silver', 'bronze'];
 const seconds = (s: number) => formatTime(Math.round(s * 1000));
 
-function row(kind: ThresholdRow['kind'], tier: Tier, fmt: (v: number) => string): ThresholdRow {
-  return { kind, tiers: MEDALS.map((medal) => ({ medal, text: `≤ ${fmt(tier[medal])}` })) };
+/** `exact`: the value no run can beat (a proven optimum), "=" instead of "≤". */
+function row(
+  kind: ThresholdRow['kind'],
+  tier: Tier,
+  fmt: (v: number) => string,
+  exact?: number,
+): ThresholdRow {
+  return {
+    kind,
+    tiers: MEDALS.map((medal) => ({
+      medal,
+      text: `${tier[medal] === exact ? '=' : '≤'} ${fmt(tier[medal])}`,
+    })),
+  };
 }
 
 /**
@@ -34,15 +46,18 @@ function row(kind: ThresholdRow['kind'], tier: Tier, fmt: (v: number) => string)
  * level's chapter has master mode), a third row for master mode, a separate achievement drawn in
  * its own box (whose title gives the rules, the time limit among them): the master move limit
  * (gold), then the grand master move limit (platinumMoves), "≤ 610 moves", "≤ 538 moves". Where
- * the two are equal (no platinumMoves) only grand master is shown: such a finish earns it.
+ * the two are equal (no platinumMoves) only grand master is shown: such a finish earns it. A
+ * move limit equal to the level's proven optimum (`optimum`: nobody does fewer) reads "=": the
+ * gold of an easy level ("= 26"), its grand master ("= 401 moves").
  */
-export function thresholdRows(th: Thresholds, master = false): ThresholdRow[] {
+export function thresholdRows(th: Thresholds, master = false, optimum?: number): ThresholdRow[] {
   const rows: ThresholdRow[] = [];
-  if (th.moves) rows.push(row('moves', th.moves, String));
+  if (th.moves) rows.push(row('moves', th.moves, String, optimum));
   if (th.time) rows.push(row('time', th.time, seconds));
   if (master && th.masterMoves !== undefined && th.grandMasterMoves !== undefined) {
     const tiers: ThresholdRow['tiers'] = [];
-    const text = (moves: number) => t('masterMovesLimit', { moves });
+    const text = (moves: number) =>
+      t(moves === optimum ? 'masterMovesExact' : 'masterMovesLimit', { moves });
     if (th.masterMoves !== th.grandMasterMoves)
       tiers.push({ medal: 'master', text: text(th.masterMoves) });
     tiers.push({ medal: 'grandMaster', text: text(th.grandMasterMoves) });

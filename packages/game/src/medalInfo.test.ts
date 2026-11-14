@@ -46,11 +46,34 @@ test('master mode: its own third row (master, grand master moves), only where it
   }
 });
 
+test('master row: a limit equal to the proven optimum reads "=", the others "≤"', () => {
+  const th = resolveThresholds({ goldMoves: 442, platinumMoves: 401, goldTime: 60 });
+  expect(thresholdRows(th, true, 401)[2]!.tiers).toEqual([
+    { medal: 'master', text: '≤ 442 moves' },
+    { medal: 'grandMaster', text: '= 401 moves' },
+  ]);
+  // not proven (no optimum) or a limit above it: "≤"
+  expect(thresholdRows(th, true)[2]!.tiers[1]!.text).toBe('≤ 401 moves');
+  expect(thresholdRows(th, true, 399)[2]!.tiers[1]!.text).toBe('≤ 401 moves');
+  // the moves row: gold above the optimum, "≤"
+  expect(thresholdRows(th, true, 401)[0]!.tiers.map((t) => t.text)).toEqual([
+    '≤ 442',
+    '≤ 487',
+    '≤ 553',
+  ]);
+  // an easy level (no platinumMoves): gold is the optimum, "=" for gold and grand master alone
+  const gold = resolveThresholds({ goldMoves: 26 });
+  const easy = thresholdRows(gold, true, 26);
+  expect(easy[0]!.tiers.map((t) => t.text)).toEqual(['= 26', '≤ 29', '≤ 33']);
+  expect(easy.at(-1)!.tiers).toEqual([{ medal: 'grandMaster', text: '= 26 moves' }]);
+});
+
 test('master row in French: the moves word is translated', () => {
   setLang('fr');
   try {
     const th = resolveThresholds({ goldMoves: 430, platinumMoves: 278, goldTime: 60 });
     expect(thresholdRows(th, true)[2]!.tiers[1]!.text).toBe('≤ 278 coups');
+    expect(thresholdRows(th, true, 278)[2]!.tiers[1]!.text).toBe('= 278 coups');
   } finally {
     setLang('en');
   }

@@ -18,7 +18,15 @@ import { getLang, t } from '../i18n';
 import { getReplay, movesOf } from '../replays';
 import type { ReplaySceneData } from './ReplayScene';
 import { onSceneKeyDown } from '../input/sceneKeys';
-import { chapters, hasMaster, levelById, levelTitle, locate, masterState } from '../levels';
+import {
+  chapters,
+  hasMaster,
+  levelById,
+  levelTitle,
+  locate,
+  masterState,
+  provenOptimum,
+} from '../levels';
 import {
   masterLineText,
   masterMedalName,
@@ -260,7 +268,7 @@ export class SelectScene extends Phaser.Scene {
         const keys = keysLine(level.initialKeys);
         const master = hasMaster(id);
         const th = resolveThresholds(level.thresholds);
-        const rows = thresholdRows(th, master);
+        const rows = thresholdRows(th, master, provenOptimum(id));
         const box = rows.find((r) => r.kind === 'master');
         const boxH = box
           ? Math.max(
@@ -415,7 +423,7 @@ export class SelectScene extends Phaser.Scene {
     }
     const th = resolveThresholds(level.thresholds);
     const master = this.masterState();
-    const rows = thresholdRows(th, master !== 'none');
+    const rows = thresholdRows(th, master !== 'none', provenOptimum(level.id));
     const tg = this.add.graphics();
     for (const r of rows) {
       if (r.kind === 'master') continue;

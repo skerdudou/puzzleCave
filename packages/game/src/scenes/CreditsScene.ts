@@ -7,7 +7,13 @@ import { syncMusic } from '../music';
 import { COLORS, HEADER_BAND, headerBand, makeButton, px, textStyle } from '../ui';
 
 /** The credits, one under the other (a key of i18n each). */
-export const CREDITS = ['creditMusic', 'creditSfx', 'creditSmoothing', 'creditFont'] as const;
+export const CREDITS = [
+  'creditEngine',
+  'creditMusic',
+  'creditSfx',
+  'creditSmoothing',
+  'creditFont',
+] as const;
 
 /**
  * The credits (main menu › Credits): the music's author asks for them in the game itself

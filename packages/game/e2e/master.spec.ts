@@ -63,7 +63,8 @@ test('master mode: locked before gold, no undo, water drowns, grand master', asy
   const grandMaster = level.thresholds.platinumMoves!;
   expect(rows[2]!.tiers).toEqual([
     { medal: 'master', text: `≤ ${gold} moves` },
-    { medal: 'grandMaster', text: `≤ ${grandMaster} moves` },
+    // pc-31 is proven optimal: grand master is its optimum, "="
+    { medal: 'grandMaster', text: `= ${grandMaster} moves` },
   ]);
   expect(await field(page, 'masterLine')).toBe('');
   await page.keyboard.press('KeyP');

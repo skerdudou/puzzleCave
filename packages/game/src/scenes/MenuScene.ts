@@ -4,6 +4,7 @@ import { app } from '../app';
 import { setDebug } from '../debug';
 import { fullscreenEnv, isFullscreen, offersFullscreen, toggleFullscreen } from '../fullscreen';
 import { t } from '../i18n';
+import { canInstall, onInstallChange, promptInstall } from '../install';
 import { isTouchDevice } from '../touch';
 import { onSceneKeyDown } from '../input/sceneKeys';
 import { konamiEntered } from '../konami';
@@ -92,6 +93,21 @@ export class MenuScene extends Phaser.Scene {
         ).setOrigin(1, 0),
         press: toggleFullscreen,
       });
+    // install as an app (only where the browser offers it: Chrome, Edge; not once installed),
+    // small, in the top left corner (off the menu's column); drawn again when that changes
+    const install = canInstall();
+    if (install) {
+      const press = () => void promptInstall();
+      items.push({
+        id: 'install',
+        button: makeButton(this, px(12), px(12), t('install'), press, 11).setOrigin(0, 0),
+        press,
+      });
+    }
+    this.events.once(
+      'shutdown',
+      onInstallChange(() => this.scene.restart()),
+    );
     const focus = new KeyFocus(items);
     const konami = new KonamiCode();
     // arrows or Tab, then Enter; Enter alone plays
@@ -120,6 +136,7 @@ export class MenuScene extends Phaser.Scene {
       buttonWidths,
       versionLine: versionLine.text,
       fullscreenOffered: fullscreen,
+      installOffered: install,
     });
   }
 }

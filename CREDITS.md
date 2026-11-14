@@ -3,6 +3,9 @@
 Also shown in the game (main menu › Credits): the music's author asks for credits in the game
 itself.
 
+- Game engine: Phaser — Richard Davey, Phaser Studio Inc., MIT license
+  (https://phaser.io, https://github.com/phaserjs/phaser).
+
 - Music (not covered by the code's GPL license):
   - "RPG Battle Climax" — Eric Matyas, www.soundimage.org
   - "Self Destruct Sequence" — Eric Matyas, www.soundimage.org

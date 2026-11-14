@@ -14,7 +14,15 @@ import { formatTime } from '../format';
 import { t, type MessageKey } from '../i18n';
 import { isTouchDevice } from '../touch';
 import { onSceneKeyDown } from '../input/sceneKeys';
-import { chapters, hasMaster, levelById, levelTitle, locate, masterState } from '../levels';
+import {
+  chapters,
+  hasMaster,
+  levelById,
+  levelTitle,
+  locate,
+  masterState,
+  provenOptimum,
+} from '../levels';
 import {
   masterLineText,
   masterMedalName,
@@ -94,7 +102,7 @@ export class ResultScene extends Phaser.Scene {
     const g = this.add.graphics();
     const th = resolveThresholds(level.thresholds);
     const master = hasMaster(levelId);
-    const rows = thresholdRows(th, master);
+    const rows = thresholdRows(th, master, provenOptimum(levelId));
     // each row's best medal held: this run's, or the saved one when the run did worse
     const plan = planReveal({
       award,

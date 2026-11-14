@@ -14,6 +14,7 @@ import { ImportReplayScene } from './scenes/ImportReplayScene';
 import { app } from './app';
 import { t } from './i18n';
 import { showNotice } from './notice';
+import { watchInstall } from './install';
 import { installBackButton } from './backButton';
 import { textBoxes, type TextBox } from './debug';
 import { showResumeBox, startUpdates } from './pwa';
@@ -29,6 +30,8 @@ const ratio = () => window.devicePixelRatio || 1;
 const e2eFps = Number(import.meta.env.VITE_E2E_FPS) || 0;
 
 app.init();
+// the browser's install offer, for the menu's button (it may come before the game exists)
+watchInstall();
 // back from an update's reload: "Updating…" until the screen it was on shows again
 showResumeBox();
 
