@@ -50,7 +50,7 @@ function row(
  * move limit equal to the level's proven optimum (`optimum`: nobody does fewer) reads "=": the
  * gold of an easy level ("= 26"), its grand master ("= 401 moves"). `bestKnown` (the best known
  * solution's moves, given once the player holds grand master): where it beats the grand master
- * limit, it follows it, "≤ 196 moves (done in 170)".
+ * limit, it follows it, "≤ 196 moves (doable in 170)".
  */
 export function thresholdRows(
   th: Thresholds,

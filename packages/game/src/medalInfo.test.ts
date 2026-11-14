@@ -72,7 +72,7 @@ test('grand master line: the best known solution follows it where it beats the l
   const th = resolveThresholds({ goldMoves: 220, platinumMoves: 196, goldTime: 60 });
   expect(thresholdRows(th, true, undefined, 170)[2]!.tiers).toEqual([
     { medal: 'master', text: '≤ 220 moves' },
-    { medal: 'grandMaster', text: '≤ 196 moves (done in 170)' },
+    { medal: 'grandMaster', text: '≤ 196 moves (doable in 170)' },
   ]);
   // not given (grand master not held), or no better than the limit: the plain limit
   expect(thresholdRows(th, true)[2]!.tiers[1]!.text).toBe('≤ 196 moves');
@@ -80,7 +80,7 @@ test('grand master line: the best known solution follows it where it beats the l
   setLang('fr');
   try {
     expect(thresholdRows(th, true, undefined, 170)[2]!.tiers[1]!.text).toBe(
-      '≤ 196 coups (déjà fait en 170)',
+      '≤ 196 coups (faisable en 170)',
     );
   } finally {
     setLang('en');
