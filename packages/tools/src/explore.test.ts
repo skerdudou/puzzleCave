@@ -41,6 +41,11 @@ test('explore arguments', () => {
       totalMemoryMb: undefined,
       save: undefined,
       from: undefined,
+      rails: false,
+      railsOnly: false,
+      railsStates: 20_000_000,
+      railsMemoryMb: 4000,
+      railsTimeoutMs: undefined,
       apply: false,
     },
   });
@@ -113,6 +118,11 @@ test('explore arguments', () => {
       totalMemoryMb: 8000,
       save: 'out',
       from: 'best',
+      rails: false,
+      railsOnly: false,
+      railsStates: 20_000_000,
+      railsMemoryMb: 4000,
+      railsTimeoutMs: undefined,
       apply: true,
     },
   });
@@ -147,8 +157,51 @@ const opts: ExploreCommandOptions = {
   seed: 1,
   maxMemoryMb: 256,
   workers: 1,
+  rails: false,
+  railsOnly: false,
+  railsStates: 20_000_000,
+  railsMemoryMb: 1024,
   apply: false,
 };
+
+test('--rails, --rails-only and their limits', () => {
+  const ok = parseExploreArgs([
+    'pc-11',
+    '--rails',
+    '--rails-states',
+    '5000',
+    '--rails-timeout',
+    '30',
+  ]);
+  expect(ok).toMatchObject({
+    opts: { rails: true, railsOnly: false, railsStates: 5000, railsTimeoutMs: 30_000 },
+  });
+  expect(parseExploreArgs(['pc-11'])).toMatchObject({
+    opts: { rails: false, railsOnly: false, railsStates: 20_000_000, railsMemoryMb: 4000 },
+  });
+  expect(parseExploreArgs(['pc-11', '--rails', '--rails-only'])).toHaveProperty('error');
+  expect(parseExploreArgs(['pc-11', '--rails-states', '0'])).toHaveProperty('error');
+  expect(parseExploreArgs(['pc-11', '--rails-timeout', '0'])).toHaveProperty('error');
+});
+
+test('--rails-only: the rails pass alone shortens the walking, saved like the rounds', async () => {
+  const dir = join(tmp, 'levels-rails');
+  mkdirSync(join(dir, 'solutions'), { recursive: true });
+  for (const f of ['pc-01.tmx', 'tileset.tsx']) copyFileSync(join(LEVELS_DIR, f), join(dir, f));
+  // the 26-move optimum with a detour (right and back again)
+  writeFileSync(join(dir, 'solutions', 'pc-01.txt'), 'RLRRRRRRLDDDRRLLLLLLDDRRRRRR\n');
+  const out = join(tmp, 'out-rails');
+  const r = await exploreCommand(dir, ['pc-01'], { ...opts, railsOnly: true, save: out });
+  expect(r.ok).toBe(true);
+  // keys and doors restricted: 28 → 26 and certified on its rails; then the plain rails
+  expect(r.lines[0]).toMatch(
+    /^pc-01: rails \(keys\): 28 → 26 moves, searched back to cut 0\/26 \(optimal on its own rails\)/,
+  );
+  expect(r.lines[1]).toMatch(/^pc-01: rails: 26 → 26 moves, searched back to cut 0\/26/);
+  // no rounds
+  expect(r.lines.some((l) => / round\(s\)/.test(l))).toBe(false);
+  expect(parseMoves(readFileSync(join(out, 'pc-01-26.txt'), 'utf8'))).toHaveLength(26);
+});
 
 test('pc-01: a longer saved solution is beaten, saved and applied with its lower bound', async () => {
   const dir = join(tmp, 'levels');

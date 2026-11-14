@@ -66,6 +66,7 @@ export {
   type ExploreResult,
   type Unit,
 } from './planner/explore';
+export { railsPass, type RailsOptions, type RailsResult } from './planner/rails';
 export { DeadlockAnalysis, type DeadReason, type ExitEntrance } from './deadlock';
 // building blocks of external searches (long-run mode in @puzzlecave/tools)
 export { CompactBound } from './compactBound';
