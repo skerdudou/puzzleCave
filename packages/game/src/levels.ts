@@ -41,10 +41,17 @@ export function hasMaster(id: string): boolean {
   return pos !== null && hasMasterMode(chapters[pos.chapterIndex]);
 }
 
-/** master mode of a level: absent from its chapter, locked (no gold yet) or open */
-export function masterState(id: string, rec: LevelRecord | undefined): 'none' | 'locked' | 'open' {
+/**
+ * master mode of a level: absent from its chapter, locked (no gold yet) or open; always open with
+ * `open` (app.masterOpen: author mode)
+ */
+export function masterState(
+  id: string,
+  rec: LevelRecord | undefined,
+  open = false,
+): 'none' | 'locked' | 'open' {
   if (!hasMaster(id)) return 'none';
-  return isMasterUnlocked(rec) ? 'open' : 'locked';
+  return open || isMasterUnlocked(rec) ? 'open' : 'locked';
 }
 
 export function locate(id: string): { chapterIndex: number; levelIndex: number } | null {

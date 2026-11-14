@@ -140,3 +140,11 @@ test('masterStatus: none, locked, not yet, best master run', () => {
   // a master run above gold: best run, no medal
   expect(masterStatus(run, true)).toEqual({ kind: 'best', moves: 41, timeMs: 12_340 });
 });
+
+test('masterStatus in author mode: never locked, still none where the chapter has no master mode', () => {
+  expect(masterStatus(undefined, true, true)).toEqual({ kind: 'notYet' });
+  expect(masterStatus({ completed: true, medals: { moves: 'silver' } }, true, true)).toEqual({
+    kind: 'notYet',
+  });
+  expect(masterStatus(undefined, false, true)).toEqual({ kind: 'none' });
+});

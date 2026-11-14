@@ -13,6 +13,11 @@ export const app = {
   data: defaultSave() as SaveData,
   author: false,
   /**
+   * Master mode open on every level, gold or not: author mode, but not in the e2e tests (run as
+   * the release, VITE_E2E=1: they check that it is locked before gold).
+   */
+  masterOpen: false,
+  /**
    * The level last picked on the selection screen (or played): the screen comes back to it from
    * the menu. Not saved: a new visit starts where the progress is.
    */
@@ -23,6 +28,7 @@ export const app = {
     // release never opens author mode (no switch, PREVIEW is the constant false there)
     this.author =
       import.meta.env.DEV || (PREVIEW && previewDevMode(location.search, browserStorage()));
+    this.masterOpen = this.author && import.meta.env.VITE_E2E !== '1';
     setLang(this.data.settings.lang ?? detectLang(navigator.languages ?? []));
     // a save from before the achievements (or of an older game version): what its records
     // already earn, without a toast for each

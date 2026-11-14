@@ -182,7 +182,7 @@ export class SelectScene extends Phaser.Scene {
   /** master mode of the current level: absent from its chapter, locked (no gold yet) or open */
   private masterState(): 'none' | 'locked' | 'open' {
     const id = this.currentId();
-    return masterState(id, app.data.levels[id]);
+    return masterState(id, app.data.levels[id], app.masterOpen);
   }
   private currentId(): string {
     return chapters[this.ci]!.levels[this.li]!;
@@ -447,7 +447,7 @@ export class SelectScene extends Phaser.Scene {
     // master mode: while locked, how to unlock it; else a box with its rules, one line per medal
     // (named when it has room: "Master ≤ 610 moves", else "♛ ≤ 610 moves") and the best master
     // run (named after the medal held), or "not finished yet"
-    const masterText = masterLineText(masterStatus(rec, master !== 'none'));
+    const masterText = masterLineText(masterStatus(rec, master !== 'none', app.masterOpen));
     const masterRow = rows.find((r) => r.kind === 'master');
     const top = y + px(17);
     if (master === 'locked') {

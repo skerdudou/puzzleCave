@@ -171,7 +171,7 @@ export class ResultScene extends Phaser.Scene {
     // master mode, a separate achievement, on its own line: this master run (master or grand
     // master medal), or after a normal run where the player stands in master mode
     if (master && th.grandMasterMoves !== undefined) {
-      const ms = masterStatus(app.data.levels[levelId], true);
+      const ms = masterStatus(app.data.levels[levelId], true, app.masterOpen);
       let text: string;
       if (mode !== 'master' && ms.kind === 'locked') {
         // master mode still locked: how to unlock it, in place of its box
@@ -250,7 +250,8 @@ export class ResultScene extends Phaser.Scene {
     // master mode, as on the select screen (chapter with master mode, gold held), right from the
     // result; after a master run Replay already starts it again, so the button would duplicate it
     const masterBtn =
-      mode !== 'master' && masterState(levelId, app.data.levels[levelId]) === 'open';
+      mode !== 'master' &&
+      masterState(levelId, app.data.levels[levelId], app.masterOpen) === 'open';
     const playMaster = () => this.scene.start('Game', { levelId, mode: 'master' });
     // the run just played, in the replay player (with Save and Export); Escape comes back here
     const watch = () =>

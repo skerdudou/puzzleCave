@@ -78,10 +78,17 @@ export type MasterStatus =
   | { kind: 'notYet' }
   | { kind: 'best'; moves: number; timeMs: number; medal?: MasterMedal };
 
-/** `hasMaster`: the level's chapter has master mode. */
-export function masterStatus(rec: LevelRecord | undefined, hasMaster: boolean): MasterStatus {
+/**
+ * `hasMaster`: the level's chapter has master mode; `open`: never locked (app.masterOpen: author
+ * mode).
+ */
+export function masterStatus(
+  rec: LevelRecord | undefined,
+  hasMaster: boolean,
+  open = false,
+): MasterStatus {
   if (!hasMaster) return { kind: 'none' };
-  if (!isMasterUnlocked(rec)) return { kind: 'locked' };
+  if (!open && !isMasterUnlocked(rec)) return { kind: 'locked' };
   if (rec?.masterBestMoves === undefined || rec.masterBestTimeMs === undefined)
     return { kind: 'notYet' };
   const best: MasterStatus = {
