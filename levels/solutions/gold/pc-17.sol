@@ -1,0 +1,2 @@
+# gold reference — natural solution (106 moves): sweeps the whole top row of keys eastwards first, down the right through doors 12,2/12,4, back west along row 5 and east along row 3, then the waters
+v1:EzMzMzMzMyERISEiAiIiIgAzMzMzAzAxEyEhISERESIAMhEzAAAgMzEwMQIgMDERERExMTM

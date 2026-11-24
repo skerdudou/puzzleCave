@@ -1,0 +1,2 @@
+# gold reference — natural solution (67 moves): both bridges along the bottom row only, no extra fill at (5,3)
+v1:ADMxEhITMgAxITMgAAIREhMzMzMiIiAiIDMDESEzMzMzPw

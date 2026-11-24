@@ -18,14 +18,14 @@ test('no solutions folder: none', () => {
   expect(readSolutions(levelsDir())).toEqual({});
 });
 
-test('the saved solutions by id; not the .prev.txt, the sub-folders or other files', () => {
+test('the saved solutions by id; not the .prev.sol, the sub-folders or other files', () => {
   const d = levelsDir();
   const s = join(d, 'solutions');
   mkdirSync(join(s, 'gold'), { recursive: true });
-  writeFileSync(join(s, 'pc-01.txt'), '# optimal (proven)\nRRDD');
-  writeFileSync(join(s, 'pc-02.txt'), '# best known\nLLUU');
-  writeFileSync(join(s, 'pc-02.prev.txt'), '# optimal (proven)\nLU');
-  writeFileSync(join(s, 'gold', 'pc-01.txt'), 'RRDDLL');
+  writeFileSync(join(s, 'pc-01.sol'), '# optimal (proven)\nRRDD');
+  writeFileSync(join(s, 'pc-02.sol'), '# best known\nLLUU');
+  writeFileSync(join(s, 'pc-02.prev.sol'), '# optimal (proven)\nLU');
+  writeFileSync(join(s, 'gold', 'pc-01.sol'), 'RRDDLL');
   writeFileSync(join(s, 'notes.md'), 'x');
   expect(readSolutions(d)).toEqual({
     'pc-01': '# optimal (proven)\nRRDD',
@@ -37,9 +37,9 @@ test('proven optima: the moves of the solutions marked "# optimal (proven)" only
   const d = levelsDir();
   const s = join(d, 'solutions');
   mkdirSync(s, { recursive: true });
-  writeFileSync(join(s, 'pc-01.txt'), '# optimal (proven)\r\nRRDD\r\nLU\r\n');
-  writeFileSync(join(s, 'pc-02.txt'), '# best known — not proven optimal\nLLUU');
-  writeFileSync(join(s, 'pc-03.prev.txt'), '# optimal (proven)\nLU');
+  writeFileSync(join(s, 'pc-01.sol'), '# optimal (proven)\r\nRRDD\r\nLU\r\n');
+  writeFileSync(join(s, 'pc-02.sol'), '# best known — not proven optimal\nLLUU');
+  writeFileSync(join(s, 'pc-03.prev.sol'), '# optimal (proven)\nLU');
   expect(provenOptima(d)).toEqual({ 'pc-01': 6 });
 });
 
@@ -47,9 +47,9 @@ test('best known: the moves of every saved solution, proven optimal or not', () 
   const d = levelsDir();
   const s = join(d, 'solutions');
   mkdirSync(s, { recursive: true });
-  writeFileSync(join(s, 'pc-01.txt'), '# optimal (proven)\nRRDD');
-  writeFileSync(join(s, 'pc-02.txt'), '# best known — not proven optimal\nLLUU\nRR');
-  writeFileSync(join(s, 'pc-03.prev.txt'), '# optimal (proven)\nLU');
+  writeFileSync(join(s, 'pc-01.sol'), '# optimal (proven)\nRRDD');
+  writeFileSync(join(s, 'pc-02.sol'), '# best known — not proven optimal\nLLUU\nRR');
+  writeFileSync(join(s, 'pc-03.prev.sol'), '# optimal (proven)\nLU');
   expect(bestKnownMoves(d)).toEqual({ 'pc-01': 4, 'pc-02': 6 });
 });
 

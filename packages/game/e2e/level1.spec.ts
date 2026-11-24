@@ -1,11 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
-import { parseMoves } from '@puzzlecave/core';
+import { parseSolution } from '@puzzlecave/core';
 
-const solution = parseMoves(
+const solution = parseSolution(
   readFileSync(
-    fileURLToPath(new URL('../../../levels/solutions/pc-01.txt', import.meta.url)),
+    fileURLToPath(new URL('../../../levels/solutions/pc-01.sol', import.meta.url)),
     'utf8',
   ),
 );

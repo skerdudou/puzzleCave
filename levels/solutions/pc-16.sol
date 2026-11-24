@@ -1,0 +1,2 @@
+# best known — not proven optimal (proven lower bound ≥ 46)
+v1:EzMzMzMTIRERIgAyESIiIgAzACIzMyIRIhEzMzMzAAAgMzEyADMzAzERERIgIxMwAAACISIRERExMxM

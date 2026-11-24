@@ -6,7 +6,7 @@ import {
   DeadlockAnalysis,
   deriveStages,
   initialState,
-  parseMoves,
+  parseSolution,
   solve,
   step,
   type Dir,
@@ -382,14 +382,14 @@ export function difficultyCommand(
       ok = false;
       continue;
     }
-    const file = join(dir, 'solutions', `${id}.txt`);
+    const file = join(dir, 'solutions', `${id}.sol`);
     if (!existsSync(file)) {
       lines.push(`${id}: no saved solution — skipped`);
       continue;
     }
     try {
       const t0 = performance.now();
-      const f = measureDifficulty(level, parseMoves(readFileSync(file, 'utf8')), o);
+      const f = measureDifficulty(level, parseSolution(readFileSync(file, 'utf8')), o);
       rows.push({ id, f, score: difficultyScore(f) });
       log(`${id} measured in ${((performance.now() - t0) / 1000).toFixed(1)} s`);
     } catch (err) {

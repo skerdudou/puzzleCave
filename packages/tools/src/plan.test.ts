@@ -13,7 +13,7 @@ test('applySolution keeps the lower bound proven for the replaced solution', () 
     // gold already below: the .tmx is never touched
     const level = { ...base, thresholds: { ...base.thresholds, goldMoves: 1, goldTime: 9 } };
     mkdirSync(join(dir, 'solutions'));
-    const file = join(dir, 'solutions', `${level.id}.txt`);
+    const file = join(dir, 'solutions', `${level.id}.sol`);
     writeFileSync(file, '# best known — not proven optimal (proven lower bound ≥ 4)\nRRRRRLR\n');
     expect(applySolution(dir, level, ['right', 'right', 'right', 'right', 'right'], 0)).toEqual([
       `${level.id}: solution written (5 moves)`,

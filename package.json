@@ -25,6 +25,7 @@
     "certify": "tsx packages/tools/src/cli.ts certify",
     "explore": "tsx packages/tools/src/cli.ts explore",
     "times": "tsx packages/tools/src/cli.ts times",
+    "solution": "tsx packages/tools/src/cli.ts solution",
     "difficulty": "tsx packages/tools/src/cli.ts difficulty",
     "dev": "npm run dev -w @puzzlecave/game",
     "build": "npm run build -w @puzzlecave/game",

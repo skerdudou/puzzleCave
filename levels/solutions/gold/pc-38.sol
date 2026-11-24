@@ -1,0 +1,2 @@
+# gold reference — natural solution (58 moves): right-hand key first, then the lower door (9,8) instead of (9,7)
+v1:EzETMzMAMAITEiIxEiIRITMCIiEgABETMzMzATM

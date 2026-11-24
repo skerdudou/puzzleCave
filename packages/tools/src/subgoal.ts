@@ -11,7 +11,7 @@ import {
   formatStage,
   formatStages,
   improveLevel,
-  parseMoves,
+  parseSolution,
   parseStages,
   runStages,
   type Dir,
@@ -91,11 +91,11 @@ export function subgoalCommand(
   if (o.fromSolution) {
     if (existsSync(file))
       return { ok: false, lines: [`${file}: already exists (not overwritten)`] };
-    const sol = join(dir, 'solutions', `${id}.txt`);
+    const sol = join(dir, 'solutions', `${id}.sol`);
     if (!existsSync(sol)) return { ok: false, lines: [`${id}: no saved solution`] };
     let stages;
     try {
-      stages = deriveStages(level, parseMoves(readFileSync(sol, 'utf8')));
+      stages = deriveStages(level, parseSolution(readFileSync(sol, 'utf8')));
     } catch (err) {
       return { ok: false, lines: [`${id}: saved solution: ${(err as Error).message}`] };
     }

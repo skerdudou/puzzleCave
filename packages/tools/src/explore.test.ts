@@ -10,7 +10,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, expect, test } from 'vitest';
-import { parseMoves } from '@puzzlecave/core';
+import { parseMoves, parseSolution } from '@puzzlecave/core';
 import { exploreCommand, parseExploreArgs, type ExploreCommandOptions } from './explore';
 import { LEVELS_DIR } from './paths';
 
@@ -189,7 +189,7 @@ test('--rails-only: the rails pass alone shortens the walking, saved like the ro
   mkdirSync(join(dir, 'solutions'), { recursive: true });
   for (const f of ['pc-01.tmx', 'tileset.tsx']) copyFileSync(join(LEVELS_DIR, f), join(dir, f));
   // the 26-move optimum with a detour (right and back again)
-  writeFileSync(join(dir, 'solutions', 'pc-01.txt'), 'RLRRRRRRLDDDRRLLLLLLDDRRRRRR\n');
+  writeFileSync(join(dir, 'solutions', 'pc-01.sol'), 'RLRRRRRRLDDDRRLLLLLLDDRRRRRR\n');
   const out = join(tmp, 'out-rails');
   const r = await exploreCommand(dir, ['pc-01'], { ...opts, railsOnly: true, save: out });
   expect(r.ok).toBe(true);
@@ -207,7 +207,7 @@ test('pc-01: a longer saved solution is beaten, saved and applied with its lower
   const dir = join(tmp, 'levels');
   mkdirSync(join(dir, 'solutions'), { recursive: true });
   for (const f of ['pc-01.tmx', 'tileset.tsx']) copyFileSync(join(LEVELS_DIR, f), join(dir, f));
-  const file = join(dir, 'solutions', 'pc-01.txt');
+  const file = join(dir, 'solutions', 'pc-01.sol');
   // the 26-move optimum with a detour (right and back again)
   writeFileSync(
     file,
@@ -224,7 +224,7 @@ test('pc-01: a longer saved solution is beaten, saved and applied with its lower
   expect(parseMoves(readFileSync(join(out, 'pc-01-26.txt'), 'utf8'))).toHaveLength(26);
   const saved = readFileSync(file, 'utf8');
   expect(saved.split('\n')[0]).toBe('# best known — not proven optimal (proven lower bound ≥ 24)');
-  expect(parseMoves(saved)).toHaveLength(26);
+  expect(parseSolution(saved)).toHaveLength(26);
   // goldMoves (26) is not lowered by an equal length
   expect(readFileSync(join(dir, 'pc-01.tmx'), 'utf8')).toMatch(
     /name="goldMoves" type="int" value="26"/,
@@ -248,7 +248,7 @@ test('--from: starts from the shortest winning <id>-<n>.txt that beats the saved
   const dir = join(tmp, 'levels-from');
   mkdirSync(join(dir, 'solutions'), { recursive: true });
   for (const f of ['pc-01.tmx', 'tileset.tsx']) copyFileSync(join(LEVELS_DIR, f), join(dir, f));
-  writeFileSync(join(dir, 'solutions', 'pc-01.txt'), 'RLRRRRRRLDDDRRLLLLLLDDRRRRRR\n');
+  writeFileSync(join(dir, 'solutions', 'pc-01.sol'), 'RLRRRRRRLDDDRRLLLLLLDDRRRRRR\n');
   const from = join(tmp, 'from');
   mkdirSync(from);
   writeFileSync(join(from, 'pc-01-26.txt'), 'RRRRRRLDDDRRLLLLLLDDRRRRRR\n');

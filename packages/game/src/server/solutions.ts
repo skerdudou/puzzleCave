@@ -1,9 +1,9 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { parseMoves } from '@puzzlecave/core';
+import { parseSolution } from '@puzzlecave/core';
 
-/** A saved solution: levels/solutions/<id>.txt (not the <id>.prev.txt kept during an optimization). */
-const SOLUTION_FILE = /^([a-z0-9][a-z0-9-]*)\.txt$/;
+/** A saved solution: levels/solutions/<id>.sol (not the <id>.prev.sol kept during an optimization). */
+const SOLUTION_FILE = /^([a-z0-9][a-z0-9-]*)\.sol$/;
 
 /** The saved solutions of the levels folder, as their text by level id (empty: none saved). */
 export function readSolutions(levelsDir: string): Record<string, string> {
@@ -12,7 +12,7 @@ export function readSolutions(levelsDir: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const f of readdirSync(dir).sort()) {
     const m = SOLUTION_FILE.exec(f);
-    if (m && !f.endsWith('.prev.txt')) out[m[1]!] = readFileSync(join(dir, f), 'utf8');
+    if (m && !f.endsWith('.prev.sol')) out[m[1]!] = readFileSync(join(dir, f), 'utf8');
   }
   return out;
 }
@@ -28,7 +28,7 @@ export function provenOptima(levelsDir: string): Record<string, number> {
   const out: Record<string, number> = {};
   for (const [id, text] of Object.entries(readSolutions(levelsDir))) {
     const header = text.split(/\r?\n/).find((l) => l.startsWith('#'));
-    if (header?.trim() === PROVEN) out[id] = parseMoves(text).length;
+    if (header?.trim() === PROVEN) out[id] = parseSolution(text).length;
   }
   return out;
 }
@@ -41,6 +41,6 @@ export function provenOptima(levelsDir: string): Record<string, number> {
 export function bestKnownMoves(levelsDir: string): Record<string, number> {
   const out: Record<string, number> = {};
   for (const [id, text] of Object.entries(readSolutions(levelsDir)))
-    out[id] = parseMoves(text).length;
+    out[id] = parseSolution(text).length;
   return out;
 }

@@ -1,6 +1,6 @@
 // Client of the /__pc/* routes of the development server (absent from the build), and the saved
 // solutions bundled in the preview of main.
-import { parseMoves, type Dir } from '@puzzlecave/core';
+import { parseSolution, type Dir } from '@puzzlecave/core';
 import { app } from '../app';
 import { PREVIEW } from '../preview';
 import type { JobInfo } from './jobText';
@@ -21,10 +21,10 @@ export interface SavedSolution {
   header: string;
 }
 
-/** A solution file's text (levels/solutions/<id>.txt): its moves and its header. */
+/** A solution file's text (levels/solutions/<id>.sol): its moves and its header. */
 export function parseSavedSolution(text: string): SavedSolution {
   return {
-    moves: parseMoves(text),
+    moves: parseSolution(text),
     header: text.split(/\r?\n/).find((l) => l.startsWith('#')) ?? '',
   };
 }
@@ -92,7 +92,7 @@ export async function fetchSolution(levelId: string): Promise<SavedSolution | nu
     const r = await call('GET', `/__pc/solution/${encodeURIComponent(levelId)}`);
     if (!r.ok) return null;
     const b = (await r.json()) as { text: string; header: string };
-    return { moves: parseMoves(b.text), header: b.header };
+    return { moves: parseSolution(b.text), header: b.header };
   } catch {
     return null;
   }

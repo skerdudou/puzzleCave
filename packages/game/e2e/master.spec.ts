@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
-import { initialState, parseMoves, replay, step, type Dir } from '@puzzlecave/core';
+import { initialState, replay, step, type Dir, parseSolution } from '@puzzlecave/core';
 import { parseTmx } from '@puzzlecave/tiled';
 import { FRAME_MS } from './fps';
 import { goToLevel } from './select';
@@ -12,7 +12,7 @@ const ID = 'pc-31';
 const levelsDir = new URL('../../../levels/', import.meta.url);
 const read = (name: string) => readFileSync(fileURLToPath(new URL(name, levelsDir)), 'utf8');
 const level = parseTmx(read(`${ID}.tmx`), ID, (src) => read(src));
-const solution = parseMoves(read(`solutions/${ID}.txt`));
+const solution = parseSolution(read(`solutions/${ID}.sol`));
 
 /** a prefix of the solution then one move that walks into water (master mode: drowned) */
 function drowning(): Dir[] {
@@ -147,7 +147,7 @@ test('result screen: a master button, only where master mode is open', async ({ 
   // Easy chapter: no master mode, no button (P does nothing)
   await page.keyboard.press('Enter');
   await expect.poll(() => field(page, 'scene')).toBe('Game');
-  await play(page, parseMoves(read('solutions/pc-01.txt')));
+  await play(page, parseSolution(read('solutions/pc-01.sol')));
   await expect.poll(() => field(page, 'scene')).toBe('Result');
   expect(await field(page, 'resultMasterButton')).toBe(false);
   await page.keyboard.press('KeyP');
@@ -336,7 +336,7 @@ test('master mode: master within gold, then grand master, which a later master r
   page,
 }) => {
   // the gold reference route: above platinumMoves, within goldMoves, safe in master mode
-  const goldRoute = parseMoves(read(`solutions/gold/${ID}.txt`));
+  const goldRoute = parseSolution(read(`solutions/gold/${ID}.sol`));
   expect(goldRoute.length).toBeGreaterThan(level.thresholds.platinumMoves!);
   expect(goldRoute.length).toBeLessThanOrEqual(level.thresholds.goldMoves!);
   expect(replay(level, goldRoute, 'master').status).toBe('won');

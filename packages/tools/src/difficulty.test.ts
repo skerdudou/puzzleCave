@@ -159,8 +159,8 @@ test('command: levels sorted by score with their chapter, missing solutions repo
     fromAscii(['@...E'], { id: 'walk', name: 'Walk' }),
     fromAscii(['@E'], { id: 'none' }),
   ]);
-  writeFileSync(join(dir, 'solutions', 'hard.txt'), '# optimal (proven)\nRRRR\n');
-  writeFileSync(join(dir, 'solutions', 'walk.txt'), 'RRRR\n');
+  writeFileSync(join(dir, 'solutions', 'hard.sol'), '# optimal (proven)\nRRRR\n');
+  writeFileSync(join(dir, 'solutions', 'walk.sol'), 'RRRR\n');
   const r = difficultyCommand(dir, { ids: 'all' });
   expect(r.ok).toBe(true);
   const text = r.lines.join('\n');

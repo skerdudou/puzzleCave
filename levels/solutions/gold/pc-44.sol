@@ -1,0 +1,2 @@
+# gold reference — natural solution (321 moves): the fins in order of the doors, each block carried whole through the gates (tail blocks last, to the gill and the second dorsal fin)
+v1:MzERMzMDAAACISIgMAAjERExERIgAwAgMxMAAAMhERMxEREiIiADAzEREREQAAAzACMAAiERERMSAAAzAjACIRERExIgIREjAAAzMwICESEzAAAiITAxESEzMTACIiICAzAxESEzMDEREyAAAAIiIiIiADEhMzMwMREhMzEwAgMwIiIiIiIRMCAzMTAAIDMDMiETAgMzEwADIRERETMwMz8

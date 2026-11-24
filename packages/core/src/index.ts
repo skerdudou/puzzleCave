@@ -4,6 +4,7 @@ export * from './step';
 export * from './ascii';
 export * from './session';
 export * from './replay';
+export * from './solutionFile';
 export * from './validate';
 export * from './medals';
 export * from './progress';
