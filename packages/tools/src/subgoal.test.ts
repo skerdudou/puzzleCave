@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, expect, test } from 'vitest';
-import { parseMoves } from '@puzzlecave/core';
+import { parseMoves, parseSolution } from '@puzzlecave/core';
 import { LEVELS_DIR } from './paths';
 import { parseSubgoalArgs, subgoalCommand } from './subgoal';
 
@@ -67,7 +67,7 @@ const opts = {
 test('pc-12: stages derived from the saved solution rebuild a winning solution as short', () => {
   const file = join(tmp, 'pc-12.txt');
   const r = subgoalCommand(LEVELS_DIR, 'pc-12', file, { ...opts, fromSolution: true });
-  const saved = parseMoves(readFileSync(join(LEVELS_DIR, 'solutions', 'pc-12.txt'), 'utf8'));
+  const saved = parseSolution(readFileSync(join(LEVELS_DIR, 'solutions', 'pc-12.sol'), 'utf8'));
   expect(r.ok).toBe(true);
   const m = /^pc-12: (\d+) moves from \d+ stages, wins/.exec(r.lines.at(-1)!);
   expect(Number(m?.[1])).toBeLessThanOrEqual(saved.length);

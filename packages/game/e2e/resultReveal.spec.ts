@@ -1,12 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
-import { parseMoves, type Dir } from '@puzzlecave/core';
+import { type Dir, parseSolution } from '@puzzlecave/core';
 import { encodedSave } from './storedSave';
 
 const levelsDir = new URL('../../../levels/', import.meta.url);
 const solutionOf = (id: string) =>
-  parseMoves(readFileSync(fileURLToPath(new URL(`solutions/${id}.txt`, levelsDir)), 'utf8'));
+  parseSolution(readFileSync(fileURLToPath(new URL(`solutions/${id}.sol`, levelsDir)), 'utf8'));
 const KEY = { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' } as const;
 const debug = (page: Page) =>
   page.evaluate(() => (window as unknown as { __pc?: Record<string, unknown> }).__pc ?? {});
@@ -138,8 +138,8 @@ for (const [name, size] of Object.entries(SIZES)) {
       await page.screenshot({ path: `${shots}master-${name}-select-pc31.png` });
 
       // master: the gold reference route (above platinumMoves)
-      const goldRoute = parseMoves(
-        readFileSync(fileURLToPath(new URL('solutions/gold/pc-31.txt', levelsDir)), 'utf8'),
+      const goldRoute = parseSolution(
+        readFileSync(fileURLToPath(new URL('solutions/gold/pc-31.sol', levelsDir)), 'utf8'),
       );
       await page.keyboard.press('KeyP');
       await expect.poll(() => field(page, 'scene')).toBe('Game');

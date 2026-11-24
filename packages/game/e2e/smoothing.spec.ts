@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
-import { initialState, parseMoves, step, type Dir, type GameState } from '@puzzlecave/core';
+import { initialState, step, type Dir, type GameState, parseSolution } from '@puzzlecave/core';
 import { loadPack } from '@puzzlecave/tiled';
 import { wallMask, wallTexture } from '../src/render/autotile';
 import { shoreAt, shoreTexture } from '../src/render/shore';
@@ -26,10 +26,10 @@ const levelsDir = fileURLToPath(new URL('../../../levels', import.meta.url));
 const sinking = (() => {
   let best: { id: string; moves: Dir[]; after: GameState } | null = null;
   for (const level of loadPack(levelsDir).levels) {
-    const file = `${levelsDir}/solutions/${level.id}.txt`;
+    const file = `${levelsDir}/solutions/${level.id}.sol`;
     if (!existsSync(file)) continue;
     let s = initialState(level);
-    const moves = parseMoves(readFileSync(file, 'utf8'));
+    const moves = parseSolution(readFileSync(file, 'utf8'));
     for (let i = 0; i < moves.length && (!best || i < best.moves.length); i++) {
       const r = step(s, moves[i]!);
       s = r.state;

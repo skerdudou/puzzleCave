@@ -164,8 +164,8 @@ test('command: table, --apply writes a missing goldTime, --force replaces one', 
     fromAscii(['@.E'], { id: 'b' }),
     fromAscii(['@E'], { id: 'c' }),
   ]);
-  writeFileSync(join(dir, 'solutions', 'a.txt'), '# optimal (proven)\nRRRR\n');
-  writeFileSync(join(dir, 'solutions', 'b.txt'), 'RR\n');
+  writeFileSync(join(dir, 'solutions', 'a.sol'), '# optimal (proven)\nRRRR\n');
+  writeFileSync(join(dir, 'solutions', 'b.sol'), 'RR\n');
   const tmxB = join(dir, 'b.tmx');
   writeFileSync(tmxB, setMapProperty(readFileSync(tmxB, 'utf8'), 'goldTime', 999));
   const expected = goldTimeFor(feat({ moves: 4 }));
@@ -192,9 +192,9 @@ test('command: the gold reference solution first, else the saved one scaled to g
     fromAscii(['@.....E'], { id: 'p', thresholds: { goldMoves: 9 } }),
   ]);
   mkdirSync(join(dir, 'solutions', 'gold'));
-  writeFileSync(join(dir, 'solutions', 'g.txt'), 'RRRRRR\n');
-  writeFileSync(join(dir, 'solutions', 'gold', 'g.txt'), 'RRRLRRRR\n');
-  writeFileSync(join(dir, 'solutions', 'p.txt'), 'RRRRRR\n');
+  writeFileSync(join(dir, 'solutions', 'g.sol'), 'RRRRRR\n');
+  writeFileSync(join(dir, 'solutions', 'gold', 'g.sol'), 'RRRLRRRR\n');
+  writeFileSync(join(dir, 'solutions', 'p.sol'), 'RRRRRR\n');
   timesCommand(dir, { ids: 'all', apply: true, force: false });
   const gold = goldTimeFor(feat({ moves: 8, turns: 2 }));
   const scaled = niceSeconds(estimateTime(feat({ moves: 6, heldRuns: 1, heldMoves: 6 })) * 1.5);

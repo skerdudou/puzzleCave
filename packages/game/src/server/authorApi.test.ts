@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, existsSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, test } from 'vitest';
-import { fromAscii } from '@puzzlecave/core';
+import { fromAscii, solutionToLetters } from '@puzzlecave/core';
 import {
   createAuthorApi,
   improveArgs,
@@ -51,7 +51,7 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-const file = () => join(dir, 'solutions', 'lvl.txt');
+const file = () => join(dir, 'solutions', 'lvl.sol');
 
 test('GET solution: 404 if missing, otherwise text, moves and header', async () => {
   const api = make();
@@ -91,7 +91,9 @@ test('valid POST: writes with the designer header and launches improve', async (
   const r = await api.handle('POST', '/__pc/solution/lvl', { moves: 'r d r' });
   expect(r.status).toBe(200);
   expect(r.body).toMatchObject({ saved: true, moves: 3 });
-  expect(readFileSync(file(), 'utf8')).toBe('# designer solution (not optimized)\nRDR\n');
+  expect(solutionToLetters(readFileSync(file(), 'utf8'))).toBe(
+    '# designer solution (not optimized)\nRDR\n',
+  );
   expect(launches).toHaveLength(1);
   expect(launches[0]).toMatchObject({ id: 'lvl', timeoutS: 30 });
   const jobId = (r.body as { jobId: string }).jobId;
@@ -121,10 +123,12 @@ test('saved solution shorter or equal: refused unless forced', async () => {
   expect(same.body).toMatchObject({ error: 'not-shorter', existing: 3 });
   const longer = await api.handle('POST', '/__pc/solution/lvl', { moves: 'RLRDR' });
   expect(longer.status).toBe(409);
-  expect(readFileSync(file(), 'utf8')).toBe('# optimal (proven)\nRDR\n');
+  expect(solutionToLetters(readFileSync(file(), 'utf8'))).toBe('# optimal (proven)\nRDR\n');
   const forced = await api.handle('POST', '/__pc/solution/lvl', { moves: 'RLRDR', force: true });
   expect(forced.status).toBe(200);
-  expect(readFileSync(file(), 'utf8')).toBe('# designer solution (not optimized)\nRLRDR\n');
+  expect(solutionToLetters(readFileSync(file(), 'utf8'))).toBe(
+    '# designer solution (not optimized)\nRLRDR\n',
+  );
 });
 
 test('saved solution longer: replaced without force', async () => {

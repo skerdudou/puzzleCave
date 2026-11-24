@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
-import { parseMoves, type Dir } from '@puzzlecave/core';
+import { type Dir, parseSolution } from '@puzzlecave/core';
 import { loadPack } from '@puzzlecave/tiled';
 import { goToLevel } from './select';
 import { encodedSave } from './storedSave';
@@ -195,7 +195,7 @@ for (const { width, height, touch, langs } of VIEWS) {
         await page.keyboard.press('Enter');
         for (const again of [false, true]) {
           await sceneIs(page, 'Game');
-          for (const d of parseMoves(read('solutions/pc-01.txt')) as Dir[])
+          for (const d of parseSolution(read('solutions/pc-01.sol')) as Dir[])
             await page.keyboard.press(KEY[d]);
           await sceneIs(page, 'Result');
           await expect.poll(() => field(page, 'resultAnimDone'), { timeout: 10_000 }).toBe(true);
@@ -209,7 +209,7 @@ for (const { width, height, touch, langs } of VIEWS) {
         await goToLevel(page, 'pc-40');
         await page.keyboard.press('Enter');
         await sceneIs(page, 'Game');
-        for (const d of parseMoves(read('solutions/pc-40.txt')) as Dir[])
+        for (const d of parseSolution(read('solutions/pc-40.sol')) as Dir[])
           await page.keyboard.press(KEY[d]);
         await sceneIs(page, 'Result');
         await expect.poll(() => field(page, 'resultAnimDone'), { timeout: 10_000 }).toBe(true);

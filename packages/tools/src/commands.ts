@@ -2,9 +2,9 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { freemem, totalmem } from 'node:os';
 import { join } from 'node:path';
 import {
-  formatMoves,
+  formatSolution,
   normalizeMoves,
-  parseMoves,
+  parseSolution,
   replay,
   solve,
   type Dir,
@@ -17,7 +17,7 @@ import { loadPack, setMapProperty } from '@puzzlecave/tiled';
 import { inProcessMemoryMb } from './memory';
 import { goldTimeFor, marginFor, readChapters, solutionFeatures } from './times';
 
-/** first line (a comment, ignored by parseMoves) of a saved solution */
+/** first line (a comment, ignored by parseSolution) of a saved solution */
 export function solutionHeader(proven: boolean, lowerBound: number): string {
   return proven
     ? '# optimal (proven)'
@@ -69,10 +69,10 @@ export function thresholdChanges(
 
 /** moves of the saved solution of a level (without refused moves), if it is readable and wins */
 export function savedWinningMoves(dir: string, level: LevelData): Dir[] | undefined {
-  const file = join(dir, 'solutions', `${level.id}.txt`);
+  const file = join(dir, 'solutions', `${level.id}.sol`);
   if (!existsSync(file)) return undefined;
   try {
-    const r = normalizeMoves(level, parseMoves(readFileSync(file, 'utf8')));
+    const r = normalizeMoves(level, parseSolution(readFileSync(file, 'utf8')));
     return r.status === 'won' ? r.moves : undefined;
   } catch {
     return undefined;
@@ -126,7 +126,7 @@ export function goldTimeChoice(
 
 /**
  * Writes into the level's .tmx the threshold changes of a new best solution `moves` (the one
- * written to solutions/<id>.txt), and goldTime when the level has none (goldTimeChoice;
+ * written to solutions/<id>.sol), and goldTime when the level has none (goldTimeChoice;
  * `previous`: the winning solution saved before this write, if any). Returns the report lines
  * about goldTime (written, or missing).
  */
@@ -183,12 +183,12 @@ export function validateCommand(dir: string): CommandResult {
   const warnings: string[] = [];
   let checked = 0;
   for (const level of pack.levels) {
-    const file = join(dir, 'solutions', `${level.id}.txt`);
+    const file = join(dir, 'solutions', `${level.id}.sol`);
     if (!existsSync(file)) continue;
     checked++;
     try {
       const text = readFileSync(file, 'utf8');
-      const end = replay(level, parseMoves(text));
+      const end = replay(level, parseSolution(text));
       if (end.status !== 'won')
         lines.push(`${level.id}: the solution does not win (status ${end.status})`);
       const p = platinumLimit(level.thresholds);
@@ -216,15 +216,15 @@ export function validateCommand(dir: string): CommandResult {
       lines.push(`${level.id}: unreadable solution — ${(err as Error).message}`);
     }
   }
-  // gold reference solutions (solutions/gold/<id>.txt, for levels whose goldMoves is longer
+  // gold reference solutions (solutions/gold/<id>.sol, for levels whose goldMoves is longer
   // than the saved platinum solution): must win in exactly goldMoves moves
   let golds = 0;
   for (const level of pack.levels) {
-    const file = join(dir, 'solutions', 'gold', `${level.id}.txt`);
+    const file = join(dir, 'solutions', 'gold', `${level.id}.sol`);
     if (!existsSync(file)) continue;
     golds++;
     try {
-      const end = replay(level, parseMoves(readFileSync(file, 'utf8')));
+      const end = replay(level, parseSolution(readFileSync(file, 'utf8')));
       const gold = level.thresholds.goldMoves;
       if (end.status !== 'won')
         lines.push(`${level.id}: the gold reference solution does not win (status ${end.status})`);
@@ -259,7 +259,7 @@ export function validateCommand(dir: string): CommandResult {
 }
 
 /**
- * Archived solutions (solutions/archive/<id>/<moves>-<name>.txt): other noteworthy routes of a
+ * Archived solutions (solutions/archive/<id>/<moves>-<name>.sol): other noteworthy routes of a
  * level, kept for the record (a genuinely different strategy, not a worse variant of the best
  * known one). Each must win in the number of moves its file name starts with; a folder must be
  * a level of the pack. Errors go to `lines`; returns how many were replayed.
@@ -276,12 +276,12 @@ function validateArchive(dir: string, levels: readonly LevelData[], lines: strin
       continue;
     }
     for (const name of readdirSync(join(root, id)).sort()) {
-      if (!name.endsWith('.txt')) continue;
+      if (!name.endsWith('.sol')) continue;
       count++;
       const where = `${id}: archived solution ${name}`;
       const stated = /^(\d+)-/.exec(name)?.[1];
       try {
-        const end = replay(level, parseMoves(readFileSync(join(root, id, name), 'utf8')));
+        const end = replay(level, parseSolution(readFileSync(join(root, id, name), 'utf8')));
         if (end.status !== 'won') lines.push(`${where} does not win (status ${end.status})`);
         else if (stated === undefined)
           lines.push(`${where}: the name must start with its moves ("${end.moves}-…")`);
@@ -353,13 +353,13 @@ export function reportSolve(
   }
   if (o.apply) {
     try {
-      const solution = join(dir, 'solutions', `${id}.txt`);
+      const solution = join(dir, 'solutions', `${id}.sol`);
       const previous = savedWinningMoves(dir, level);
       // shorter than the saved solution (or none saved, or it does not win)
       const better = previous === undefined || n < previous.length;
       if (o.force || better || !existsSync(solution)) {
         mkdirSync(join(dir, 'solutions'), { recursive: true });
-        writeFileSync(solution, `${solutionHeader(true, n)}\n${formatMoves(r.moves)}`);
+        writeFileSync(solution, formatSolution(r.moves, solutionHeader(true, n)));
       }
       lines.push(...applyThresholds(dir, level, r.moves, { force: o.force, previous }));
     } catch (err) {

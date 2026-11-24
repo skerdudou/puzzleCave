@@ -3,7 +3,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { availableParallelism, freemem } from 'node:os';
 import { join } from 'node:path';
-import { formatMoves, parseMoves, replay, type Dir, type LevelData } from '@puzzlecave/core';
+import { formatSolution, parseSolution, replay, type Dir, type LevelData } from '@puzzlecave/core';
 import { loadPack } from '@puzzlecave/tiled';
 import { applyThresholds, solutionHeader, type CommandResult } from '../commands';
 import type { Dominance } from './expander';
@@ -101,14 +101,14 @@ export function parseLongRunArgs(args: string[]): LongRunCommandOptions | { erro
 
 /** saved solution if it wins */
 function savedSolution(dir: string, level: LevelData): Dir[] | undefined {
-  return winning(join(dir, 'solutions', `${level.id}.txt`), level);
+  return winning(join(dir, 'solutions', `${level.id}.sol`), level);
 }
 
 /** the solution of a file if it wins */
 function winning(file: string, level: LevelData): Dir[] | undefined {
   if (!existsSync(file)) return undefined;
   try {
-    const moves = parseMoves(readFileSync(file, 'utf8'));
+    const moves = parseSolution(readFileSync(file, 'utf8'));
     return replay(level, moves).status === 'won' ? moves : undefined;
   } catch {
     return undefined;
@@ -117,7 +117,7 @@ function winning(file: string, level: LevelData): Dir[] | undefined {
 
 /** lower bound written in the header of the saved solution */
 function savedLowerBound(dir: string, id: string): number {
-  const file = join(dir, 'solutions', `${id}.txt`);
+  const file = join(dir, 'solutions', `${id}.sol`);
   if (!existsSync(file)) return 0;
   const text = readFileSync(file, 'utf8');
   if (/^# optimal \(proven\)/.test(text)) return Infinity;
@@ -187,7 +187,7 @@ function report(
   const lines = [
     `${id}: ${s.layers} layers, ${s.expanded} states expanded, ${s.emitted} successors written, ${(s.ms / 1000).toFixed(0)} s, disk peak ${(s.diskPeak / 1024 ** 3).toFixed(2)} GB`,
   ];
-  const solFile = join(dir, 'solutions', `${id}.txt`);
+  const solFile = join(dir, 'solutions', `${id}.sol`);
   const saved = savedSolution(dir, level);
   if (r.status === 'solved') {
     const n = r.moves.length;
@@ -195,14 +195,14 @@ function report(
       lines.push(`${id}: solution rejected — it does not win, nothing is written`);
       return { ok: false, lines };
     }
-    const text = `${solutionHeader(true, n)}\n${formatMoves(r.moves)}`;
-    writeFileSync(join(workDir, 'solution.txt'), text);
+    const text = formatSolution(r.moves, solutionHeader(true, n));
+    writeFileSync(join(workDir, 'solution.sol'), text);
     lines.push(
-      `${id}: optimal solution of ${n} moves (shorter than ${r.upperBound}) — saved in ${join(workDir, 'solution.txt')}`,
+      `${id}: optimal solution of ${n} moves (shorter than ${r.upperBound}) — saved in ${join(workDir, 'solution.sol')}`,
     );
     if (apply && (!saved || n < saved.length)) {
       writeFileSync(solFile, text);
-      lines.push(`${id}: written to solutions/${id}.txt (optimal, proven)`);
+      lines.push(`${id}: written to solutions/${id}.sol (optimal, proven)`);
       lines.push(...applyThresholds(dir, level, r.moves, { previous: saved }));
     }
     return { ok: true, lines };
@@ -214,8 +214,8 @@ function report(
     );
     writeFileSync(join(workDir, 'proof.txt'), `no solution of fewer than ${r.upperBound} moves\n`);
     if (apply && proven) {
-      writeFileSync(solFile, `${solutionHeader(true, r.upperBound)}\n${formatMoves(saved)}`);
-      lines.push(`${id}: solutions/${id}.txt marked "# optimal (proven)"`);
+      writeFileSync(solFile, formatSolution(saved, solutionHeader(true, r.upperBound)));
+      lines.push(`${id}: solutions/${id}.sol marked "# optimal (proven)"`);
     }
     return { ok: true, lines };
   }
@@ -223,8 +223,8 @@ function report(
     `${id}: stopped (${r.reason}) — proven lower bound ≥ ${r.lowerBound}; resume with --resume`,
   );
   if (apply && saved && r.lowerBound > savedLowerBound(dir, id)) {
-    writeFileSync(solFile, `${solutionHeader(false, r.lowerBound)}\n${formatMoves(saved)}`);
-    lines.push(`${id}: lower bound of solutions/${id}.txt raised to ${r.lowerBound}`);
+    writeFileSync(solFile, formatSolution(saved, solutionHeader(false, r.lowerBound)));
+    lines.push(`${id}: lower bound of solutions/${id}.sol raised to ${r.lowerBound}`);
   }
   return { ok: true, lines };
 }

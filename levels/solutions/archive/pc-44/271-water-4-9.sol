@@ -1,0 +1,2 @@
+# archived — 271 moves (best known until 2026-11-23, found with the solver tools): waters 4,8 then 4,9 (the 253 fills 4,6), the north-east (water 11,3, key 12,2) left for the end, before the exit doors 14,9, 14,8, 15,8, 16,8
+v1:MhMzETMzAwAAAiEiIDAAIxERMRIAIDMTADIAAyEREREhEyADERAiICAzMDERITEREAADAwIwAhIRExIAACADEREQIgIDMDERITMxMAAiAhEhMzAxERMgAiIgIREjAAAAACESIgAxITMzIhMTADIAIDMTAgMzEwADIRERIiERITMxMAIDMzAzPw

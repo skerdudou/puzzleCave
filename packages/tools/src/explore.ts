@@ -13,7 +13,7 @@ import { join } from 'node:path';
 import {
   exploreLevel,
   formatMoves,
-  parseMoves,
+  parseSolution,
   railsPass,
   replay,
   type Dir,
@@ -216,7 +216,7 @@ export async function exploreCommand(
   let ok = true;
   for (const id of ids) {
     const level = byId.get(id);
-    const file = join(dir, 'solutions', `${id}.txt`);
+    const file = join(dir, 'solutions', `${id}.sol`);
     if (!level || !existsSync(file)) {
       emit(`${id}: ${level ? 'no saved solution' : 'unknown level'}`);
       ok = false;
@@ -224,7 +224,7 @@ export async function exploreCommand(
     }
     let saved: Dir[];
     try {
-      saved = parseMoves(readFileSync(file, 'utf8'));
+      saved = parseSolution(readFileSync(file, 'utf8'));
       if (replay(level, saved).status !== 'won') throw new Error('it does not win');
     } catch (err) {
       emit(`${id}: saved solution unusable — ${(err as Error).message}`);
@@ -238,7 +238,7 @@ export async function exploreCommand(
       for (const f of readdirSync(o.from)) {
         if (!new RegExp(`^${id}-\\d+\\.txt$`).test(f)) continue;
         try {
-          const moves = parseMoves(readFileSync(join(o.from, f), 'utf8'));
+          const moves = parseSolution(readFileSync(join(o.from, f), 'utf8'));
           if (moves.length < start.length && replay(level, moves).status === 'won') start = moves;
         } catch {
           // unreadable: ignored

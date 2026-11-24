@@ -12,7 +12,13 @@ import { longRunCommand, parseLongRunArgs } from './longrun/command';
 import { certifyCommand, parseCertifyArgs } from './longrun/certify';
 import { parseTimesArgs, timesCommand } from './times';
 import { difficultyCommand, parseDifficultyArgs } from './difficulty';
+import { solutionCommand } from './solutionCmd';
 
+if (process.argv[2] === 'solution') {
+  const r = solutionCommand(LEVELS_DIR, process.argv.slice(3));
+  for (const line of r.lines) (r.ok ? console.log : console.error)(line);
+  process.exit(r.ok ? 0 : 1);
+}
 if (process.argv[2] === 'plan') {
   const p = parsePlanArgs(process.argv.slice(3));
   if ('error' in p) {

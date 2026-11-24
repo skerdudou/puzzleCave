@@ -10,7 +10,13 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
-import { formatMoves, parseMoves, replay, type LevelData } from '@puzzlecave/core';
+import {
+  formatMoves,
+  formatSolution,
+  parseSolution,
+  replay,
+  type LevelData,
+} from '@puzzlecave/core';
 import { parseImproveOutput, type ImproveSummary } from './improveOutput';
 
 /**
@@ -85,8 +91,8 @@ export function createAuthorApi(o: AuthorApiOptions) {
   let counter = 0;
   let lastEnd = 0;
 
-  const solutionFile = (id: string) => join(o.levelsDir, 'solutions', `${id}.txt`);
-  const prevSolutionFile = (id: string) => join(o.levelsDir, 'solutions', `${id}.prev.txt`);
+  const solutionFile = (id: string) => join(o.levelsDir, 'solutions', `${id}.sol`);
+  const prevSolutionFile = (id: string) => join(o.levelsDir, 'solutions', `${id}.prev.sol`);
   const tmxMtime = (id: string) => {
     try {
       return statSync(join(o.levelsDir, `${id}.tmx`)).mtimeMs;
@@ -97,12 +103,12 @@ export function createAuthorApi(o: AuthorApiOptions) {
   const runningFor = (levelId: string) =>
     [...jobs.values()].some((j) => j.levelId === levelId && j.state === 'running');
 
-  function readSaved(id: string): { text: string; moves: ReturnType<typeof parseMoves> } | null {
+  function readSaved(id: string): { text: string; moves: ReturnType<typeof parseSolution> } | null {
     const f = solutionFile(id);
     if (!existsSync(f)) return null;
     const text = readFileSync(f, 'utf8');
     try {
-      return { text, moves: parseMoves(text) };
+      return { text, moves: parseSolution(text) };
     } catch {
       return { text, moves: [] };
     }
@@ -215,7 +221,7 @@ export function createAuthorApi(o: AuthorApiOptions) {
       try {
         fsOps.copyFileSync(prevFile, solutionFile(job.levelId));
       } catch (err) {
-        // .prev.txt is then the only copy of the proven solution: keep it
+        // .prev.sol is then the only copy of the proven solution: keep it
         throw new Error(`${(err as Error).message}; proven solution kept in ${prevFile}`);
       }
       job.proofKept = true;
@@ -223,7 +229,7 @@ export function createAuthorApi(o: AuthorApiOptions) {
     try {
       fsOps.unlinkSync(prevFile);
     } catch {
-      // .prev.txt remains, harmless
+      // .prev.sol remains, harmless
     }
   }
 
@@ -238,7 +244,7 @@ export function createAuthorApi(o: AuthorApiOptions) {
     }
     let moves;
     try {
-      moves = parseMoves(text);
+      moves = parseSolution(text);
     } catch (err) {
       return json(400, { error: 'bad-moves', message: (err as Error).message });
     }
@@ -258,7 +264,7 @@ export function createAuthorApi(o: AuthorApiOptions) {
     }
     mkdirSync(join(o.levelsDir, 'solutions'), { recursive: true });
     if (saved) copyFileSync(solutionFile(id), prevSolutionFile(id));
-    writeFileSync(solutionFile(id), `${DESIGNER_HEADER}\n${formatMoves(moves)}`);
+    writeFileSync(solutionFile(id), formatSolution(moves, DESIGNER_HEADER));
     const job = startJob(id, savedProven ? saved.moves.length : undefined);
     return json(200, { saved: true, jobId: job.id, moves: moves.length });
   }

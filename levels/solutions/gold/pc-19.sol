@@ -1,0 +1,2 @@
+# gold reference — the optimal route (88 moves) with two harmless back-and-forth steps at the start, 92 moves
+v1:MjIzMDMzMzEwAwIiMxESIiIiIiAzMzMzMTAAAwIiIiIiEgACAzMxMwMhIgMzMw

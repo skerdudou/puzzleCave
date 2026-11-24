@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from 'vitest';
-import { fromAscii, solve, type LevelData } from '@puzzlecave/core';
+import { fromAscii, solve, type LevelData, solutionToLetters } from '@puzzlecave/core';
 import { TILE_ORDER, writeTmx } from '@puzzlecave/tiled';
 import { reportSolve, solveCommand, thresholdChanges, validateCommand } from './commands';
 import { childNeedBytes, inProcessMemoryMb, planJobs, solveParallel } from './parallel';
@@ -37,21 +37,21 @@ test('validate: archived solutions win in the moves their name starts with', () 
     mkdirSync(join(dir, 'solutions', 'archive', id), { recursive: true });
     writeFileSync(join(dir, 'solutions', 'archive', id, name), `# archived — test\n${moves}\n`);
   };
-  archive('a', '5-detour.txt', 'RLRRR');
+  archive('a', '5-detour.sol', 'RLRRR');
   const good = validateCommand(dir);
   expect(good.ok).toBe(true);
   expect(good.lines.at(-1)).toMatch(/\(\+ 1 archived\) — OK$/);
-  archive('a', '4-wrong.txt', 'RLRRR');
-  archive('a', 'noname.txt', 'RRR');
-  archive('a', '2-lost.txt', 'RR');
-  archive('nope', '3-x.txt', 'RRR');
+  archive('a', '4-wrong.sol', 'RLRRR');
+  archive('a', 'noname.sol', 'RRR');
+  archive('a', '2-lost.sol', 'RR');
+  archive('nope', '3-x.sol', 'RRR');
   const bad = validateCommand(dir);
   expect(bad.ok).toBe(false);
   expect(bad.lines).toEqual(
     expect.arrayContaining([
-      'a: archived solution 4-wrong.txt wins in 5 moves, not 4',
-      'a: archived solution noname.txt: the name must start with its moves ("3-…")',
-      'a: archived solution 2-lost.txt does not win (status playing)',
+      'a: archived solution 4-wrong.sol wins in 5 moves, not 4',
+      'a: archived solution noname.sol: the name must start with its moves ("3-…")',
+      'a: archived solution 2-lost.sol does not win (status playing)',
       'archive/nope: no such level',
     ]),
   );
@@ -76,7 +76,7 @@ test('validate: starting on water is a warning, not an error', () => {
 test('validate: a solution that does not win is an error', () => {
   const dir = fixture();
   mkdirSync(join(dir, 'solutions'));
-  writeFileSync(join(dir, 'solutions', 'a.txt'), 'RR\n');
+  writeFileSync(join(dir, 'solutions', 'a.sol'), 'RR\n');
   const r = validateCommand(dir);
   expect(r.ok).toBe(false);
   expect(r.lines.join('\n')).toMatch(/a: the solution does not win/);
@@ -90,7 +90,8 @@ const setGold = (dir: string, from: number, to: number) =>
       `name="goldMoves" type="int" value="${to}"`,
     ),
   );
-const solutionOf = (dir: string) => readFileSync(join(dir, 'solutions', 'a.txt'), 'utf8');
+const solutionOf = (dir: string) =>
+  solutionToLetters(readFileSync(join(dir, 'solutions', 'a.sol'), 'utf8'));
 
 test('solve --apply writes the solution and goldMoves', () => {
   const dir = fixture();
@@ -104,11 +105,11 @@ test('solve --apply does not rewrite an equal goldMoves; a shorter solution repl
   const dir = fixture();
   solveCommand(dir, ['a'], { ...opts, apply: true });
   // a saved solution as short as the optimum: kept
-  writeFileSync(join(dir, 'solutions', 'a.txt'), 'RRR\n');
+  writeFileSync(join(dir, 'solutions', 'a.sol'), 'RRR\n');
   expect(solveCommand(dir, ['a'], { ...opts, apply: true }).ok).toBe(true);
   expect(solutionOf(dir)).toBe('RRR\n');
   // a longer one: replaced by the optimum, the thresholds untouched
-  writeFileSync(join(dir, 'solutions', 'a.txt'), 'RLRRR\n');
+  writeFileSync(join(dir, 'solutions', 'a.sol'), 'RLRRR\n');
   expect(solveCommand(dir, ['a'], { ...opts, apply: true }).ok).toBe(true);
   expect(solutionOf(dir)).toBe('# optimal (proven)\nRRR\n');
   expect(tmxOf(dir)).toMatch(/name="goldMoves" type="int" value="3"/);
@@ -119,7 +120,7 @@ test('solve --apply keeps an existing goldMoves and sets platinumMoves to the pr
   const dir = fixture();
   solveCommand(dir, ['a'], { ...opts, apply: true });
   setGold(dir, 3, 7);
-  writeFileSync(join(dir, 'solutions', 'a.txt'), 'RLRRR\n');
+  writeFileSync(join(dir, 'solutions', 'a.sol'), 'RLRRR\n');
   const r = solveCommand(dir, ['a'], { ...opts, apply: true });
   expect(r.ok).toBe(true);
   expect(r.lines[0]).toMatch(/proposed platinumMoves = 3$/);
@@ -158,7 +159,7 @@ test('solve --apply: a platinum write leaves goldTime untouched', () => {
   const dir = fixture();
   writeFileSync(join(dir, 'a.tmx'), writeTmx(withA({ goldMoves: 7, goldTime: 42 })));
   mkdirSync(join(dir, 'solutions'));
-  writeFileSync(join(dir, 'solutions', 'a.txt'), 'RLRRR\n');
+  writeFileSync(join(dir, 'solutions', 'a.sol'), 'RLRRR\n');
   solveCommand(dir, ['a'], { ...opts, apply: true });
   expect(tmxOf(dir)).toMatch(/name="platinumMoves" type="int" value="3"/);
   expect(goldTimeOf(dir)).toBe('42');
@@ -175,7 +176,7 @@ test('solve --apply: existing goldMoves without goldTime, from a solution of gol
   const saved = fixture();
   writeFileSync(join(saved, 'a.tmx'), writeTmx(withA({ goldMoves: 7 })));
   mkdirSync(join(saved, 'solutions'));
-  writeFileSync(join(saved, 'solutions', 'a.txt'), 'RLRLRRR\n');
+  writeFileSync(join(saved, 'solutions', 'a.sol'), 'RLRLRRR\n');
   const rs = solveCommand(saved, ['a'], { ...opts, apply: true });
   expect(rs.lines).toContain('a: goldTime = 1.6 s written (from the 7-move gold solution)');
   expect(tmxOf(saved)).toMatch(/name="platinumMoves" type="int" value="3"/);
@@ -207,18 +208,18 @@ test('validate: the gold reference solution must win in exactly goldMoves moves'
   const dir = fixture();
   writeFileSync(join(dir, 'a.tmx'), writeTmx(withA({ goldMoves: 5, platinumMoves: 3 })));
   mkdirSync(join(dir, 'solutions', 'gold'), { recursive: true });
-  writeFileSync(join(dir, 'solutions', 'a.txt'), '# optimal (proven)\nRRR\n');
-  writeFileSync(join(dir, 'solutions', 'gold', 'a.txt'), 'RLRRR\n');
+  writeFileSync(join(dir, 'solutions', 'a.sol'), '# optimal (proven)\nRRR\n');
+  writeFileSync(join(dir, 'solutions', 'gold', 'a.sol'), 'RLRRR\n');
   const good = validateCommand(dir);
   expect(good.ok).toBe(true);
   expect(good.lines.at(-1)).toMatch(/1 solution\(s\) replayed \(\+ 1 gold reference\(s\)\) — OK$/);
-  writeFileSync(join(dir, 'solutions', 'gold', 'a.txt'), 'RRR\n');
+  writeFileSync(join(dir, 'solutions', 'gold', 'a.sol'), 'RRR\n');
   const short = validateCommand(dir);
   expect(short.ok).toBe(false);
   expect(short.lines).toContain(
     'a: the gold reference solution (3 moves) differs from goldMoves (5)',
   );
-  writeFileSync(join(dir, 'solutions', 'gold', 'a.txt'), 'RLRR\n');
+  writeFileSync(join(dir, 'solutions', 'gold', 'a.sol'), 'RLRR\n');
   expect(validateCommand(dir).lines.join('\n')).toMatch(
     /a: the gold reference solution does not win/,
   );
@@ -253,7 +254,7 @@ test('solve: a goldMoves below the optimum is flagged, kept without --force, rep
   expect(r.ok).toBe(false);
   expect(r.lines).toContain('a: goldMoves (2) < proven optimum (3) — impossible threshold');
   expect(tmxOf(dir)).toMatch(/name="goldMoves" type="int" value="2"/);
-  writeFileSync(join(dir, 'solutions', 'a.txt'), 'RRR\n');
+  writeFileSync(join(dir, 'solutions', 'a.sol'), 'RRR\n');
   solveCommand(dir, ['a'], { ...opts, apply: true, force: true });
   expect(tmxOf(dir)).toMatch(/name="goldMoves" type="int" value="3"/);
   // --force rewrites the solution, always with its status header
@@ -284,7 +285,7 @@ test('solve --apply: an engine solution that does not win is never written (repl
   expect(r.lines).toEqual([
     'a: engine solution rejected — it does not win (status playing), nothing is written',
   ]);
-  expect(existsSync(join(dir, 'solutions', 'a.txt'))).toBe(false);
+  expect(existsSync(join(dir, 'solutions', 'a.sol'))).toBe(false);
   expect(tmxOf(dir)).toBe(before);
 });
 
@@ -335,7 +336,7 @@ test('solve flags an unsolvable level and an unknown id', () => {
   expect(r.ok).toBe(false);
   expect(r.lines.join('\n')).toMatch(/z: unsolvable/);
   expect(r.lines.join('\n')).toMatch(/nope: unknown level/);
-  expect(existsSync(join(dir, 'solutions', 'z.txt'))).toBe(false);
+  expect(existsSync(join(dir, 'solutions', 'z.sol'))).toBe(false);
 });
 
 test('solve --all processes every level', () => {

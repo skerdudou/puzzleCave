@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
-import { parseMoves } from '@puzzlecave/core';
+import { parseSolution } from '@puzzlecave/core';
 import { SAVE_KEY } from '../src/save';
 import { encodedSave } from './storedSave';
 
@@ -73,9 +73,9 @@ const click = async (page: Page, button: string) => {
   await page.mouse.click(x, y);
 };
 const KEY = { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' } as const;
-const pc01 = parseMoves(
+const pc01 = parseSolution(
   readFileSync(
-    fileURLToPath(new URL('../../../levels/solutions/pc-01.txt', import.meta.url)),
+    fileURLToPath(new URL('../../../levels/solutions/pc-01.sol', import.meta.url)),
     'utf8',
   ),
 );

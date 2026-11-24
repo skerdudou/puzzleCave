@@ -10,6 +10,7 @@ import {
   type ExactEngine,
   type ImproveResult,
   type LevelData,
+  solutionToLetters,
 } from '@puzzlecave/core';
 import { TILE_ORDER, writeTmx } from '@puzzlecave/tiled';
 import { validateCommand } from './commands';
@@ -34,7 +35,7 @@ function fixture(levels: LevelData[], solutions: Record<string, string> = {}): s
   );
   if (Object.keys(solutions).length > 0) mkdirSync(join(dir, 'solutions'));
   for (const [id, text] of Object.entries(solutions))
-    writeFileSync(join(dir, 'solutions', `${id}.txt`), text);
+    writeFileSync(join(dir, 'solutions', `${id}.sol`), text);
   return dir;
 }
 const level = (id: string, goldMoves?: number) =>
@@ -45,7 +46,7 @@ const gold = (dir: string, id = 'k') =>
 const platinum = (dir: string, id = 'k') =>
   /name="platinumMoves" type="int" value="(\d+)"/.exec(tmx(dir, id))?.[1];
 const solution = (dir: string, id = 'k') =>
-  readFileSync(join(dir, 'solutions', `${id}.txt`), 'utf8');
+  solutionToLetters(readFileSync(join(dir, 'solutions', `${id}.sol`), 'utf8'));
 const opts = { timeoutMs: 20_000, maxStates: 100_000, apply: false, force: false };
 const stuck = (lowerBound: number) => () => ({
   status: 'timeout' as const,
@@ -212,7 +213,7 @@ test('improve: solution search options reach findSolution (time, memory, key clo
 });
 
 const found = (dir: string, id = 'k') =>
-  readFileSync(join(dir, 'solutions', `${id}.found.txt`), 'utf8');
+  solutionToLetters(readFileSync(join(dir, 'solutions', `${id}.found.sol`), 'utf8'));
 
 test.each([
   ['that does not win', 'D\n', 'the saved solution does not win (status playing), ignored'],
@@ -227,35 +228,35 @@ test.each([
     expect(r.lines).toContain(`k: warning — ${warning}`);
     expect(r.lines.some((l) => /^k: solution found/.test(l))).toBe(true);
     expect(r.lines).toContain(
-      'k: saved solution kept (invalid) — found solution written to solutions/k.found.txt, thresholds unchanged; --force to replace',
+      'k: saved solution kept (invalid) — found solution written to solutions/k.found.sol, thresholds unchanged; --force to replace',
     );
     expect(solution(dir)).toBe(text);
     expect(tmx(dir)).toBe(before);
     expect(found(dir)).toBe('# optimal (proven)\nRRRR\n');
-    // with --force, the found solution replaces the invalid one; the stale .found.txt disappears
+    // with --force, the found solution replaces the invalid one; the stale .found.sol disappears
     improveCommand(dir, ['k'], { ...opts, apply: true, force: true });
     expect(solution(dir)).toBe('# optimal (proven)\nRRRR\n');
     expect(replay(level('k'), parseMoves(solution(dir))).status).toBe('won');
     expect(gold(dir)).toBe('9');
     expect(platinum(dir)).toBe('4');
-    expect(existsSync(join(dir, 'solutions', 'k.found.txt'))).toBe(false);
+    expect(existsSync(join(dir, 'solutions', 'k.found.sol'))).toBe(false);
   },
 );
 
-test('improve --apply: the stale .found.txt disappears when the saved solution becomes valid again', () => {
+test('improve --apply: the stale .found.sol disappears when the saved solution becomes valid again', () => {
   const dir = fixture([level('k', 9)], { k: 'D\n' });
   improveCommand(dir, ['k'], { ...opts, apply: true });
   expect(found(dir)).toBe('# optimal (proven)\nRRRR\n');
   // the designer fixes their solution
-  writeFileSync(join(dir, 'solutions', 'k.txt'), LONG);
+  writeFileSync(join(dir, 'solutions', 'k.sol'), LONG);
   const r = improveCommand(dir, ['k'], { ...opts, apply: true });
   expect(r.ok).toBe(true);
-  expect(existsSync(join(dir, 'solutions', 'k.found.txt'))).toBe(false);
+  expect(existsSync(join(dir, 'solutions', 'k.found.sol'))).toBe(false);
   expect(solution(dir)).toBe('# optimal (proven)\nRRRR\n');
   // without --apply, nothing is touched
   const dir2 = fixture([level('k', 9)], { k: 'D\n' });
   improveCommand(dir2, ['k'], { ...opts, apply: true });
-  writeFileSync(join(dir2, 'solutions', 'k.txt'), LONG);
+  writeFileSync(join(dir2, 'solutions', 'k.sol'), LONG);
   improveCommand(dir2, ['k'], opts);
   expect(found(dir2)).toBe('# optimal (proven)\nRRRR\n');
 });
@@ -276,7 +277,7 @@ test('improve --apply: a solution that does not win is never written (replayed f
   expect(r.lines).toContain(
     'k: solution rejected — it does not win (status playing), nothing is written',
   );
-  expect(existsSync(join(dir, 'solutions', 'k.txt'))).toBe(false);
+  expect(existsSync(join(dir, 'solutions', 'k.sol'))).toBe(false);
   expect(tmx(dir)).toBe(before);
 });
 
@@ -286,7 +287,7 @@ test('improve: unsolvable or unknown level', () => {
   expect(r.ok).toBe(false);
   expect(r.lines.some((l) => /^z: no solution — unsolvable/.test(l))).toBe(true);
   expect(r.lines).toContain('nope: unknown level');
-  expect(existsSync(join(dir, 'solutions', 'z.txt'))).toBe(false);
+  expect(existsSync(join(dir, 'solutions', 'z.sol'))).toBe(false);
 });
 
 test('parallel improve: same level lines, writes by the parent', async () => {

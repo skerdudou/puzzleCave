@@ -44,8 +44,8 @@ const make = (timeoutS?: number) =>
     launch,
     timeoutS,
   });
-const file = () => join(dir, 'solutions', 'lvl.txt');
-const prev = () => join(dir, 'solutions', 'lvl.prev.txt');
+const file = () => join(dir, 'solutions', 'lvl.sol');
+const prev = () => join(dir, 'solutions', 'lvl.prev.sol');
 const post = (api: ReturnType<typeof make>, moves: string, force = false) =>
   api.handle('POST', '/__pc/solution/lvl', { moves, force });
 const jobOf = async (api: ReturnType<typeof make>, r: { body: unknown }) =>
@@ -111,7 +111,7 @@ describe('hard stop', () => {
 });
 
 describe('proof never degraded', () => {
-  test('refusal: existingProven; forced replacement: old one kept in .prev.txt', async () => {
+  test('refusal: existingProven; forced replacement: old one kept in .prev.sol', async () => {
     const api = make();
     writeFileSync(file(), PROVEN);
     const refused = await post(api, 'RLRDR');
@@ -145,7 +145,7 @@ describe('proof never degraded', () => {
     expect(readFileSync(file(), 'utf8')).toBe(PROVEN);
   });
 
-  test('improve proved: nothing to restore, .prev.txt removed', async () => {
+  test('improve proved: nothing to restore, .prev.sol removed', async () => {
     const api = make();
     writeFileSync(file(), PROVEN);
     const r = await post(api, 'RLRDR', true);
@@ -178,7 +178,7 @@ describe('restoration robustness', () => {
       onJobEnd: (id) => ended.push(id),
       fsOps: {
         copyFileSync: (a, b) => {
-          if (String(b).endsWith('lvl.txt')) throw new Error('EBUSY');
+          if (String(b).endsWith('lvl.sol')) throw new Error('EBUSY');
           copyFileSync(a, b);
         },
         unlinkSync: () => {
@@ -197,7 +197,7 @@ describe('restoration robustness', () => {
     expect(job.warnings.join(' ')).toContain('EBUSY');
     // the only copy of the proof is kept, and the warning names it
     expect(readFileSync(prev(), 'utf8')).toBe(PROVEN);
-    expect(job.warnings.join(' ')).toContain('lvl.prev.txt');
+    expect(job.warnings.join(' ')).toContain('lvl.prev.sol');
     expect((await post(api, 'RLRDR', true)).status).toBe(200); // level freed
   });
 
@@ -216,7 +216,7 @@ describe('restoration robustness', () => {
     expect(await jobOf(api, r)).toMatchObject({ state: 'done' });
   });
 
-  test('dispose: child killed, timer cancelled, proof restored from .prev.txt', async () => {
+  test('dispose: child killed, timer cancelled, proof restored from .prev.sol', async () => {
     const api = make();
     writeFileSync(file(), PROVEN);
     const r = await post(api, 'RLRDR', true);
@@ -240,7 +240,7 @@ describe('restoration robustness', () => {
 });
 
 test('GET solution: unknown level = 404 unknown-level', async () => {
-  writeFileSync(join(dir, 'solutions', 'other.txt'), 'RDR\n');
+  writeFileSync(join(dir, 'solutions', 'other.sol'), 'RDR\n');
   expect((await make().handle('GET', '/__pc/solution/other')).body).toMatchObject({
     error: 'unknown-level',
   });

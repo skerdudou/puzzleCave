@@ -1,14 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
-import { initialState, parseMoves, step } from '@puzzlecave/core';
+import { initialState, step, parseSolution } from '@puzzlecave/core';
 import { loadPack } from '@puzzlecave/tiled';
 import { goToLevel } from './select';
 
 const levelsDir = fileURLToPath(new URL('../../../levels', import.meta.url));
 // Keyring: starts with one key, picks up two more
 const level = loadPack(levelsDir).levels.find((l) => l.id === 'pc-21')!;
-const moves = parseMoves(readFileSync(`${levelsDir}/solutions/pc-21.txt`, 'utf8'));
+const moves = parseSolution(readFileSync(`${levelsDir}/solutions/pc-21.sol`, 'utf8'));
 const debug = (page: Page) =>
   page.evaluate(() => (window as unknown as { __pc?: Record<string, unknown> }).__pc ?? {});
 

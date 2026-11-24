@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
-import { initialState, parseMoves, replay, step, type Dir } from '@puzzlecave/core';
+import { initialState, replay, step, type Dir, parseSolution } from '@puzzlecave/core';
 import { parseTmx } from '@puzzlecave/tiled';
 import { exportSave, importSave } from '../src/save';
 import { goToLevel } from './select';
@@ -171,7 +171,7 @@ const read = (name: string) => readFileSync(fileURLToPath(new URL(name, levelsDi
 /** a prefix of the solution then one move that walks into water (master mode: drowned) */
 function drowning(): Dir[] {
   const level = parseTmx(read(`${ID}.tmx`), ID, (src) => read(src));
-  const solution = parseMoves(read(`solutions/${ID}.txt`));
+  const solution = parseSolution(read(`solutions/${ID}.sol`));
   const dirs: Dir[] = ['up', 'down', 'left', 'right'];
   for (let k = 0; k <= solution.length; k++) {
     const prefix = solution.slice(0, k);

@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   initialState,
-  parseMoves,
+  parseSolution,
   step,
   type Chapter,
   type Dir,
@@ -242,20 +242,21 @@ export function timesCommand(dir: string, o: TimesArgs): CommandResult {
       continue;
     }
     // the gold reference solution when there is one, else the saved (platinum) one
-    const goldFile = join(dir, 'solutions', 'gold', `${id}.txt`);
+    const goldFile = join(dir, 'solutions', 'gold', `${id}.sol`);
     const file =
       o.from !== undefined
-        ? join(o.from, `${id}.txt`)
+        ? // a working folder of letters (<id>.txt), as explore --save writes them
+          join(o.from, `${id}.txt`)
         : existsSync(goldFile)
           ? goldFile
-          : join(dir, 'solutions', `${id}.txt`);
+          : join(dir, 'solutions', `${id}.sol`);
     if (!existsSync(file)) {
       lines.push(`${id}: no saved solution — skipped`);
       continue;
     }
     let f: SolutionFeatures;
     try {
-      f = solutionFeatures(level, parseMoves(readFileSync(file, 'utf8')));
+      f = solutionFeatures(level, parseSolution(readFileSync(file, 'utf8')));
     } catch (err) {
       lines.push(`${id}: ${(err as Error).message}`);
       ok = false;

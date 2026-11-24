@@ -1,0 +1,2 @@
+# gold reference — natural solution (333 moves): ring keys and holes, both column-8 and column-9 openers, the left wing down column 9 to the right arm for the keys, then the right wing down column 8 to the left arm and the exit
+v1:MyIhITMRMRECMAIREAAAIAMzExIhESEwAAIgARExERExAAIiAiEzMwMRERERAAAAAiIiIAIhEzMzMwMRERERESEwAAAAAAIiAiICEhMzMzMDEREREREhMzMDMwMgAyERIhIiIAAAAAIRMRIQMAAAAzAzEiIgIRERAAAzMzMAMxEiIiIgIRERERETEgAAAAAAMzAzMDExIiIiICERERERExIiICIgAC8

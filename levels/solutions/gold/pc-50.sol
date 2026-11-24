@@ -1,0 +1,2 @@
+# gold reference — natural solution (397 moves): leg and foot first with the two free blocks, then one right-hand door per block in turn: cheek, head, both arm pockets, the left antenna, and the right antenna bridge to the exit
+v1:IgAxExIiAhETEiICEAAzAAAzMzMSAhETEiICERMSIgIRIhMxMzEiIAADMzMzADIRMAMCIiIiIiIiADIREzMzMzMyETADAiIhIAADAiIiEDMTMRETMzMzMhEwAwIiIiIiIiAhMSIiEjAzMzMzMzMzMzMzEREgADAiIiIiEgMCIiIiICExIiAhERIQMAADMzMzMzMzMwMxMgAxIRMwIiIiIiIhIAADAiEgAAICEzEREzERMzMzMwABESIgAAMxAAERMwISAAAwPw

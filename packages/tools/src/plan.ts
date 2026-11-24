@@ -5,9 +5,9 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  formatMoves,
+  formatSolution,
   improveLevel,
-  parseMoves,
+  parseSolution,
   planSolution,
   replay,
   type Dir,
@@ -190,12 +190,12 @@ export function applySolution(
 ): string[] {
   if (replay(level, moves).status !== 'won')
     return [`${level.id}: solution rejected (does not win)`];
-  const file = join(dir, 'solutions', `${level.id}.txt`);
+  const file = join(dir, 'solutions', `${level.id}.sol`);
   const previous = savedWinningMoves(dir, level);
   if (existsSync(file)) {
     try {
       lowerBound = Math.max(lowerBound, savedLowerBound(file));
-      const saved = parseMoves(readFileSync(file, 'utf8'));
+      const saved = parseSolution(readFileSync(file, 'utf8'));
       if (replay(level, saved).status === 'won' && saved.length <= moves.length)
         return [`${level.id}: saved solution (${saved.length}) kept`];
     } catch {
@@ -203,7 +203,7 @@ export function applySolution(
     }
   }
   mkdirSync(join(dir, 'solutions'), { recursive: true });
-  writeFileSync(file, `${solutionHeader(false, lowerBound)}\n${formatMoves(moves)}`);
+  writeFileSync(file, formatSolution(moves, solutionHeader(false, lowerBound)));
   return [
     `${level.id}: solution written (${moves.length} moves)`,
     ...applyThresholds(dir, level, moves, { previous }),

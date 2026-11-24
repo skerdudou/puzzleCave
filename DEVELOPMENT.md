@@ -209,7 +209,7 @@ time it goes to the background or to another menu screen. On the dev server the 
   (often an earlier, plainer solution of the level), else `max(p + 3, ⌈1.1 p⌉)`. When a shorter
   platinum solution is found, `goldMoves` is re-evaluated only once the gap leaves that window.
 - Gold reference solution: when `goldMoves` comes from a real solution that differs from the saved
-  (platinum) one, that solution is kept in `levels/solutions/gold/<id>.txt`; `validate` replays it
+  (platinum) one, that solution is kept in `levels/solutions/gold/<id>.sol`; `validate` replays it
   and errors unless it wins in exactly `goldMoves` moves. `goldTime` comes from it (`npm run times`
   reads it first). For a level on the `+10 %` rule there is no such file: `goldTime` comes from the
   optimal route, scaled by `goldMoves` / its length (a gold player plays `goldMoves` moves).
@@ -298,7 +298,7 @@ save gets what its records already earn). Erase clears them with the levels.
 
 1. Play the level in author mode until the exit.
 2. On the result screen, "Copy solution".
-3. Paste it into `levels/solutions/<id>.txt`.
+3. Paste it into a file, then `npm run solution -- set <id> <file>` (it must win; see "Solutions").
 4. `npm run improve -- <id> --apply`: the solution is shortened if possible, saved with its status
    on the first line, and `platinumMoves` is set if the level has none and it is shorter than `goldMoves` (an existing one is kept, see "Medal thresholds").
 
@@ -306,7 +306,14 @@ save gets what its records already earn). Erase clears them with the levels.
 
 `levels/solutions/` contains reference solutions (all 22 current levels, including 10 best known but not proven optimal: pc-04, pc-07, pc-08, pc-09, pc-11, pc-13, pc-14, pc-16, pc-17, pc-18; the others are proven optimal; the first line of each file gives its status), replayed by `npm run validate` and the tests. The solver found some of them directly; the hardest ones (pc-07, pc-08, pc-09, pc-11, pc-13, pc-14, pc-16, pc-17, pc-18) were built by chaining small sub-goal searches (one key or one filled water cell at a time, other blocks frozen as walls), then shortened with `improve`. New ones can be added with `npm run solve -- <id> --apply`, or by playing in author mode and saving the solution from the result screen. They are not included in the published game, but they are readable in the repository.
 
-`levels/solutions/archive/<id>/<moves>-<name>.txt` keeps other noteworthy routes of a level, for the record: former best known solutions and solutions found by players, when they follow a genuinely different strategy (other blocks sunk, other doors, another way to the exit). A worse variant of a kept route (the same interactions in another order, or a few more) is not archived; neither is the gold reference, already in `gold/`. The first line says where it comes from and its route (the keys, waters and doors in order). `npm run validate` replays them: each must win in the moves its file name starts with, in a folder named after a level of the pack.
+Format (`packages/core/src/solutionFile.ts`): `levels/solutions/<id>.sol` (and `gold/`, `archive/`) holds comment lines (`# optimal (proven)`, `# best known — … (proven lower bound ≥ L)`, the route of an archived one), then the moves encoded on one line: `v1:` and base64url of 4 bits a move (up 0, down 1, left 2, right 3; 4–14 kept for later actions, 15 pads an odd count). It keeps a solution from being pasted as is into the game's replay import, which reads U/D/L/R letters only; it is no secret (the decoder is here). The tools read and write it (`parseSolution`, `formatSolution`; `parseSolution` also reads letters, for a solution written by hand), and:
+
+    npm run solution -- show <id | file>          # the moves as letters, the header kept
+    npm run solution -- set <id> <file> [--force]  # save letters (or encoded) as the solution
+
+`set` replays the solution (it must win) and refuses one that is not shorter than the saved one without `--force`; it keeps the saved header and does not touch the thresholds. The working files of the tools stay letters: `explore --save` / `--from` (`<id>-<length>.txt`), `times --from` (`<dir>/<id>.txt`). Until 2026-11-24 the files were letters in `<id>.txt`: their history is under those names.
+
+`levels/solutions/archive/<id>/<moves>-<name>.sol` keeps other noteworthy routes of a level, for the record: former best known solutions and solutions found by players, when they follow a genuinely different strategy (other blocks sunk, other doors, another way to the exit). A worse variant of a kept route (the same interactions in another order, or a few more) is not archived; neither is the gold reference, already in `gold/`. The first line says where it comes from and its route (the keys, waters and doors in order). `npm run validate` replays them: each must win in the moves its file name starts with, in a folder named after a level of the pack.
 
 Current solver limits: exact A* search bounded by time (60 s by default, `--timeout <s>`) and by memory (`--max-memory <MB>` per process, computed by default, see below); `--max-states <n>` adds a state limit (none by default). The compact engine stores a macro-state in ~60–110 bytes (typed arrays outside the V8 heap, which it caps itself) and processes one in ~1–6 µs. When memory or the state limit stops it before the deadline, it restarts for the remaining time with partial expansion (slower, but deeper for the same memory) and keeps the best bound. Large levels with many pushable objects exceed these limits and stay without an optimal solution: `improve` (below) then starts from the designer's solution or looks for a non-optimal one. When a limit is hit, `solve` prints a **proven lower bound** (`≥ L moves`: no solution is shorter) and reports an error if the level's platinum limit (`platinumMoves`, else `goldMoves`) is below that bound (unreachable threshold).
 
@@ -351,7 +358,7 @@ Same memory and parallelism rules as `solve` (same plan: processes, per-process 
 
 `solve` remains the exact search alone. `improve` looks for the best possible solution and says whether it is **proven optimal** or only **best known**. For each level, within the `--timeout` time:
 
-1. **Starting point**: the solution in `levels/solutions/<id>.txt` if it wins (the designer's solution, takes priority); otherwise a non-optimal solution search (best-first by novelty, BFWS), with 30 % of the time; if it finds nothing, the event planner (see `plan` below) gets the next 30 % (`planFallback`, on by default: it only runs when the search failed, so it costs nothing otherwise; `planShare` sets its share). The later stages then share the time left. The report says `solution planned` when the start comes from the planner.
+1. **Starting point**: the solution in `levels/solutions/<id>.sol` if it wins (the designer's solution, takes priority); otherwise a non-optimal solution search (best-first by novelty, BFWS), with 30 % of the time; if it finds nothing, the event planner (see `plan` below) gets the next 30 % (`planFallback`, on by default: it only runs when the search failed, so it costs nothing otherwise; `planShare` sets its share). The later stages then share the time left. The report says `solution planned` when the start comes from the planner.
 2. **Windows**: the solution is cut at interactions (key, door, push); each window of 8, 16, 24… interactions is replaced by the exact shortest path to the same state, if it is shorter.
 3. **Spare keys**: the windows keep keys in hand and on the ground identical, so they never drop a useless key pickup. A pickup is droppable when, from it to the end, the keys in hand never fall below 1; windows of 2, 4, 8… 32 interactions around it then look for a shorter path to the same state but with that key left on the ground and one key fewer in hand. The best saving is applied (one key at a time), and the windows run again on the new solution if time remains.
 4. **Frozen blocks**: blocks the solution never pushes become walls, then an exact search on that restricted level (and greedy removal of other blocks if it does not finish). Optimum for that set of blocks only.
@@ -370,7 +377,7 @@ Each step replays the solution: it always wins and is never longer than the inpu
 
 Without `--apply`, nothing is written. With `--apply`, the solution is written with a first comment line (ignored when reading): `# optimal (proven)` or `# best known — not proven optimal (proven lower bound ≥ L)`. The thresholds follow the `solve` rule: `goldMoves` only for a level without one, otherwise `platinumMoves` only for a level without one (an existing one is kept), or always with `--force`; the solution itself is saved when strictly shorter. `npm run validate` checks that all solutions win and compares the platinum limit with the saved solution (see "Medal thresholds").
 
-A saved solution that is unreadable or does not win is never overwritten without `--force`: it is kept and reported, the solution found is written next to it in `levels/solutions/<id>.found.txt`, and the thresholds are left untouched; that `.found.txt` is deleted as soon as the saved solution is valid again (or with `--force`). `solve --apply` also writes the `# optimal (proven)` header. `solve` and `improve` replay every solution before writing it: a solution that does not win is an error and nothing is written. The `improve` watchdog kills a child process past `--timeout` plus 60 s.
+A saved solution that is unreadable or does not win is never overwritten without `--force`: it is kept and reported, the solution found is written next to it in `levels/solutions/<id>.found.sol`, and the thresholds are left untouched; that `.found.sol` is deleted as soon as the saved solution is valid again (or with `--force`). `solve --apply` also writes the `# optimal (proven)` header. `solve` and `improve` replay every solution before writing it: a solution that does not win is an error and nothing is written. The `improve` watchdog kills a child process past `--timeout` plus 60 s.
 
 ### Long run on one level: `longrun`
 
@@ -379,7 +386,7 @@ A saved solution that is unreadable or does not win is never overwritten without
                             [--dominance off|player|keys] [--compress none|gen|all] [--resume] [--apply]
 
 Exact search of a single level with the whole machine: worker threads, the GPU, RAM, then the disk. It only
-looks for solutions strictly shorter than the saved one (`levels/solutions/<id>.txt`, re-read before
+looks for solutions strictly shorter than the saved one (`levels/solutions/<id>.sol`, re-read before
 each layer, as are the `--watch` files: a shorter winning solution saved meanwhile lowers the bound;
 `--bound n` replaces the saved solution, the `--watch` files can still lower it). States are
 processed by layers of moves (uniform cost), partitioned by the hash of their blocks, waters and
@@ -402,7 +409,7 @@ too fast for it.
   files (`gen`, default), also in the run files (`all`: less disk, but they are unpacked at every
   layer), or `none`.
 - Results: `solved` (an optimal solution shorter than the bound, saved in the work dir as
-  `solution.txt`), `exhausted` (no shorter solution: the saved one is proven optimal, `proof.txt`),
+  `solution.sol`), `exhausted` (no shorter solution: the saved one is proven optimal, `proof.txt`),
   or `stopped` (time, disk, Ctrl+C) with a proven lower bound.
 - `--apply` follows the `improve` rules: a shorter solution is written only if it wins
   (header `# optimal (proven)`, `platinumMoves` lowered); an exhausted search marks the saved solution
@@ -500,7 +507,7 @@ The line per level gives saved → best length, rounds, the gains of the structu
     npm run times -- [<id…>] [--from <dir>] [--apply] [--force]
 
 Proposes `goldTime` (seconds) for each level from the shape of its gold reference solution
-(`levels/solutions/gold/<id>.txt`), else of its saved one (or of `<dir>/<id>.txt` with `--from`); silver and bronze follow from it and from the move thresholds (move ratio × 1.25 and × 1.8, with
+(`levels/solutions/gold/<id>.sol`), else of its saved one (or of `<dir>/<id>.txt` with `--from`); silver and bronze follow from it and from the move thresholds (move ratio × 1.25 and × 1.8, with
 minimum gaps, see `resolveThresholds`). Without `--apply` it only prints the table (moves, turns, held moves,
 estimate, margin, proposed and current goldTime); `--apply` writes goldTime into levels that have none,
 `--force` also replaces an existing one.
@@ -580,13 +587,13 @@ wrong push fatal). The whole table takes about a minute.
 
 In author mode (development server only):
 
-- **Save solution**: on the result screen, after finishing a level, this button sends your moves to the server, which replays them (refused if they do not win), writes them to `levels/solutions/<id>.txt` (header `# designer solution (not optimized)`) and then runs `improve <id> --apply` in the background. The game shows the progress (current step, elapsed time) then the result: "Optimized: X → Y moves (proven optimal | best known, lower bound ≥ L)", "Already optimal" or "No improvement". If a saved solution that is as short or shorter already exists, saving is refused and the "Replace anyway" button appears.
+- **Save solution**: on the result screen, after finishing a level, this button sends your moves to the server, which replays them (refused if they do not win), writes them to `levels/solutions/<id>.sol` (header `# designer solution (not optimized)`) and then runs `improve <id> --apply` in the background. The game shows the progress (current step, elapsed time) then the result: "Optimized: X → Y moves (proven optimal | best known, lower bound ≥ L)", "Already optimal" or "No improvement". If a saved solution that is as short or shorter already exists, saving is refused and the "Replace anyway" button appears.
 - **Replay my solution / Replay optimized solution**: animated replay (8 moves/s at the start). Space: pause/play; ←/→: previous/next move; +/−: speed (1 to 20 moves/s); Home: back to the start; Esc: back. On-screen buttons do the same; ◀ and ▶ held down repeat (at the Repeat rate of the Options), and the progress bar above them is pressed or dragged to go to a move. The screen stays on while the replay plays (Screen Wake Lock, where the browser has it).
 - On the selection screen of a level that has a saved solution: "Replay solution" button (or S key).
 
 Settings: `PC_IMPROVE_TIMEOUT=<seconds>` (default 120) sets the maximum duration of an optimization; one job at a time per level; children are stopped when the server stops. The optimization may rewrite `platinumMoves` (or `goldMoves` and `goldTime` on a level without them; the result then shows the reference time) in the `.tmx` (same rule as the CLI): the page is then not reloaded automatically, reload it to see the new threshold. The `/__pc/*` routes do not exist in the build, and nothing from `levels/solutions` is bundled in the release (the preview of `main` bundles them, for its replays).
 
-Details: a short `PC_IMPROVE_TIMEOUT` may show "best known" on a level proven optimal with a longer budget; forcibly replacing a proven solution never degrades it, though (the old one is kept in `<id>.prev.txt` during the work, then restored if the new run proves nothing). A stuck job is killed by the server after the timeout + 90 s. The write routes rely on Vite's host checks: do not start the server with `--host` or `allowedHosts: true`.
+Details: a short `PC_IMPROVE_TIMEOUT` may show "best known" on a level proven optimal with a longer budget; forcibly replacing a proven solution never degrades it, though (the old one is kept in `<id>.prev.sol` during the work, then restored if the new run proves nothing). A stuck job is killed by the server after the timeout + 90 s. The write routes rely on Vite's host checks: do not start the server with `--host` or `allowedHosts: true`.
 
 ## Board art
 

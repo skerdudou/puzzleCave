@@ -6,7 +6,7 @@ const SOLUTIONS_ID = 'virtual:solutions';
 const SOLUTIONS_RESOLVED = '\0virtual:solutions';
 
 /**
- * `virtual:solutions`: the saved solutions (levels/solutions/<id>.txt), for the preview of main's
+ * `virtual:solutions`: the saved solutions (levels/solutions/<id>.sol), for the preview of main's
  * author mode, which replays them without the development server. `bundle` false (the release,
  * the dev server, which reads them from disk): an empty table, nothing of them in the build.
  */

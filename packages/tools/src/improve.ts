@@ -3,10 +3,10 @@ import { freemem, totalmem } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  formatMoves,
+  formatSolution,
   improveLevel,
   normalizeMoves,
-  parseMoves,
+  parseSolution,
   replay,
   type Dir,
   type ExactEngine,
@@ -51,14 +51,14 @@ function findOptions(find: FindArgs | undefined) {
   };
 }
 
-const solutionFile = (dir: string, id: string) => join(dir, 'solutions', `${id}.txt`);
+const solutionFile = (dir: string, id: string) => join(dir, 'solutions', `${id}.sol`);
 
 /** saved solution (the designer's or from a previous run), if any */
 export function readSolution(dir: string, id: string): Dir[] | { error: string } | undefined {
   const file = solutionFile(dir, id);
   if (!existsSync(file)) return undefined;
   try {
-    return parseMoves(readFileSync(file, 'utf8'));
+    return parseSolution(readFileSync(file, 'utf8'));
   } catch (err) {
     return { error: (err as Error).message };
   }
@@ -150,11 +150,11 @@ export function reportImprove(
     );
   else if (o.apply) {
     try {
-      const file = keepSaved ? join(dir, 'solutions', `${id}.found.txt`) : solutionFile(dir, id);
+      const file = keepSaved ? join(dir, 'solutions', `${id}.found.sol`) : solutionFile(dir, id);
       const bound = keepSaved
         ? r.lowerBound
         : Math.max(r.lowerBound, savedLowerBound(solutionFile(dir, id)));
-      const text = `${solutionHeader(r.proven, bound)}\n${formatMoves(r.moves)}`;
+      const text = formatSolution(r.moves, solutionHeader(r.proven, bound));
       const previous = keepSaved ? undefined : savedWinningMoves(dir, level);
       if (!existsSync(file) || readFileSync(file, 'utf8') !== text) {
         mkdirSync(join(dir, 'solutions'), { recursive: true });
@@ -162,11 +162,11 @@ export function reportImprove(
       }
       if (keepSaved)
         lines.push(
-          `${id}: saved solution kept (invalid) — found solution written to solutions/${id}.found.txt, thresholds unchanged; --force to replace`,
+          `${id}: saved solution kept (invalid) — found solution written to solutions/${id}.found.sol, thresholds unchanged; --force to replace`,
         );
       else {
-        // the saved solution is valid again, or --force: the .found.txt is stale
-        rmSync(join(dir, 'solutions', `${id}.found.txt`), { force: true });
+        // the saved solution is valid again, or --force: the .found.sol is stale
+        rmSync(join(dir, 'solutions', `${id}.found.sol`), { force: true });
         lines.push(...applyThresholds(dir, level, r.moves, { force: o.force, previous }));
       }
     } catch (err) {

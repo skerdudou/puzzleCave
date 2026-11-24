@@ -10,6 +10,7 @@ import {
   structuralPass,
   type Dir,
   type LevelData,
+  parseSolution,
 } from '@puzzlecave/core';
 import { loadPack } from '@puzzlecave/tiled';
 import {
@@ -25,7 +26,7 @@ import { LEVELS_DIR } from './paths';
 const pack = loadPack(LEVELS_DIR);
 const levelOf = (id: string): LevelData => pack.levels.find((l) => l.id === id)!;
 const savedOf = (id: string): Dir[] =>
-  parseMoves(readFileSync(join(LEVELS_DIR, 'solutions', `${id}.txt`), 'utf8'));
+  parseSolution(readFileSync(join(LEVELS_DIR, 'solutions', `${id}.sol`), 'utf8'));
 
 test('worker count and memory plan', () => {
   expect(defaultWorkers(16)).toBe(14);

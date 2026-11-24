@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
-import { initialState, parseMoves, replay, step, type Dir } from '@puzzlecave/core';
+import { initialState, replay, step, type Dir, parseSolution } from '@puzzlecave/core';
 import { parseTmx } from '@puzzlecave/tiled';
 import { goToLevel } from './select';
 import { encodedSave, storedSave } from './storedSave';
@@ -9,7 +9,7 @@ import { encodedSave, storedSave } from './storedSave';
 const levelsDir = new URL('../../../levels/', import.meta.url);
 const read = (name: string) => readFileSync(fileURLToPath(new URL(name, levelsDir)), 'utf8');
 const letters = (moves: readonly Dir[]) => moves.map((d) => d[0]!.toUpperCase()).join('');
-const solution = parseMoves(read('solutions/pc-01.txt'));
+const solution = parseSolution(read('solutions/pc-01.sol'));
 const solutionLetters = letters(solution);
 const KEY = { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' } as const;
 
@@ -138,7 +138,7 @@ test('Delete asks twice, then the replay is gone', async ({ page }) => {
 // pc-31 (Medium chapter): a prefix of its solution, then a move into water
 const WATER_ID = 'pc-31';
 const waterLevel = parseTmx(read(`${WATER_ID}.tmx`), WATER_ID, (src) => read(src));
-const waterSolution = parseMoves(read(`solutions/${WATER_ID}.txt`));
+const waterSolution = parseSolution(read(`solutions/${WATER_ID}.sol`));
 
 function drowningMoves(): Dir[] {
   const dirs: Dir[] = ['up', 'down', 'left', 'right'];
