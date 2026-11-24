@@ -163,6 +163,7 @@ test('invalid settings replaced by defaults', () => {
     dust: true,
     vignette: true,
     smoothing: true,
+    floatingBlocks: true,
   });
 });
 
@@ -190,6 +191,7 @@ test('a save from before the drag, vibration and touch control options: defaults
     dust: true,
     vignette: true,
     smoothing: true,
+    floatingBlocks: true,
   });
 });
 

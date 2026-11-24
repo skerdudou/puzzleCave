@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import {
   Session,
   award,
+  initialState,
   masterTimeLimitMs,
   recordRun,
   resolveThresholds,
@@ -174,7 +175,13 @@ export class GameScene extends Phaser.Scene {
       master: this.mode === 'master',
     });
     this.ambience.layout(layout, ...this.hudBand());
-    this.board = new BoardView(this, this.session.state, layout, app.data.settings.smoothing);
+    this.board = new BoardView(
+      this,
+      this.session.state,
+      layout,
+      app.data.settings.smoothing,
+      app.data.settings.floatingBlocks ? initialState(this.session.level).terrain : null,
+    );
     this.board.setTerrainTint(chapterTint(this.level.id));
     this.showLayout(layout);
     this.hold = new HoldRepeat(

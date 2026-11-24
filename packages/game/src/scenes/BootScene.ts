@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { levels } from '../levels';
 import { afterStartCheck, hideUpdatingAfter, startScreen } from '../pwa';
 import { SHORE_TEXTURES } from '../render/shore';
+import { SUNK_STEPS, SUNK_TEXTURES, sunkBlock, sunkKey } from '../render/sunk';
 import {
   SMOOTH_SPRITES,
   addPixels,
@@ -53,8 +54,14 @@ export class BootScene extends Phaser.Scene {
     this.load.on('loaderror', (file: Phaser.Loader.File) => this.failed.push(file.key));
   }
   create(): void {
+    // the barrel sunk in the water, a sprite a step of its sinking, made from its art
+    if (this.textures.exists('BLOCK')) {
+      const block = texturePixels(this.textures, 'BLOCK');
+      for (const by of SUNK_STEPS)
+        addPixels(this.textures, sunkKey(by), sunkBlock(block, by), false, false);
+    }
     // the sprites that move, smoothed once (the board smooths its terrain itself)
-    for (const key of SMOOTH_SPRITES)
+    for (const key of [...SMOOTH_SPRITES, ...SUNK_TEXTURES])
       if (this.textures.exists(key))
         addPixels(
           this.textures,

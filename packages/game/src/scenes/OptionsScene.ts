@@ -321,10 +321,10 @@ export class OptionsScene extends Phaser.Scene {
 
     // The on/off switches ("Dust: On"): one a line, all as wide as the longest of their words
     // either way, so that a switch pressed changes neither its width nor the lines.
-    type Switch = 'torchlight' | 'dust' | 'vignette' | 'smoothing';
+    type Switch = 'torchlight' | 'dust' | 'vignette' | 'smoothing' | 'floatingBlocks';
     const onOff = (key: Switch, on: boolean) =>
       t('labelValue', { label: t(key), value: on ? t('on') : t('off') });
-    const SWITCHES: Switch[] = ['torchlight', 'dust', 'vignette', 'smoothing'];
+    const SWITCHES: Switch[] = ['torchlight', 'dust', 'vignette', 'smoothing', 'floatingBlocks'];
     const switchW = Math.max(
       ...SWITCHES.flatMap((k) =>
         [true, false].map((on) => {
@@ -439,15 +439,19 @@ export class OptionsScene extends Phaser.Scene {
 
     // graphics: the cave ambience and the smoothing, one switch each, like music and effects
     label(t('graphics'));
-    const graphic = (
-      key: 'torchlight' | 'dust' | 'vignette' | 'smoothing',
-    ): [string, Switch, boolean, () => void] => [
+    const graphic = (key: Switch): [string, Switch, boolean, () => void] => [
       key,
       key,
       s[key],
       () => change(() => (s[key] = !s[key])),
     ];
-    switches([graphic('torchlight'), graphic('dust'), graphic('vignette'), graphic('smoothing')]);
+    switches([
+      graphic('torchlight'),
+      graphic('dust'),
+      graphic('vignette'),
+      graphic('smoothing'),
+      graphic('floatingBlocks'),
+    ]);
 
     // the progress: kept in a file, brought back from one (it replaces the progress) or erased;
     // both of those ask first

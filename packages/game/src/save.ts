@@ -51,6 +51,8 @@ export interface Settings {
   vignette: boolean;
   /** the board's art smoothed (xBR), or drawn as it is */
   smoothing: boolean;
+  /** a barrel pushed into the water stays there, its lid above the surface; off: the cell drawn as floor */
+  floatingBlocks: boolean;
 }
 /** A level's saved replay: the moves as letters (UDLR, no newline) and the mode they were played in. */
 export interface SavedReplay {
@@ -286,6 +288,7 @@ export function defaultSave(): SaveData {
       dust: true,
       vignette: true,
       smoothing: true,
+      floatingBlocks: true,
     },
     levels: {},
     achievements: {},
@@ -338,6 +341,7 @@ function sanitiseSettings(raw: unknown): Settings {
     dust: typeof s.dust === 'boolean' ? s.dust : d.dust,
     vignette: typeof s.vignette === 'boolean' ? s.vignette : d.vignette,
     smoothing: typeof s.smoothing === 'boolean' ? s.smoothing : d.smoothing,
+    floatingBlocks: typeof s.floatingBlocks === 'boolean' ? s.floatingBlocks : d.floatingBlocks,
   };
 }
 

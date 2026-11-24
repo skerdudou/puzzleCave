@@ -1,0 +1,245 @@
+<title>Tonneau dans l'eau</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;700&family=Inter:wght@400;600&display=swap">
+<style>
+/* Layout: one column; a control bar, then a 2x2 grid of looping board mockups, each with its caption. Single dark look, taken from the game's palette. */
+:root{
+  --bg:#1d1b24; --panel:#26232e; --fg:#d1cfc8; --muted:#8f8a99; --accent:#7c82e0; --line:#3a3644;
+  --display:"Pixelify Sans", "Courier New", monospace; --body:Inter, system-ui, sans-serif;
+  color-scheme:dark;
+}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:24px 48px}
+main{max-width:1000px;margin:0 auto;display:grid;gap:24px}
+h1{font-family:var(--display);font-weight:700;font-size:2rem;margin:0;text-wrap:balance;letter-spacing:.02em}
+h2{font-family:var(--display);font-weight:500;font-size:1.25rem;margin:0}
+p{margin:0;max-width:65ch;color:var(--muted)}
+.controls{display:flex;flex-wrap:wrap;gap:8px 20px;padding:12px 16px;background:var(--panel);border:1px solid var(--line);border-radius:6px;align-items:center}
+.controls label{display:flex;gap:6px;align-items:center;cursor:pointer;user-select:none}
+.controls input{accent-color:var(--accent);width:16px;height:16px}
+.controls input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.controls .tag{font-family:var(--display);font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:20px}
+figure{margin:0;display:grid;gap:8px;min-width:0}
+canvas{width:100%;max-width:100%;image-rendering:pixelated;border:1px solid var(--line);border-radius:4px;background:#28252f;display:block}
+figcaption{display:grid;gap:2px}
+figcaption .name{font-family:var(--display);font-size:1.1rem}
+figcaption .name b{color:var(--accent);font-weight:700;margin-right:6px}
+figcaption p{font-size:.9rem}
+.zoom{display:flex;gap:12px;flex-wrap:wrap}
+.zoom figure{width:120px}
+.zoom canvas{width:120px}
+.zoom figcaption{font-size:.8rem;color:var(--muted);text-align:center}
+@media (prefers-reduced-motion:reduce){.motion-note{display:block}}
+.motion-note{display:none;color:var(--muted);font-size:.85rem}
+</style>
+<main>
+  <header style="display:grid;gap:8px">
+    <h1>Tonneau dans l'eau</h1>
+    <p>Maquettes avec les vraies textures du jeu (16 px, sans le lissage xBR). Le joueur pousse le tonneau dans l'eau, puis marche dessus. Aujourd'hui la case redevient du sol ; les variantes A, B et C gardent l'eau et montrent le tonneau qui affleure.</p>
+  </header>
+  <div class="controls" role="group" aria-label="Effets">
+    <span class="tag">Effets</span>
+    <label><input type="checkbox" id="fx-splash" checked> Éclaboussure</label>
+    <label><input type="checkbox" id="fx-ripple" checked> Ondes</label>
+    <label><input type="checkbox" id="fx-bob"> S'enfonce d'1 px sous le pas</label>
+    <label><input type="checkbox" id="fx-idle"> Flotte doucement</label>
+    <label><input type="checkbox" id="slow"> Ralenti ×3</label>
+  </div>
+  <p class="motion-note">Animations réduites dans ton système : les maquettes tournent quand même, c'est leur sujet.</p>
+  <div class="grid" id="grid"></div>
+  <section style="display:grid;gap:12px">
+    <h2>La case finale, de près</h2>
+    <div class="zoom" id="zoom"></div>
+  </section>
+</main>
+<script>
+const TEX={"BLOCK":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsSAAALEgHS3X78AAAAnUlEQVR42o2TUQqAMAxDdxlBUCYiCH54Ay/g/Q9SiVAIXTr9CJSueUtlFjMrSuOwGCubS43HtNu1za9QZ6DG7MYIYFAKUKYo9CVAxc5qTpEC4q2/APdZP78BZroJMADFBN7vJoCigY0487m1niYTfL0Dr1NANHAyPpMAXqH3kCQADb4xW8HNDYDXUCtw380NwMlsiEA2y79RrRNjsx6jZQqrk9DsigAAAABJRU5ErkJggg==","DOOR":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsSAAALEgHS3X78AAAAsElEQVR42qWTwQoCMQxE8zOCoOwiguDBBe9L7979/19QEpgyiWm3i4ehS9p5m6SplNf7Ay3PUtfjYXbSGITzGpcIuEwP27ifbk4a0z0AcE7YjD9HM0NwrgI4tWher2dTBukCYGIA1r8AKi4jBYzIAdDZ2IPetwPw9fRKyDJQ3zCgdZUCKg/QVhN5dn4y2NNEl8HeJqrZAPHxjJSActUrcbZb7yB7VNYDpAIAD1ZL3PgvSOWlLqNTlrcAAAAASUVORK5CYII=","EXIT":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsSAAALEgHS3X78AAAAdUlEQVR42mPwi0z5D8OGerb/7Rz9cGKYfExZBRwzIEuSgmH6GGACGqr6YIxPE0weWR3YBcR6AYZh6sEuQA4DXH7GphmGqRsGxGpGCQNSohGnF3CFAa4woV0YUJwOiEkDGF7AF4iE0gHYCzRNB7jCBGc6ICcMAJhHv1ktHwAxAAAAAElFTkSuQmCC","FLOOR":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsSAAALEgHS3X78AAAAGUlEQVR42mOwc/T7TwlmGDVg1IBRA4aLAQByu8wQ0c0dsgAAAABJRU5ErkJggg==","GRAVEL":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsSAAALEgHS3X78AAAAXklEQVR42mOwc/T7TwlmGJwG+EWmgDEyG8bHawCyYmwGYDMIpwExZRVgMRANwiQZANNkqGcLZyMbQpIByJioMEC2kWwXwAxCNoDkQARhmAFkxQJZ0UhxQho8eYEUDACVVeIaeO8J3AAAAABJRU5ErkJggg==","KEY":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsSAAALEgHS3X78AAABAklEQVR42qVSMRKCQAzkJ4IFgrXO6A+k9wFgI3yFCl+BtvoLG+EF8AQ7Dpt4GzwGhBHUIkPI7G42yWlEpCGO3oxUPhRNbF3wN9ZogcCxKHYrEc2XPyKZdMgQPElhFne64iLRaS8xrCbKB71bFIlBhRAcyFVHFaiDy52KQlAWVQB8QUDdXoVkr0PO0TF/YfKDRbUACrFrMqlJ3l7vDNLkmiDETl+YMjVILbJlWwkhn8vOICOWwZlrinj0zPYV+ubHdxFcJPnC8xc3nU677ql7zwRgFlVuynTKs8NdH3bwwQw9sI8CcNBne7RAc9vqWl8JYHEIOME7+GEE/b8R0P2vJY6JJ7J6yp8JP5MtAAAAAElFTkSuQmCC","WATER":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsSAAALEgHS3X78AAAAGUlEQVR42mOwdVrznxLMMGrAqAGjBgwXAwA97CofGMn0LwAAAABJRU5ErkJggg==","WATER_E":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAAAAAAAAQCEeRdzAAAAHklEQVR4nGOwdVrzn1xsZjX7P8OoAaMGjBowXAwAAGlQKB8m9dxfAAAAAElFTkSuQmCC","WATER_ES":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAAAAAAAAQCEeRdzAAAAJklEQVR4nGOwdVrzn1xsZjX7P8OoAaMGjBowWAwIiDrwn1wMMgAA6nQr0ND/05gAAAAASUVORK5CYII=","WATER_ES_cNW":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAAAAAAAAQCEeRdzAAAAKUlEQVR4nGMws5r939ZpDVkYpJeBXM2jBowaMGoAtQ0IiDrwn1wMMgAAaL4rsLzpC8oAAAAASUVORK5CYII=","WATER_E_cNW":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAAAAAAAAQCEeRdzAAAAIUlEQVR4nGMws5r939ZpDVkYpJeBXM2jBowaMGrAYDMAAOeLJ/+OWZ+uAAAAAElFTkSuQmCC","WATER_N":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAAAAAAAAQCEeRdzAAAALElEQVR4nGPQUNX/Twlm0Dfu+k8JZjCzmv2fEsxg67TmPyV41IBRA0YNgGAA1G0ZP9hwM0oAAAAASUVORK5CYII=","WATER_NE":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAAAAAAAAQCEeRdzAAAALUlEQVR4nGPQUNX/Twlm0Dfu+k8JZjCzmv2fEsxg67TmP7l41IBRA0YNQBgAAFYxF5+s5n/3AAAAAElFTkSuQmCC","WATER_NES":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAAAAAAAAQCEeRdzAAAANElEQVR4nGPQUNX/Twlm0Dfu+k8JZjCzmv2fEsxg67TmP7l41IBRA4aTAQFRB/6Ti0EGAADXVRtQqUaJKgAAAABJRU5ErkJggg==","WATER_NS":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAAAAAAAAQCEeRdzAAAAMUlEQVR4nGPQUNX/Twlm0Dfu+k8JZjCzmv2fEsxg67TmPyV41IBRA4aLAQFRB/5TggFWXB0v/fO5CAAAAABJRU5ErkJggg==","WATER_NW":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAAAAAAAAQCEeRdzAAAALElEQVR4nGPQUNX/Twlm0Dfu+k8JZjCzmv2fEgw2wNZpDdl41IBRA0YNgGAA9KIXn1Rf0H4AAAAASUVORK5CYII=","WATER_NWE":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAAAAAAAAQCEeRdzAAAALUlEQVR4nGPQUNX/Twlm0Dfu+k8JZjCzmv2fEgw2wNZpDVl41IBRA0YNQBgAAHZmFf8x6J2RAAAAAElFTkSuQmCC","WATER_NWES":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAAAAAAAAQCEeRdzAAAAMklEQVR4nGPQUNX/Twlm0Dfu+k8JZjCzmv2fEgw2wNZpDVl41IBRA4abAQFRB8jCIL0A6AoZcYPPBBYAAAAASUVORK5CYII=","WATER_NWS":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAAAAAAAAQCEeRdzAAAAMElEQVR4nGPQUNX/Twlm0Dfu+k8JZjCzmv2fEgw2wNZpDdl41IBRA4aTAQFRB8jGAGcRG1CuPD+1AAAAAElFTkSuQmCC","WATER_S":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAAAAAAAAQCEeRdzAAAAIElEQVR4nGOwdVrznxLMMGrAqAGjBgwWAwKiDvynBAMAv8wuDyx/U4QAAAAASUVORK5CYII=","WATER_S_cNE":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAAAAAAAAQCEeRdzAAAAKElEQVR4nGOwdVrzn1xsZjX7PwMlBoDwqAGjBowaQC0DAqIO/KcEAwBFli3vcn3fEAAAAABJRU5ErkJggg==","WATER_S_cNW":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAAAAAAAAQCEeRdzAAAAJUlEQVR4nGMws5r939ZpDdmYgRLNowaMGjBqADUNCIg68J8SDAA+Fi3vD5A+qQAAAABJRU5ErkJggg==","WATER_S_cNW_cNE":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAAAAAAAAQCEeRdzAAAAKElEQVR4nGMws5r939ZpDVkYpJeBXM0wPGrAqAGjBlDLgICoA/8pwQDD0S3P7wjsKgAAAABJRU5ErkJggg==","WATER_W":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAAAAAAAAQCEeRdzAAAAHUlEQVR4nGMws5r939ZpDdmYYdSAUQNGDRguBgAA8UEoH6uc8usAAAAASUVORK5CYII=","WATER_WE":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAAAAAAAAQCEeRdzAAAAH0lEQVR4nGMws5r939ZpDVkYpJdh1IBRA0YNGC4GAAActCYf8yAtpgAAAABJRU5ErkJggg==","WATER_WES":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAAAAAAAAQCEeRdzAAAAJklEQVR4nGMws5r939ZpDVkYpJdh1IBRA0YNGEwGBEQdIAuD9AIAjlgpkT2SpQUAAAAASUVORK5CYII=","WATER_WS":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAAAAAAAAQCEeRdzAAAAIklEQVR4nGMws5r939ZpDdmYYdSAUQNGDRhMBgREHSAbAwBjsCvQdCZmsQAAAABJRU5ErkJggg==","WATER_WS_cNE":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAAAAAAAAQCEeRdzAAAAJ0lEQVR4nGMws5r939ZpDVkYpJeBEgNAeNSAUQNGDaCmAQFRB8jGAOlrK7ABb8ANAAAAAElFTkSuQmCC","WATER_W_cNE":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAAAAAAAAQCEeRdzAAAAI0lEQVR4nGMws5r939ZpDVkYpJeBEgNAeNSAUQNGDRgsBgAAdwsn/4WsBk4AAAAASUVORK5CYII=","WATER_cNE":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAAAAAAAAQCEeRdzAAAAIklEQVR4nGOwdVrzn1xsZjX7PwMlBoDwqAGjBowaMFgMAADDpyn/egOowgAAAABJRU5ErkJggg==","WATER_cNW":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAAAAAAAAQCEeRdzAAAAH0lEQVR4nGMws5r939ZpDdmYgRLNowaMGjBqwGAyAAC8Jyn//8sOogAAAABJRU5ErkJggg==","WATER_cNW_cNE":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAAAAAAAAQCEeRdzAAAAIklEQVR4nGMws5r939ZpDVkYpJeBXM0wPGrAqAGjBgwWAwBB8Snfpn0VJAAAAABJRU5ErkJggg==","player":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAASCAYAAABSO15qAAAACXBIWXMAAAsSAAALEgHS3X78AAAA+ElEQVR42p1SwQkCQQzcckSPAxUEka1AGxDBl/i1A23BEvwIluJPrCgy0VlyMbeIj8E1yUwmuaT9dpMCyOmwk9v1osAbMV8nIqlKfj7uij6RXoHjYiLn5aw4wBsx5EAKBdABQOE6t7KaNsIY3oghx1joAJ0AdAKB9vFGzOTjEWgdHWg7ilUFSHiPkhU2VhWYj767ejeoCQUwK5blRTyZy+0IgIwlIelFPNl+nSLAIyGZvxY2x2NTgWY4KDeAz0VYAu+A8Y6APV8QIgEr/FliuUoVGLdZAGvXO7BjsV4F+MfbtIV+FwBzKSrynWq5IvAPML4eA/Er0XJeQTsNl4PX0J8AAAAASUVORK5CYII=",};
+const T = 16, W = 7, H = 4;
+const WATER_RGB = [0x3d, 0x42, 0xac];
+const FOAM = [0x5c, 0x62, 0xc4];
+const DROP = [0xb4, 0xb9, 0xff];
+const RING = [0x6c, 0x72, 0xd6];
+const isWaterBase = (x, y) => x >= 3 && x <= 5 && y >= 1 && y <= 2;
+const TX = 3, TY = 1; // where the barrel sinks
+
+const VARIANTS = [
+  { id: 'now', letter: '0', name: "Aujourd'hui", text: "Le tonneau disparaît et la case devient du sol : les berges se redessinent autour." },
+  { id: 'A', letter: 'A', name: 'Affleurant', shift: 4, wl: 11, ghost: true, text: "Le couvercle dépasse à fleur d'eau, un liseré clair fait la ligne d'eau, le corps se devine sous la surface." },
+  { id: 'A2', letter: 'A-bis', name: 'Affleurant, plus haut', shift: 2, wl: 12, ghost: true, text: "Le rendu du A à la hauteur du B : l'eau monte jusqu'au cerclage et le bas du tonneau se devine sous la surface." },
+  { id: 'B', letter: 'B', name: 'Mi-immergé', shift: 2, wl: 12, ghost: false, text: "On voit plus du tonneau, l'eau monte jusqu'au cerclage. Se lit tout de suite comme un tonneau." },
+  { id: 'C', letter: 'C', name: 'Couvercle seul', shift: 5, wl: 11, ghost: false, text: "Seul le haut du couvercle reste en surface, comme un pas japonais. Le plus discret." },
+];
+
+function shoreKey(isW, x, y) {
+  const n = !isW(x, y - 1), w = !isW(x - 1, y), e = !isW(x + 1, y), s = !isW(x, y + 1);
+  const nw = !n && !w && !isW(x - 1, y - 1), ne = !n && !e && !isW(x + 1, y - 1);
+  const sides = (n ? 'N' : '') + (w ? 'W' : '') + (e ? 'E' : '') + (s ? 'S' : '');
+  return ['WATER', sides, nw ? 'cNW' : '', ne ? 'cNE' : ''].filter(Boolean).join('_');
+}
+
+const PIX = {};
+function loadAll() {
+  return Promise.all(Object.entries(TEX).map(([k, src]) => new Promise((res) => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+      const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+      PIX[k] = { w: img.width, h: img.height, d: g.getImageData(0, 0, img.width, img.height).data };
+      res();
+    };
+    img.onerror = () => res();
+    img.src = src;
+  })));
+}
+
+// deterministic droplets
+const DROPS = Array.from({ length: 7 }, (_, i) => {
+  const a = Math.sin((i + 1) * 12.9898) * 43758.5453; const r = a - Math.floor(a);
+  const b = Math.sin((i + 1) * 78.233) * 12543.123; const q = b - Math.floor(b);
+  return { dx: (r - 0.5) * 9, vx: (r - 0.5) * 0.035, vy: -0.05 - q * 0.04 };
+});
+
+const ease = (p) => 1 - Math.pow(1 - Math.min(1, Math.max(0, p)), 3);
+const LOOP = 4200, PUSH0 = 500, PUSH1 = 680, SINK1 = 900, STEP0 = 1700, STEP1 = 1880;
+
+function opts() {
+  const on = (id) => document.getElementById(id).checked;
+  return { splash: on('fx-splash'), ripple: on('fx-ripple'), bob: on('fx-bob'), idle: on('fx-idle'), slow: on('slow') };
+}
+
+function render(ctx, v, t, o, crop) {
+  const BW = W * T, BH = H * T;
+  const img = ctx.createImageData(BW, BH), d = img.data;
+  const put = (x, y, c, a = 1) => {
+    if (x < 0 || y < 0 || x >= BW || y >= BH) return;
+    const i = (y * BW + x) * 4;
+    d[i] = d[i] * (1 - a) + c[0] * a; d[i + 1] = d[i + 1] * (1 - a) + c[1] * a; d[i + 2] = d[i + 2] * (1 - a) + c[2] * a; d[i + 3] = 255;
+  };
+  const blit = (key, ox, oy, filter) => {
+    const p = PIX[key]; if (!p) return;
+    for (let y = 0; y < p.h; y++) for (let x = 0; x < p.w; x++) {
+      const i = (y * p.w + x) * 4; if (p.d[i + 3] === 0) continue;
+      const sx = ox + x, sy = oy + y;
+      if (sx < 0 || sy < 0 || sx >= BW || sy >= BH) continue;
+      const c = [p.d[i], p.d[i + 1], p.d[i + 2]];
+      if (filter && filter(x, y, sx, sy, c) === false) continue;
+      put(sx, sy, c, p.d[i + 3] / 255);
+    }
+  };
+
+  const arrived = t >= PUSH1;
+  const sunkAsFloor = v.id === 'now' && arrived;
+  const isW = (x, y) => isWaterBase(x, y) && !(sunkAsFloor && x === TX && y === TY);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++)
+    blit(isW(x, y) ? shoreKey(isW, x, y) : 'FLOOR', x * T, y * T);
+
+  const pp = ease((t - PUSH0) / (PUSH1 - PUSH0));
+  const stepP = ease((t - STEP0) / (STEP1 - STEP0));
+  const playerX = (1 + (t >= PUSH0 ? pp : 0) + (t >= STEP0 ? stepP : 0)) * T;
+  const barrelX = (2 + (t >= PUSH0 ? pp : 0)) * T;
+  const stepping = t >= STEP0 + 120 && t < STEP0 + 520;
+
+  const vis = new Uint8Array(BW * BH);
+  const cellTop = TY * T, cellX = TX * T;
+  let wlAbs = cellTop + 11;
+  if (v.id === 'now') {
+    if (!arrived) blit('BLOCK', Math.round(barrelX), cellTop);
+  } else {
+    let s = 0;
+    if (arrived) {
+      s = v.shift * ease((t - PUSH1) / (SINK1 - PUSH1));
+      if (o.idle && t >= SINK1 + 300 && Math.floor((t - SINK1) / 700) % 2 === 1) s += 1;
+      if (o.bob && stepping) s = v.shift + 1;
+      s = Math.round(s);
+    }
+    wlAbs = cellTop + v.wl;
+    blit('BLOCK', Math.round(barrelX), cellTop + s, (x, y, sx, sy, c) => {
+      if (!arrived) { vis[sy * BW + sx] = 1; return; }
+      if (sy >= cellTop + T) return false;
+      if (sy >= wlAbs) {
+        if (!v.ghost) return false;
+        const k = 0.62;
+        for (let j = 0; j < 3; j++) c[j] = c[j] * (1 - k) + WATER_RGB[j] * k;
+        return;
+      }
+      vis[sy * BW + sx] = 1;
+    });
+    // waterline: a light rim on the water touching the barrel
+    if (arrived) {
+      for (let y = wlAbs - 2; y <= wlAbs; y++) for (let x = cellX; x < cellX + T; x++) {
+        const i = y * BW + x; if (vis[i]) continue;
+        const nb = vis[i - 1] || vis[i + 1] || vis[i - BW] || (y < wlAbs && vis[i + BW]);
+        if (nb) put(x, y, FOAM);
+      }
+    }
+  }
+
+  const waterAt = (x, y) => {
+    const i = (y * BW + x) * 4;
+    return d[i] === WATER_RGB[0] && d[i + 1] === WATER_RGB[1] && d[i + 2] === WATER_RGB[2] && !vis[y * BW + x];
+  };
+  const cx = cellX + 7.5, cy = wlAbs - 2;
+
+  if (v.id !== 'now' && o.ripple) {
+    const rings = [[PUSH1 + 20, 1], [PUSH1 + 220, 0.7]];
+    if (o.bob) rings.push([STEP0 + 140, 0.55]);
+    for (const [t0, amp] of rings) {
+      const age = (t - t0) / 750; if (age < 0 || age > 1) continue;
+      const rx = 6 + age * 9, ry = rx * 0.55, a = (1 - age) * amp;
+      for (let y = Math.floor(cy - ry - 1); y <= cy + ry + 1; y++) for (let x = Math.floor(cx - rx - 1); x <= cx + rx + 1; x++) {
+        if (x < 0 || y < 0 || x >= BW || y >= BH) continue;
+        const dd = Math.hypot((x - cx) / rx, (y - cy) / ry);
+        if (Math.abs(dd - 1) < 0.9 / ry && waterAt(x, y)) put(x, y, RING, a);
+      }
+    }
+  }
+  if (v.id !== 'now' && o.splash) {
+    const age = t - PUSH1;
+    if (age >= 0 && age < 480) for (const p of DROPS) {
+      const x = Math.round(cx + p.dx + p.vx * age), y = Math.round(cy + p.vy * age + 0.00032 * age * age);
+      if (y <= cy + 1) put(x, y, DROP, age > 360 ? 0.5 : 1);
+    }
+  }
+
+  // player (16x18, feet on the cell's bottom)
+  blit('player', Math.round(playerX), TY * T - 2 + (v.id !== 'now' && o.bob && stepping ? 1 : 0));
+
+  if (crop) {
+    const c = ctx.createImageData(crop.w, crop.h);
+    for (let y = 0; y < crop.h; y++) for (let x = 0; x < crop.w; x++) {
+      const si = ((y + crop.y) * BW + x + crop.x) * 4, di = (y * crop.w + x) * 4;
+      c.data[di] = d[si]; c.data[di + 1] = d[si + 1]; c.data[di + 2] = d[si + 2]; c.data[di + 3] = 255;
+    }
+    ctx.putImageData(c, 0, 0);
+  } else ctx.putImageData(img, 0, 0);
+}
+
+function el(tag, attrs, ...kids) { const e = document.createElement(tag); Object.assign(e, attrs); e.append(...kids); return e; }
+
+loadAll().then(() => {
+  const grid = document.getElementById('grid'), zoom = document.getElementById('zoom');
+  const boards = VARIANTS.map((v) => {
+    const c = el('canvas', { width: W * T, height: H * T });
+    c.setAttribute('role', 'img'); c.setAttribute('aria-label', 'Maquette ' + v.name);
+    const cap = el('figcaption', {}, el('div', { className: 'name' }, el('b', {}, v.letter), v.name), el('p', {}, v.text));
+    grid.append(el('figure', {}, c, cap));
+    const z = el('canvas', { width: 48, height: 48 });
+    zoom.append(el('figure', {}, z, el('figcaption', {}, v.letter + ' · ' + v.name)));
+    return { v, ctx: c.getContext('2d'), zctx: z.getContext('2d') };
+  });
+  const still = { splash: false, ripple: false, bob: false, idle: false };
+  const start = performance.now();
+  const frame = (now) => {
+    const o = opts();
+    const t = ((now - start) / (o.slow ? 3 : 1)) % LOOP;
+    for (const b of boards) {
+      render(b.ctx, b.v, t, o);
+      render(b.zctx, b.v, 1500, still, { x: (TX - 1) * T, y: TY * T - 8, w: 48, h: 48 });
+    }
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+});
+</script>

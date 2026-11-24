@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { Session, type Dir, type LevelData, type Mode } from '@puzzlecave/core';
+import { Session, initialState, type Dir, type LevelData, type Mode } from '@puzzlecave/core';
 import { app } from '../app';
 import { setDebug } from '../debug';
 import { ellipsize } from '../format';
@@ -151,7 +151,13 @@ export class ReplayScene extends Phaser.Scene {
       hudHeight: this.topReserve(),
     });
     this.ambience.layout(layout);
-    this.board = new BoardView(this, this.session.state, layout, app.data.settings.smoothing);
+    this.board = new BoardView(
+      this,
+      this.session.state,
+      layout,
+      app.data.settings.smoothing,
+      app.data.settings.floatingBlocks ? initialState(this.session.level).terrain : null,
+    );
     this.board.setTerrainTint(chapterTint(this.level.id));
     this.buildHud();
     const start = this.info.startIndex ?? 0;

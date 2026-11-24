@@ -5,6 +5,7 @@ import { initialState, step, type Dir, type GameState, parseSolution } from '@pu
 import { loadPack } from '@puzzlecave/tiled';
 import { wallMask, wallTexture } from '../src/render/autotile';
 import { shoreAt, shoreTexture } from '../src/render/shore';
+import { shownTerrain, sunkCells } from '../src/render/sunk';
 import { SAVE_KEY } from '../src/save';
 import { encodedSave } from './storedSave';
 import { goToLevel } from './select';
@@ -13,6 +14,7 @@ type Pc = {
   scene?: string;
   boardTerrain?: string | null;
   boardTiles?: string[] | null;
+  boardSunk?: number[];
   replayBar?: { x: number; y: number; w: number };
   replayIndex?: number;
   replayTotal?: number;
@@ -24,17 +26,18 @@ const KEY = { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'Arrow
 // The saved solution whose first block sinks soonest: the level, and its moves up to that sink
 const levelsDir = fileURLToPath(new URL('../../../levels', import.meta.url));
 const sinking = (() => {
-  let best: { id: string; moves: Dir[]; after: GameState } | null = null;
+  let best: { id: string; moves: Dir[]; start: GameState; after: GameState } | null = null;
   for (const level of loadPack(levelsDir).levels) {
     const file = `${levelsDir}/solutions/${level.id}.sol`;
     if (!existsSync(file)) continue;
-    let s = initialState(level);
+    const start = initialState(level);
+    let s = start;
     const moves = parseSolution(readFileSync(file, 'utf8'));
     for (let i = 0; i < moves.length && (!best || i < best.moves.length); i++) {
       const r = step(s, moves[i]!);
       s = r.state;
       if (r.events.some((e) => e.type === 'blockSank')) {
-        best = { id: level.id, moves: moves.slice(0, i + 1), after: s };
+        best = { id: level.id, moves: moves.slice(0, i + 1), start, after: s };
         break;
       }
     }
@@ -55,11 +58,24 @@ function tilesOf(s: GameState): string[] {
   });
 }
 
-async function open(page: Page, smoothing: boolean, errors: string[]): Promise<void> {
+async function open(
+  page: Page,
+  smoothing: boolean,
+  errors: string[],
+  floatingBlocks = false,
+): Promise<void> {
   page.on('pageerror', (e) => errors.push(e.message));
   await page.addInitScript(
     ([k, v]) => localStorage.setItem(k!, v!),
-    [SAVE_KEY, encodedSave({ version: 2, settings: { smoothing }, levels: {}, achievements: {} })],
+    [
+      SAVE_KEY,
+      encodedSave({
+        version: 2,
+        settings: { smoothing, floatingBlocks },
+        levels: {},
+        achievements: {},
+      }),
+    ],
   );
   await page.goto('/');
   await expect.poll(async () => (await debug(page)).scene).toBe('Menu');
@@ -112,5 +128,43 @@ test('smoothing on: the replay bar jumps over a block sinking, back and forth', 
   await page.mouse.click(bar.x, bar.y);
   await expect.poll(async () => (await debug(page)).replayIndex).toBe(0);
   await expect.poll(async () => (await debug(page)).boardTerrain).toBe(start);
+  expect(errors).toEqual([]);
+});
+
+test('floating barrels, smoothing on: a block sinks, the terrain stays as it was, the barrel shows; undone, gone', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  await open(page, true, errors, true);
+  await page.keyboard.press('Enter');
+  await expect.poll(async () => (await debug(page)).scene).toBe('Game');
+  const start = (await debug(page)).boardTerrain;
+  expect(start).toBeTruthy();
+  expect((await debug(page)).boardSunk).toEqual([]);
+  for (const d of sinking.moves) await page.keyboard.press(KEY[d]);
+  const cells = sunkCells(sinking.start.terrain, sinking.after.terrain);
+  await expect.poll(async () => (await debug(page)).boardSunk).toEqual(cells);
+  expect((await debug(page)).boardTerrain).toBe(start);
+  await page.keyboard.press('KeyU');
+  await expect.poll(async () => (await debug(page)).boardSunk).toEqual([]);
+  expect((await debug(page)).boardTerrain).toBe(start);
+  expect(errors).toEqual([]);
+});
+
+test('floating barrels, smoothing off: a block sinks, its cell and the banks stay water', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  await open(page, false, errors, true);
+  await page.keyboard.press('Enter');
+  await expect.poll(async () => (await debug(page)).scene).toBe('Game');
+  for (const d of sinking.moves) await page.keyboard.press(KEY[d]);
+  const cells = sunkCells(sinking.start.terrain, sinking.after.terrain);
+  await expect.poll(async () => (await debug(page)).boardSunk).toEqual(cells);
+  const shown = {
+    ...sinking.after,
+    terrain: shownTerrain(sinking.start.terrain, sinking.after.terrain),
+  };
+  expect((await debug(page)).boardTiles).toEqual(tilesOf(shown));
   expect(errors).toEqual([]);
 });

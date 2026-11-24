@@ -34,8 +34,9 @@ export function addPixels(
   key: string,
   img: Rgba,
   opaque = false,
+  smooth = true,
 ): void {
-  if (opaque && textures.game.renderer.type === Phaser.WEBGL) {
+  if (opaque && smooth && textures.game.renderer.type === Phaser.WEBGL) {
     textures
       .addUint8Array(key, img.data, img.w, img.h)
       ?.setFilter(Phaser.Textures.FilterMode.LINEAR);
@@ -55,7 +56,9 @@ export function addPixels(
   const draw = () => ctx.putImageData(new ImageData(data, img.w, img.h), 0, 0);
   draw();
   const tex = textures.addCanvas(key, canvas);
-  tex?.setFilter(Phaser.Textures.FilterMode.LINEAR);
+  // the art itself (not smoothed): crisp, as the game draws its textures
+  const filter = smooth ? Phaser.Textures.FilterMode.LINEAR : Phaser.Textures.FilterMode.NEAREST;
+  tex?.setFilter(filter);
   const renderer = textures.game.renderer;
   if (!tex || renderer.type !== Phaser.WEBGL) return;
   // The WebGL context lost then restored (the GPU's memory dropped), Phaser uploads the texture
@@ -63,7 +66,7 @@ export function addPixels(
   // smooth again: a canvas texture refreshed is set back to the game's crisp filter).
   const restore = () => {
     draw();
-    tex.refresh().setFilter(Phaser.Textures.FilterMode.LINEAR);
+    tex.refresh().setFilter(filter);
   };
   renderer.on(Phaser.Renderer.Events.RESTORE_WEBGL, restore);
   const forget = (removed: string) => {
